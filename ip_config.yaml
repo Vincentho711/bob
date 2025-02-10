@@ -1,0 +1,40 @@
+project:
+  name: "pong"
+  arch: "xc7"
+  board_name: "arty"
+  fpga_part: "xc7a35ticsg324-1L"
+
+directories:
+  root_dir: "${PROJ_ROOT}"
+  src_dir: "${directories.root_dir}/src"
+  # lib_dir: "${root_dir}/lib"
+  build_dir: "${directories.root_dir}/build"
+
+sources:
+  top_level: "${directories.src_dir}/top_${project.name}.sv"
+  sv:
+    - "${directories.src_dir}/top_${project.name}.sv"
+  xdc: "${directories.src_dir}/constraints/arty.xdc"
+
+tasks:
+  hello_world:
+    # script: build_scripts/fpga_build.tcl
+    # output_dir: ${directories.build_dir}/fpga
+    depends_on: []
+    # source_files:
+    #   - "${sources.top_level}"
+    #   - "${sources.sv}"
+    # constraint_file: "${sources.xdc}"
+    # fpga_part: ${project.fpga_part}
+
+  tb_hello_world:
+    # script: build_scripts/tb_build.sh
+    # output_dir: ${build_dir}/tb
+    depends_on:
+      - hello_world
+      - bye_world
+    # source_files:
+    #   - "${sources.top_level}"
+    #   - "${sources.sv}"
+
+

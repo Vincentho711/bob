@@ -1,0 +1,7 @@
+task_name: hello_world
+hello_world:
+  fpga_config:
+    source_files:
+      - "${sources.top_level}"
+      - "${sources.sv}"
+    constraint_file: "${sources.xdc}"
