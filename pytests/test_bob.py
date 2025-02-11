@@ -1,5 +1,6 @@
 import os
 import shutil
+from sys import exc_info
 import pytest
 import logging
 from typing import Generator
@@ -475,7 +476,6 @@ def test_remove_task_build_dirs(mock_rmtree):
         mock_exists.return_value = True
         mock_is_dir.return_value = True
         # Case 1: All tasks exist and directories are valid
-        print(bob_instance.proj_root)
         deleted_count = bob_instance.remove_task_build_dirs(["task1", "task2", "task3"])
         assert deleted_count == 2  # task1 and task2 should be deleted
         assert mock_rmtree.call_count == 2
@@ -539,3 +539,114 @@ def test_create_all_task_env_exception(create_multiple_valid_task_config):
     mock_logger.critical.assert_called_once()
 
     assert "Unexpected error during create_all_task_env()" in mock_logger.critical.call_args[0][0]
+
+def test_append_task_env_var_val_is_path_and_key_doesnt_exist():
+    """Test setting a path to a env key which doesn't exist"""
+    mock_logger = MagicMock()
+    bob_instance = Bob(mock_logger)
+
+    bob_instance.task_configs = {
+            "task1": {"task_env": {"EXISTING_VAR": "/some/old/path"}},
+    }
+    task_name = "task1"
+    env_key = "NEW_VAR"
+    env_val = Path("/new/path/to/set")
+    # Mock the existence of Path
+    with patch.object(Path, "exists") as mock_exists:
+        mock_exists.return_value = True
+        bob_instance.append_task_env_var_val(task_name, env_key, env_val)
+
+        updated_value = bob_instance.task_configs[task_name]["task_env"][env_key.upper()]
+        assert updated_value == str(env_val)
+        bob_instance.logger.debug.assert_called_once_with(f"For {task_name} env, setting env var {env_key} = {env_val}.")
+
+def test_append_task_env_var_val_is_path_and_key_exists():
+    """Test appending a path to a env key which already exists"""
+    mock_logger = MagicMock()
+    bob_instance = Bob(mock_logger)
+
+    bob_instance.task_configs = {
+            "task1": {"task_env": {"EXISTING_VAR": "/some/old/path"}},
+    }
+    task_name = "task1"
+    env_key = "EXISTING_VAR"
+    env_val = Path("/new/path/to/append")
+
+    # Mock the existence of Path
+    with patch.object(Path, "exists") as mock_exists:
+        mock_exists.return_value = True
+        bob_instance.append_task_env_var_val(task_name, env_key, env_val)
+
+        updated_value = bob_instance.task_configs[task_name]["task_env"][env_key.upper()]
+        assert updated_value == "/some/old/path" + os.pathsep + "/new/path/to/append"
+
+        bob_instance.logger.debug.assert_called_once_with(f"For {task_name} env, appending path /new/path/to/append to env var {env_key.upper()}. {env_key.upper()} = /some/old/path{os.pathsep}/new/path/to/append.")
+
+def test_append_task_env_var_val_is_path_and_key_doesnt_exist_and_path_doesnt_exist():
+    """Test adding a non-existent path to an existing env_key, it should throw an exception"""
+    mock_logger = MagicMock()
+    bob_instance = Bob(mock_logger)
+
+    bob_instance.task_configs = {
+            "task1": {"task_env": {"EXISTING_VAR": "/some/old/path"}},
+    }
+    task_name = "task1"
+    env_key = "EXISTING_VAR"
+    env_val = Path("/non/existing/path")
+
+    # Not mocking the existence of Path, so it should throw FileNotFoundError
+    bob_instance.append_task_env_var_val(task_name, env_key, env_val)
+
+    assert bob_instance.task_configs[task_name]["task_env"].get(env_key.upper()) == "/some/old/path"
+    bob_instance.logger.error.assert_called_once_with(f"FileNotFoundError : The path {env_val} does not exist, hence {env_key.upper()} is not set to that path.")
+
+def test_append_task_env_var_val_is_str_and_key_doesnt_exist():
+    """Test adding a new env var"""
+    mock_logger = MagicMock()
+    bob_instance = Bob(mock_logger)
+
+    bob_instance.task_configs = {
+            "task1": {"task_env": {"EXISTING_VAR": "/some/old/path"}},
+    }
+    task_name = "task1"
+    env_key = "NEW_VAR"
+    env_val = "some_string_value"
+
+    bob_instance.append_task_env_var_val(task_name, env_key, env_val)
+    updated_value = bob_instance.task_configs[task_name]["task_env"][env_key]
+    assert updated_value == env_val
+
+    bob_instance.logger.debug.assert_called_once_with(f"For {task_name} env, setting env var {env_key.upper()} = {env_val}.")
+
+def test_append_task_env_var_val_is_str_and_key_exist():
+    """Test replacing old env val with new env val"""
+    mock_logger = MagicMock()
+    bob_instance = Bob(mock_logger)
+
+    bob_instance.task_configs = {
+            "task1": {"task_env": {"EXISTING_VAR": "old_value"}},
+    }
+    task_name = "task1"
+    env_key = "EXISTING_VAR"
+    env_val = "new_value"
+
+    bob_instance.append_task_env_var_val(task_name, env_key, env_val)
+    updated_value = bob_instance.task_configs[task_name]["task_env"][env_key]
+    assert updated_value == env_val
+
+    bob_instance.logger.debug.assert_called_once_with(f"For {task_name} env, updating env var {env_key.upper()} = {env_val}.")
+
+def test_append_task_env_var_val_invalid_task_name():
+    """Test setting env var for a non-existent task env"""
+    mock_logger = MagicMock()
+    bob_instance = Bob(mock_logger)
+
+    bob_instance.task_configs = {
+            "task1": {"task_env": {"EXISTING_VAR": "old_value"}},
+    }
+    task_name = "non_existent_task"
+    env_key = "TASK_2_KEY"
+    env_val = "some_string_value"
+
+    bob_instance.append_task_env_var_val(task_name, env_key, env_val)
+    bob_instance.logger.critical.assert_called_once_with(f"Unexpected error during append_task_env_var_val(): 'non_existent_task'", exc_info=True)

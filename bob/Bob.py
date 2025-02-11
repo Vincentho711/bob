@@ -12,7 +12,7 @@ class Bob:
     def __init__(self, logger: logging.Logger) -> None:
         self.name = "bob"
         self.logger = logger
-        self.logger.debug("Bob instance initialised.")
+        # self.logger.debug("Bob instance initialised.")
         self.proj_root: str = os.environ.get("PROJ_ROOT", "Not Set")
         self.ip_config: Dict[str, Any] = {}
         self.task_configs: Dict[str, Any] = {}
@@ -281,12 +281,30 @@ class Bob:
             self.logger.critical(f"Unexpected error during create_all_task_env(): {e}", exc_info=True)
             sys.exit(1)
 
-    def append_task_env_var_val(self, task_name: str, env_key: str, env_val: str) -> None:
-        """ Append a envionment variable within a task environment"""
+    def append_task_env_var_val(self, task_name: str, env_key: str, env_val: str | Path) -> None:
+        """ Append/Add an envionment variable within a task environment"""
         try:
-            pass
+            env_key = env_key.upper()
+            existing_val = self.task_configs[task_name]["task_env"].get(env_key)
+            if isinstance(env_val, Path) and not env_val.exists():
+                raise FileNotFoundError(f"The path {env_val} does not exist, hence {env_key} is not set to that path.")
+            if existing_val:
+                if isinstance(env_val, Path):
+                    self.task_configs[task_name]["task_env"][env_key] += os.pathsep + str(env_val)
+                    self.logger.debug(f"For {task_name} env, appending path {str(env_val)} to env var {env_key}. {env_key} = {self.task_configs[task_name]["task_env"].get(env_key)}.")
+                # If it is not a Path, we replace existing env_val with the new env_val
+                else:
+                    self.task_configs[task_name]["task_env"][env_key] = env_val
+                    self.logger.debug(f"For {task_name} env, updating env var {env_key} = {env_val}.")
+            else:
+                if isinstance(env_val, Path):
+                    env_val = str(env_val)
+                self.task_configs[task_name]["task_env"][env_key] = env_val
+                self.logger.debug(f"For {task_name} env, setting env var {env_key} = {env_val}.")
+        except FileNotFoundError as fnfe:
+            self.logger.error(f"FileNotFoundError : {fnfe}")
         except Exception as e:
-            pass
+            self.logger.critical(f"Unexpected error during append_task_env_var_val(): {e}", exc_info=True)
 
     def set_bob_dir(self) -> None:
         """Sets BOB_DIR based on proj_root"""

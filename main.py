@@ -98,5 +98,11 @@ def main() -> None:
     for task_name, task_config in bob.task_configs.items():
         assert(task_config["task_env"] == os.environ)
 
+    bob.append_task_env_var_val("tb_hello_world", "new_key", "new_val")
+    bob.append_task_env_var_val("tb_hello_world", "new_path", Path(os.getcwd()))
+    print(bob.task_configs["tb_hello_world"]["task_env"])
+    bob.append_task_env_var_val("hello_world", "hello_world_key", "hello_world_val")
+    print(bob.task_configs["hello_world"]["task_env"])
+
 if __name__ == "__main__":
     main()
