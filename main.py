@@ -104,5 +104,10 @@ def main() -> None:
     bob.append_task_env_var_val("hello_world", "hello_world_key", "hello_world_val")
     print(bob.task_configs["hello_world"]["task_env"])
 
+    hello_world_file_path = Path(bob.proj_root) / "hello_world" / "hello_world_top.sv"
+    assert(hello_world_file_path.exists())
+    bob.append_task_src_files("hello_world", hello_world_file_path)
+    print(bob.task_configs["hello_world"]["src_files"])
+
 if __name__ == "__main__":
     main()

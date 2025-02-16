@@ -650,3 +650,69 @@ def test_append_task_env_var_val_invalid_task_name():
 
     bob_instance.append_task_env_var_val(task_name, env_key, env_val)
     bob_instance.logger.critical.assert_called_once_with(f"Unexpected error during append_task_env_var_val(): 'non_existent_task'", exc_info=True)
+
+@patch.object(Path, "exists", return_value=True)
+def test_append_task_src_files_single_valid_file(mock_exists):
+    """Test adding a single valid file to 'src_files' within task_configs for a task"""
+    mock_logger = MagicMock()
+    bob_instance = Bob(mock_logger)
+
+    bob_instance.task_configs = {
+            "existing_task" : {},
+    }
+
+    test_file = Path("/valid/file1.v")
+    bob_instance.append_task_src_files("existing_task", test_file)
+
+    assert "src_files" in bob_instance.task_configs["existing_task"]
+    assert bob_instance.task_configs["existing_task"]["src_files"] == [test_file]
+
+@patch.object(Path, "exists", side_effect=[True, True, False])  # Simulate the first 2 files exists, and the last one missing
+def test_append_task_src_files_multiple_files_with_missing(mock_exists):
+    """Test adding multiple files to 'src_files' list, with one missing."""
+    mock_logger = MagicMock()
+    bob_instance = Bob(mock_logger)
+
+    bob_instance.task_configs = {
+            "existing_task" : {},
+    }
+    files = [Path("/valid/file1.v"), Path("/valid/file2.v"), Path("/missing/file3.sv")]
+
+    bob_instance.append_task_src_files("existing_task", files)
+
+    assert "src_files" in bob_instance.task_configs["existing_task"]
+    assert bob_instance.task_configs["existing_task"]["src_files"] == files[:2]  # Check that only valid ones are added
+    bob_instance.logger.error.assert_called_once_with(f"For existing_task, the following paths do not exist and will be ignored: {{PosixPath('/missing/file3.sv')}}")
+
+@patch.object(Path, "exists", return_value=True)
+def test_append_task_src_files_duplicate_files(mock_exists):
+    """Test that duplicate files are not added multiple times."""
+    mock_logger = MagicMock()
+    bob_instance = Bob(mock_logger)
+
+    bob_instance.task_configs = {
+            "existing_task" : {},
+    }
+    file = Path("/valid/file4.v")
+
+    # Add the file twice
+    bob_instance.append_task_src_files("existing_task", file)
+    bob_instance.append_task_src_files("existing_task", file)
+
+    assert bob_instance.task_configs["existing_task"]["src_files"] == [file]
+    bob_instance.logger.info.assert_called_once_with("No new files were added to task 'existing_task' (duplicates avoided).")
+
+@patch.object(Path, "exists", return_value=True)
+def test_append_task_src_files_non_existent_task(mock_exists):
+    """Test adding src files to a non-existent task"""
+    mock_logger = MagicMock()
+    bob_instance = Bob(mock_logger)
+
+    bob_instance.task_configs = {
+            "existing_task" : {},
+    }
+    task_name = "non_existent_task"
+    file = Path("/valid/file4.v")
+    bob_instance.append_task_src_files(task_name, file)
+
+    bob_instance.logger.error.assert_called_once_with(f"Task '{task_name}' does not exist in task_configs. Please run discover_tasks() first.")

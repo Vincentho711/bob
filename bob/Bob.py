@@ -306,6 +306,46 @@ class Bob:
         except Exception as e:
             self.logger.critical(f"Unexpected error during append_task_env_var_val(): {e}", exc_info=True)
 
+    def append_task_src_files(self, task_name: str, src_files: Path| list[Path]) -> None:
+        """Append a src file or a list of src files to the 'src_files' attribute of a task"""
+        try:
+            if task_name not in self.task_configs:
+                self.logger.error(f"Task '{task_name}' does not exist in task_configs. Please run discover_tasks() first.")
+                return
+            if not isinstance(src_files, (Path, list)):
+                raise ValueError(f"For {task_name}, the argument 'src_files' must be a Path or a list of Path objects, but got {type(src_files).__name__}.")
+
+            if isinstance(src_files, Path):
+                src_files = [src_files]
+
+            # Validate list contents
+            invalid_elements = [item for item in src_files if not isinstance(item, Path)]
+            if invalid_elements:
+                print(f"Have invalid_elements.")
+                raise ValueError(f"For {task_name}, all elements in src_files must be Path objects. Invalid entries: {invalid_elements}")
+
+            valid_files = [path for path in src_files if path.exists()]
+            missing_files = set(src_files) - set(valid_files)
+
+            if missing_files:
+                self.logger.error(f"For {task_name}, the following paths do not exist and will be ignored: {missing_files}")
+            if valid_files:
+                self.logger.debug(f"Found valid_files: {valid_files}")
+                task_entry = self.task_configs[task_name]
+                src_list = task_entry.setdefault("src_files", [])
+
+                # Append only new paths to avoid duplicates
+                new_files = [path for path in valid_files if path not in src_list]
+                if new_files:
+                    src_list.extend(new_files)
+                    self.logger.debug(f"Added {len(new_files)} new file(s) to task '{task_name}'.")
+                else:
+                    self.logger.info(f"No new files were added to task '{task_name}' (duplicates avoided).")
+        except ValueError as ve:
+            self.logger.critical(f"ValueError: {ve}")
+        except Exception as e:
+            self.logger.critical(f"Unexpected error during append_task_src_files(): {e}", exc_info=True)
+
     def set_bob_dir(self) -> None:
         """Sets BOB_DIR based on proj_root"""
         try:
