@@ -7,6 +7,8 @@ import yaml
 import subprocess
 import logging
 import shutil
+import hashlib
+import json
 
 class Bob:
     def __init__(self, logger: logging.Logger) -> None:
@@ -16,6 +18,8 @@ class Bob:
         self.proj_root: str = os.environ.get("PROJ_ROOT", "Not Set")
         self.ip_config: Dict[str, Any] = {}
         self.task_configs: Dict[str, Any] = {}
+        self.dotbob_dir: Path = Path(self.proj_root) / ".bob"
+        self.dotbob_checksum_file: Path = self.dotbob_dir / "checksum.json"
 
     def get_proj_root(self) -> Path:
         return Path(self.proj_root)
@@ -321,7 +325,6 @@ class Bob:
             # Validate list contents
             invalid_elements = [item for item in src_files if not isinstance(item, Path)]
             if invalid_elements:
-                print(f"Have invalid_elements.")
                 raise ValueError(f"For {task_name}, all elements in src_files must be Path objects. Invalid entries: {invalid_elements}")
 
             valid_files = [path for path in src_files if path.exists()]
@@ -345,6 +348,154 @@ class Bob:
             self.logger.critical(f"ValueError: {ve}")
         except Exception as e:
             self.logger.critical(f"Unexpected error during append_task_src_files(): {e}", exc_info=True)
+
+    def ensure_dotbob_dir_at_proj_root(self) -> None:
+        """Create a .bob directory and checksum.json with default settings at project root if they don't exist yet"""
+        try:
+            if not self.task_configs:
+                raise ValueError(f"No tasks defined within task_configs, cannot create dotbob_checksum_file with default values.")
+            self.dotbob_dir.mkdir(exist_ok=True)
+            if not self.dotbob_checksum_file.exists():
+                self.logger.debug(f"Creating default checksum.json at {self.dotbob_checksum_file}.")
+                initial_dotbob_checksum_file_dict = {
+                    task_name : {"hash_sha256": "", "dirty" : True}
+                        for task_name in self.task_configs
+                }
+                self._save_dotbob_checksum_file(initial_dotbob_checksum_file_dict)
+
+        except ValueError as ve:
+            self.logger.error(f"ValueError: {ve}")
+
+        except Exception as e:
+            self.logger.critical(f"Unexpected error during create_dotbob_dir_at_proj_root() : {e}", exc_info=True)
+
+    def _compute_task_src_files_hash_sha256(self, task_name: str) -> str | None:
+        """Compute a SHA256 checksum from a list of src files for a task"""
+        try:
+            if task_name not in self.task_configs:
+                self.logger.error(f"Task '{task_name}' does not exist in task_configs. Please run discover_tasks() first.")
+                return None
+            hash_sha256 = hashlib.sha256()
+            for file_path in sorted(self.task_configs[task_name]["src_files"], key=lambda p: p.as_posix()):
+                if file_path.exists() and file_path.is_file():
+                    with file_path.open("rb") as f:
+                        while chunk := f.read(8192):
+                            hash_sha256.update(chunk)
+            return hash_sha256.hexdigest()
+
+        except Exception as e:
+            self.logger.critical(f"Unexpected error during _compute_task_src_files_checksum(): {e}", exc_info=True)
+
+    def _load_dotbob_checksum_file(self) -> dict | None:
+        """Loads the checksum file within dotbob dir"""
+        try:
+            if not self.dotbob_checksum_file.exists():
+                self.logger.error(f"No checksum.json within .bob dir found.")
+                return None
+            with self.dotbob_checksum_file.open("r") as f:
+                return json.load(f)
+        except Exception as e:
+            self.logger.critical(f"Unexpected error during _load_dotbob_checksum_file() : {e}", exc_info=True)
+            return None
+
+    def _save_dotbob_checksum_file(self, checksums: dict[str, dict]) -> None:
+        """Validate the checksum dict, and save it to checksum.json"""
+        try:
+            # Check checksums is not empty
+            if not checksums:
+                raise ValueError(f"Chechsums is an empty dict, cannot set checksum.json to empty.")
+            # Check that task names are unique
+            task_names = list(checksums.keys())
+            if len(task_names) != len(set(task_names)):
+                raise ValueError(f"During _save_dotbob_checksum_file(), there are duplicate tasks with the same task_name in 'checksums'. Abort saving to checksum.json.")
+            # Validate each task has both "hash_sha256" and "dirty" fields
+            for task_name, task_info in checksums.items():
+                if "hash_sha256" not in task_info or "dirty" not in task_info:
+                    self.logger.error(f"During _save_dotbob_checksum_file(), within the input dict checksums, missing required 'hash_sha256' or/and 'dirty' fields for {task_name}.")
+                    return None
+            with self.dotbob_checksum_file.open("w") as f:
+                json.dump(checksums, f, indent=4)
+
+        except ValueError as ve:
+            self.logger.error(f"ValueError: {ve}")
+
+        except Exception as e:
+            self.logger.critical(f"Unexpected error during _save_dotbob_checksum_file(): {e}", exc_info=True)
+
+    def should_rebuild_task(self, task_name: str) -> bool | None:
+        """Determine whether a task needs to be rebuilt based on dirty flag and whether its hash_sha256 has changed"""
+        try:
+            if task_name not in self.task_configs:
+                raise ValueError(f"Task {task_name} not found in task_configs. Please ensure discover_tasks() have been executed first.")
+
+            src_files = self.task_configs[task_name].get("src_files", [])
+
+            if not src_files:
+                self.logger.error(f"No source files defined for task {task_name}. Skipping build for this task.")
+                return False
+
+            current_hash_sha256 = self._compute_task_src_files_hash_sha256(task_name)
+
+            if current_hash_sha256 is None:
+                raise RuntimeError(f"_compute_task_src_files_checksum() returned None, hence current checksum cannot be computed for task {task_name}.")
+
+            dotbob_checksum_file_dict: dict = self._load_dotbob_checksum_file()
+            previous_task_checksum_entry = dotbob_checksum_file_dict.get(task_name, {})
+            previous_hash_sha256 = previous_task_checksum_entry.get("hash_sha256")
+            hash_sha256_is_dirty = previous_task_checksum_entry.get("dirty", True)
+
+            if previous_hash_sha256 == current_hash_sha256 and not hash_sha256_is_dirty:
+                self.logger.info(f"For task {task_name}, hash_sha256 unchanged, skipping build.")
+                return False
+
+            # Mark as dirty since hash_sha256 has changed
+            dotbob_checksum_file_dict[task_name] = {
+                "hash_sha256": current_hash_sha256,
+                "dirty": True
+            }
+            # Update the checksum.json with the updated hash_sha256 and dirty fields
+            self._save_dotbob_checksum_file(dotbob_checksum_file_dict)
+            self.logger.info(f"For task {task_name}, hash_sha256 has changed, triggering rebuild.")
+            return True
+
+        except RuntimeError as re:
+            self.logger.error(f"RuntimeError: {re}")
+            return None
+
+        except ValueError as ve:
+            self.logger.error(f"ValueError: {ve}")
+            return None
+
+        except Exception as e:
+            self.logger.critical(f"Unexpected error during should_rebuild_task(): {e}", exc_info=True)
+            return None
+
+    def mark_task_as_clean_in_dotbob_checksum_file(self, task_name: str) -> None:
+        """Mark a task as clean after a succesful build"""
+        try:
+            if task_name not in self.task_configs:
+                raise ValueError(f"Task {task_name} not found in task_configs. Please ensure discover_tasks() have been executed first.")
+
+            dotbob_checksum_file_dict: dict = self._load_dotbob_checksum_file()
+
+            if task_name not in dotbob_checksum_file_dict:
+                raise KeyError(f"Within mark_task_as_clean_in_dotbob_checksum_file(), the task {task_name} does not exists in checksum.json, aborting marking it as clean.")
+
+            dotbob_checksum_file_dict[task_name]["dirty"] = False
+            self._save_dotbob_checksum_file(dotbob_checksum_file_dict)
+            self.logger.debug(f"Marked task {task_name} as clean.")
+
+        except ValueError as ve:
+            self.logger.error(f"ValueError: {ve}")
+            return None
+
+        except KeyError as ke:
+            self.logger.error(f"KeyError: {ke}")
+            return None
+
+        except Exception as e:
+            self.logger.critical(f"Unexpected error during mark_task_as_clean_in_dotbob_checksum_file(): {e}", exc_info=True)
+            return None
 
     def set_bob_dir(self) -> None:
         """Sets BOB_DIR based on proj_root"""
