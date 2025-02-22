@@ -3,6 +3,7 @@ import shutil
 from sys import exc_info
 import pytest
 import logging
+import json
 from typing import Generator
 from pathlib import Path
 from bob.Bob import Bob
@@ -716,3 +717,41 @@ def test_append_task_src_files_non_existent_task(mock_exists):
     bob_instance.append_task_src_files(task_name, file)
 
     bob_instance.logger.error.assert_called_once_with(f"Task '{task_name}' does not exist in task_configs. Please run discover_tasks() first.")
+
+def test_ensure_dotbob_dir_at_proj_root_missing_task_configs():
+    """Test ensuring dotbob dir is at project root but task_configs have not been established"""
+    mock_logger = MagicMock()
+    bob_instance = Bob(mock_logger)
+    bob_instance.ensure_dotbob_dir_at_proj_root()
+
+    bob_instance.logger.error.assert_called_once_with("ValueError: No tasks defined within task_configs, cannot create dotbob_checksum_file with default values.")
+
+@patch.object(Path, "exists", return_value=False) # checksum.json doesn't exists
+@patch("pathlib.Path.mkdir")
+def test_ensure_dotbob_dir_at_proj_root_non_existent_dotbob_dir(mock_exists, mock_mkdir, tmp_path: Path):
+    """Test the successful creation of dotbob dir and checksum file when non of them exist"""
+    os.environ["PROJ_ROOT"] = str(tmp_path)
+    mock_logger = MagicMock()
+    bob_instance = Bob(mock_logger)
+    bob_instance.task_configs = {
+            "existing_task_1" : {},
+            "existing_task_2" : {},
+    }
+    mock_file = mock_open()
+    with patch('bob.open', mock_file):
+        with patch("pathlib.Path.open", mock_open()) as mock_path_open: # Mock the open of self.dotbob_checksum_file
+            bob_instance.ensure_dotbob_dir_at_proj_root()
+
+    expected_content = {
+        "existing_task_1": {"hash_sha256": "", "dirty": True},
+        "existing_task_2": {"hash_sha256": "", "dirty": True},
+    }
+    mock_mkdir.assert_called_once_with()  # Check that .bob dir is created
+    mock_path_open.assert_called_once_with("w") # Check that the mocked file has been opened once
+    handle = mock_path_open() # Retrieve the actual written data
+    written_data = "".join(call.args[0] for call in handle.write.call_args_list)
+    assert json.loads(written_data) == expected_content # Verify the correct JSON data was written
+
+def test_ensure_dotbob_dir_at_proj_root_existing_dotbob_dir_but_no_dotbob_checksum_file():
+    """Test when the dotbob dir exsts, but no checksum.json yet. The function should create and populate checksum.json"""
+    pass

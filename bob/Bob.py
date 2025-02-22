@@ -362,6 +362,8 @@ class Bob:
                         for task_name in self.task_configs
                 }
                 self._save_dotbob_checksum_file(initial_dotbob_checksum_file_dict)
+            else:
+                self.logger.debug(f"checksum.json already exists.")
 
         except ValueError as ve:
             self.logger.error(f"ValueError: {ve}")
