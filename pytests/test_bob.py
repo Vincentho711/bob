@@ -4,6 +4,7 @@ from sys import exc_info
 import pytest
 import logging
 import json
+import hashlib
 from typing import Generator
 from pathlib import Path
 from bob.Bob import Bob
@@ -726,7 +727,7 @@ def test_ensure_dotbob_dir_at_proj_root_missing_task_configs():
 
     bob_instance.logger.error.assert_called_once_with("ValueError: No tasks defined within task_configs, cannot create dotbob_checksum_file with default values.")
 
-@patch.object(Path, "exists", return_value=False) # checksum.json doesn't exists
+@patch.object(Path, "exists", return_value=False) # checksum.json doesn't exist
 @patch("pathlib.Path.mkdir")
 def test_ensure_dotbob_dir_at_proj_root_non_existent_dotbob_dir(mock_exists, mock_mkdir, tmp_path: Path):
     """Test the successful creation of dotbob dir and checksum file when non of them exist"""
@@ -752,6 +753,99 @@ def test_ensure_dotbob_dir_at_proj_root_non_existent_dotbob_dir(mock_exists, moc
     written_data = "".join(call.args[0] for call in handle.write.call_args_list)
     assert json.loads(written_data) == expected_content # Verify the correct JSON data was written
 
-def test_ensure_dotbob_dir_at_proj_root_existing_dotbob_dir_but_no_dotbob_checksum_file():
+@patch.object(Path, "exists", return_value=False) # checksum.json doesn't exist
+@patch("pathlib.Path.mkdir")
+def test_ensure_dotbob_dir_at_proj_root_existing_dotbob_dir_but_no_dotbob_checksum_file(mock_mkdir, tmp_path: Path):
     """Test when the dotbob dir exsts, but no checksum.json yet. The function should create and populate checksum.json"""
-    pass
+    os.environ["PROJ_ROOT"] = str(tmp_path)
+    mock_logger = MagicMock()
+    bob_instance = Bob(mock_logger)
+    bob_instance.task_configs = {
+            "existing_task_3" : {},
+            "existing_task_4" : {},
+    }
+    mock_file = mock_open()
+    with patch('bob.open', mock_file):
+        with patch("pathlib.Path.open", mock_open()) as mock_path_open: # Mock the open of self.dotbob_checksum_file
+            bob_instance.ensure_dotbob_dir_at_proj_root()
+
+    expected_content = {
+        "existing_task_3": {"hash_sha256": "", "dirty": True},
+        "existing_task_4": {"hash_sha256": "", "dirty": True},
+    }
+    mock_mkdir.assert_called_once_with(exist_ok=True)
+
+    mock_path_open.assert_called_once_with("w") # Check that the mocked file has been opened once
+    handle = mock_path_open() # Retrieve the actual written data
+    written_data = "".join(call.args[0] for call in handle.write.call_args_list)
+    assert json.loads(written_data) == expected_content # Verify the correct JSON data was written
+
+@patch.object(Path, "exists", return_value=True) # checksum.json already exists
+@patch("pathlib.Path.mkdir")
+def test_ensure_dotbob_dir_at_proj_root_both_dotbob_dir_and_dotbob_checksum_file_exist(mocl_exists, mock_mkdir, tmp_path: Path):
+    """Test the function when both dotbob dir dotbob checksum file already exist"""
+    os.environ["PROJ_ROOT"] = str(tmp_path)
+    mock_logger = MagicMock()
+    bob_instance = Bob(mock_logger)
+    bob_instance.task_configs = {
+            "existing_task_5" : {},
+            "existing_task_6" : {},
+    }
+    mock_file = mock_open()
+    with patch('bob.open', mock_file):
+        with patch("pathlib.Path.open", mock_open()) as mock_path_open: # Mock the open of self.dotbob_checksum_file if function attempts to open it
+            bob_instance.ensure_dotbob_dir_at_proj_root()
+    mock_mkdir.assert_called_once_with() # Check that mkdir will still be called irrespective of whether the dotbob dir exists
+    mock_path_open.assert_not_called() # Checking that no file should be opened because checksum.json already exists
+    bob_instance.logger.debug.assert_called_once_with(f"checksum.json already exists.")
+
+def test_compute_task_src_files_hash_sha256_task_not_exists():
+    """Test the function with a non-existent task_name"""
+    mock_logger = MagicMock()
+    bob_instance = Bob(mock_logger)
+    bob_instance.task_configs = {
+            "existing_task_1" : {},
+            "existing_task_2" : {},
+    }
+    result = bob_instance._compute_task_src_files_hash_sha256("non_existent_task")
+    assert result is None
+    bob_instance.logger.error.assert_called_once_with("Task 'non_existent_task' does not exist in task_configs. Please run discover_tasks() first.")
+
+def test_compute_task_src_files_hash_sha256_task_empty_src_files():
+    """Test the function with an existing task but the task doesn't have any source files"""
+    mock_logger = MagicMock()
+    bob_instance = Bob(mock_logger)
+    bob_instance.task_configs = {
+        "task1" : {},
+    }
+    bob_instance.task_configs["task1"]["src_files"] = []
+    result = bob_instance._compute_task_src_files_hash_sha256("task1")
+    assert result is None
+    bob_instance.logger.error.assert_called_once_with(f"Task 'task1' has no source files defined.")
+
+def test_compute_task_src_files_hash_sha256_task_valid_files():
+    """Test the function of compute the hash_sha256 of a task with 2 files"""
+    mock_logger = MagicMock()
+    bob_instance = Bob(mock_logger)
+
+    mock_file_1 = MagicMock()
+    mock_file_1.exists.return_value = True
+    mock_file_1.is_file.return_value = True
+    mock_file_1.open.return_value.__enter__.return_value.read.side_effect = [b"data1", b""]
+    mock_file_1.as_posix.return_value = "/fake/path/file1" # Mocking as_posix()
+
+    mock_file_2 = MagicMock()
+    mock_file_2.exists.return_value = True
+    mock_file_2.is_file.return_value = True
+    mock_file_2.open.return_value.__enter__.return_value.read.side_effect = [b"data2", b""]
+    mock_file_2.as_posix.return_value = "/fake/path/file2" # Mocking as_posix()
+
+    bob_instance.task_configs = {
+        "task1" : {"src_files": [mock_file_1, mock_file_2]}
+    }
+    expected_hash_sha256 = hashlib.sha256(b"data1data2").hexdigest()
+
+    with patch("builtins.open", create=True):
+        result = bob_instance._compute_task_src_files_hash_sha256("task1")
+
+    assert result == expected_hash_sha256

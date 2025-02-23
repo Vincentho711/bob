@@ -377,8 +377,14 @@ class Bob:
             if task_name not in self.task_configs:
                 self.logger.error(f"Task '{task_name}' does not exist in task_configs. Please run discover_tasks() first.")
                 return None
+
+            src_files = self.task_configs[task_name].get("src_files", [])
+            if not src_files:
+                self.logger.error(f"Task '{task_name}' has no source files defined.")
+                return None
+
             hash_sha256 = hashlib.sha256()
-            for file_path in sorted(self.task_configs[task_name]["src_files"], key=lambda p: p.as_posix()):
+            for file_path in sorted(src_files, key=lambda p: p.as_posix()):
                 if file_path.exists() and file_path.is_file():
                     with file_path.open("rb") as f:
                         while chunk := f.read(8192):
@@ -386,7 +392,7 @@ class Bob:
             return hash_sha256.hexdigest()
 
         except Exception as e:
-            self.logger.critical(f"Unexpected error during _compute_task_src_files_checksum(): {e}", exc_info=True)
+            self.logger.critical(f"Unexpected error during _compute_task_src_files_hash_sha256(): {e}", exc_info=True)
 
     def _load_dotbob_checksum_file(self) -> dict | None:
         """Loads the checksum file within dotbob dir"""
