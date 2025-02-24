@@ -1,12 +1,12 @@
 module hello_world_top (
-    input wire       clk,
-    input wire [7:0] a,
-    output reg [7:0] b
+    input wire       clk_i,
+    input wire [7:0] a_i,
+    output reg [7:0] b_o
 );
 
-  reg [7:0] b;
+  reg [7:0] b_o;
   always_ff @(posedge clk) begin
-    b <= a;
+    b_o <= a_i;
   end
 
 endmodule

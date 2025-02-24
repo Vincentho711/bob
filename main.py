@@ -109,5 +109,14 @@ def main() -> None:
     bob.append_task_src_files("hello_world", hello_world_file_path)
     print(bob.task_configs["hello_world"]["src_files"])
 
+    tb_hello_world_file_path = Path(bob.proj_root) / "tb_hello_world" / "tb_hello_world.sv"
+    assert(tb_hello_world_file_path.exists())
+    bob.append_task_src_files("tb_hello_world", tb_hello_world_file_path)
+
+    bob.ensure_dotbob_dir_at_proj_root()
+
+    bob.task_configs["new_task"] = {}
+    bob.ensure_dotbob_dir_at_proj_root()
+
 if __name__ == "__main__":
     main()

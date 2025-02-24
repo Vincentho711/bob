@@ -363,7 +363,8 @@ class Bob:
                 }
                 self._save_dotbob_checksum_file(initial_dotbob_checksum_file_dict)
             else:
-                self.logger.debug(f"checksum.json already exists.")
+                self.logger.debug(f"checksum.json already exists. Checking for new tasks...")
+                self._update_dotbob_checksum_file()
 
         except ValueError as ve:
             self.logger.error(f"ValueError: {ve}")
@@ -393,6 +394,37 @@ class Bob:
 
         except Exception as e:
             self.logger.critical(f"Unexpected error during _compute_task_src_files_hash_sha256(): {e}", exc_info=True)
+
+    def _update_dotbob_checksum_file(self) -> None:
+        """Update checksum.json to include new tasks without modifying existing entries."""
+        try:
+            if not self.task_configs:
+                raise ValueError(f"No tasks defined within task_configs, aborting _update_dotbob_checksum_file().")
+
+            with self.dotbob_checksum_file.open("r") as f:
+                existing_dotbob_checksum_file_dict = json.load(f)
+
+            new_tasks = set(self.task_configs.keys()) - set(existing_dotbob_checksum_file_dict.keys())
+
+            if new_tasks:
+                self.logger.debug(f"New tasks detected: {new_tasks}. Updating checksum.json...")
+                for task_name in new_tasks:
+                    existing_dotbob_checksum_file_dict[task_name] = {"hash_sha256": "", "dirty": True}
+                self._save_dotbob_checksum_file(existing_dotbob_checksum_file_dict)
+            else:
+                self.logger.debug("No new tasks detected. checksum.json is up to date")
+
+        except json.JSONDecodeError:
+            self.logger.error("checksum.json is corrupted or empty. Reinitialising...")
+            self._save_dotbob_checksum_file({
+                task_name: {"hash_sha256": "", "dirty": True} for task_name in self.task_configs
+            })
+
+        except ValueError as ve:
+            self.logger.critical(f"ValueError: {ve}")
+
+        except Exception as e:
+            self.logger.critical(f"Unexpected error during _update_dotbob_checksum_file(): {e}", exc_info=True)
 
     def _load_dotbob_checksum_file(self) -> dict | None:
         """Loads the checksum file within dotbob dir"""

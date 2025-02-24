@@ -741,7 +741,8 @@ def test_ensure_dotbob_dir_at_proj_root_non_existent_dotbob_dir(mock_exists, moc
     mock_file = mock_open()
     with patch('bob.open', mock_file):
         with patch("pathlib.Path.open", mock_open()) as mock_path_open: # Mock the open of self.dotbob_checksum_file
-            bob_instance.ensure_dotbob_dir_at_proj_root()
+            with patch.object(bob_instance, "_update_dotbob_checksum_file", return_value={}): # Mock the return of empty so _update_dotbob_checksum_file is not executed
+                bob_instance.ensure_dotbob_dir_at_proj_root()
 
     expected_content = {
         "existing_task_1": {"hash_sha256": "", "dirty": True},
@@ -767,7 +768,8 @@ def test_ensure_dotbob_dir_at_proj_root_existing_dotbob_dir_but_no_dotbob_checks
     mock_file = mock_open()
     with patch('bob.open', mock_file):
         with patch("pathlib.Path.open", mock_open()) as mock_path_open: # Mock the open of self.dotbob_checksum_file
-            bob_instance.ensure_dotbob_dir_at_proj_root()
+            with patch.object(bob_instance, "_update_dotbob_checksum_file", return_value={}): # Mock the return of empty so _update_dotbob_checksum_file is not executed
+                bob_instance.ensure_dotbob_dir_at_proj_root()
 
     expected_content = {
         "existing_task_3": {"hash_sha256": "", "dirty": True},
@@ -794,10 +796,45 @@ def test_ensure_dotbob_dir_at_proj_root_both_dotbob_dir_and_dotbob_checksum_file
     mock_file = mock_open()
     with patch('bob.open', mock_file):
         with patch("pathlib.Path.open", mock_open()) as mock_path_open: # Mock the open of self.dotbob_checksum_file if function attempts to open it
-            bob_instance.ensure_dotbob_dir_at_proj_root()
+            with patch.object(bob_instance, "_update_dotbob_checksum_file", return_value={}): # Mock the return of empty so _update_dotbob_checksum_file is not executed
+                bob_instance.ensure_dotbob_dir_at_proj_root()
+
     mock_mkdir.assert_called_once_with() # Check that mkdir will still be called irrespective of whether the dotbob dir exists
-    mock_path_open.assert_not_called() # Checking that no file should be opened because checksum.json already exists
-    bob_instance.logger.debug.assert_called_once_with(f"checksum.json already exists.")
+    mock_path_open.assert_not_called() # Since _update_dotbob_checksum_file() has been mocked, no file open will be executed
+    bob_instance.logger.debug.assert_called_once_with(f"checksum.json already exists. Checking for new tasks...")
+
+@patch.object(Path, "exists", return_value=True)
+@patch("pathlib.Path.mkdir")
+def test_ensure_dotbob_dir_at_proj_root_with_new_tasks(mock_exists, mock_mkdir, tmp_path: Path):
+    """Test when new tasks are added to task_configs and checksum.json should be updated"""
+    os.environ["PROJ_ROOT"] = str(tmp_path)
+    mock_logger = MagicMock()
+    bob_instance = Bob(mock_logger)
+    bob_instance.task_configs = {
+        "task1": {},
+        "task2": {},
+        "new_task": {},
+    }
+    existing_dotbob_checksum_file_dict = {
+        "task1": {"hash_sha256": "", "dirty": False},
+        "task2": {"hash_sha256": "", "dirty": True},
+    }
+
+    expected_updated_dotbob_checksum_file_dict = existing_dotbob_checksum_file_dict.copy()
+    expected_updated_dotbob_checksum_file_dict["new_task"] = {"hash_sha256": "", "dirty": True}
+
+    with patch("pathlib.Path.open", mock_open(read_data=json.dumps(existing_dotbob_checksum_file_dict))) as mock_path_open: # Mock the open of self.dotbob_checksum_file within _update_dotbob_checksum_file(), and the return of json.load() with existing_dotbob_checksum_file_dict
+        bob_instance.ensure_dotbob_dir_at_proj_root()
+
+    mock_mkdir.assert_called_once_with() # Check that mkdir will still be called irrespective of whether the dotbob dir exists
+    bob_instance.logger.debug.assert_any_call(f"checksum.json already exists. Checking for new tasks...")
+    bob_instance.logger.debug.assert_any_call(f"New tasks detected: {{'new_task'}}. Updating checksum.json...")
+
+    assert mock_path_open.call_count == 2 # It should be called twice, once for reading and once for writing
+
+    handle = mock_path_open() # Retrieve the actual written data
+    written_data = "".join(call.args[0] for call in handle.write.call_args_list)
+    assert json.loads(written_data) == expected_updated_dotbob_checksum_file_dict # Verify the correct JSON data was written
 
 def test_compute_task_src_files_hash_sha256_task_not_exists():
     """Test the function with a non-existent task_name"""
@@ -849,3 +886,92 @@ def test_compute_task_src_files_hash_sha256_task_valid_files():
         result = bob_instance._compute_task_src_files_hash_sha256("task1")
 
     assert result == expected_hash_sha256
+
+@patch("pathlib.Path.open", new_callable=mock_open, read_data=json.dumps({
+    "task1" : {"hash_sha256": "", "dirty": False},
+    "task2" : {"hash_sha256": "", "dirty": True},
+}))
+def test_update_dotbob_checksum_file_no_new_tasks(mock_path_open, tmp_path: Path):
+    """Test that _update_dotbob_checksum does nothing when there are no new tasks"""
+    os.environ["PROJ_ROOT"] = str(tmp_path)
+    mock_logger = MagicMock()
+    bob_instance = Bob(mock_logger)
+    bob_instance.task_configs = {
+        "task1": {},
+        "task2": {},
+    }
+
+    bob_instance._update_dotbob_checksum_file()
+    # Check that the self.dotbob_checksum_file is only opened once, only read but not written to since there are no new tasks.
+    mock_path_open.assert_called_once_with("r")
+    bob_instance.logger.debug.assert_called_once_with("No new tasks detected. checksum.json is up to date")
+
+
+@patch("pathlib.Path.open", new_callable=mock_open, read_data=json.dumps({
+    "task1" : {"hash_sha256": "", "dirty": False},
+    "task2" : {"hash_sha256": "", "dirty": True},
+}))
+def test_update_dotbob_checksum_file_with_new_tasks(mock_path_open, tmp_path: Path):
+    """Test that the function correctly update the checksum.json file with new entries when there are new tasks"""
+    os.environ["PROJ_ROOT"] = str(tmp_path)
+    mock_logger = MagicMock()
+    bob_instance = Bob(mock_logger)
+    bob_instance.task_configs = {
+        "task1": {},
+        "task2": {},
+        "new_task": {},
+    }
+
+    bob_instance._update_dotbob_checksum_file()
+    # Check that self.dotbob_checksum_file has been opened twice, once for reading and once for writing as there are new tasks
+    assert mock_path_open.call_count == 2
+    # Since there are new tasks, ensure that self.dotbob_checksum_file is opened for writing
+    mock_path_open.assert_any_call("w")
+    bob_instance.logger.debug.assert_any_call(f"New tasks detected: {{'new_task'}}. Updating checksum.json...")
+
+    handle = mock_path_open() # Retrieve the actual written data
+    written_data = "".join(call.args[0] for call in handle.write.call_args_list)
+    expected_data = {
+        "task1": {"hash_sha256": "", "dirty": False},
+        "task2": {"hash_sha256": "", "dirty": True},
+        "new_task": {"hash_sha256": "", "dirty": True},
+    }
+    assert json.loads(written_data) == expected_data # Verify the correct JSON data was written
+
+@patch("pathlib.Path.open", new_callable=mock_open, read_data="")
+def test_update_dotbob_checksum_file_with_empty_or_corrupted_checksum_file(mock_path_open, tmp_path: Path):
+    """Test that the function reinitialises the checksum.json when current checksum.json is empty or corrupted"""
+    os.environ["PROJ_ROOT"] = str(tmp_path)
+    mock_logger = MagicMock()
+    bob_instance = Bob(mock_logger)
+    bob_instance.task_configs = {
+        "task1": {},
+        "task2": {},
+    }
+
+    bob_instance._update_dotbob_checksum_file()
+    # Check that self.dotbob_checksum_file has been opened, once for reading and once for writing
+    assert mock_path_open.call_count == 2
+    # Ensure that there has been a open with write to reinitialise checksum.json
+    mock_path_open.assert_any_call("w")
+    bob_instance.logger.error.assert_any_call("checksum.json is corrupted or empty. Reinitialising...")
+
+    handle = mock_path_open() # Retrieve the actual written data
+    written_data = "".join(call.args[0] for call in handle.write.call_args_list)
+    expected_data = {
+        "task1": {"hash_sha256": "", "dirty": True},
+        "task2": {"hash_sha256": "", "dirty": True},
+    }
+    assert json.loads(written_data) == expected_data # Verify the correct JSON data was written
+
+@patch("pathlib.Path.open", new_callable=mock_open)
+def test_update_dotbob_checksum_file_no_tasks(mock_path_open):
+    mock_logger = MagicMock()
+    bob_instance = Bob(mock_logger)
+    bob_instance.task_configs = {}  # No tasks defined
+
+    bob_instance._update_dotbob_checksum_file()
+
+    bob_instance.logger.critical.assert_called_once_with(f"ValueError: No tasks defined within task_configs, aborting _update_dotbob_checksum_file().")
+    # Ensure that the file was not written to
+    mock_path_open.assert_not_called()
