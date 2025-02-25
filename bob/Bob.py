@@ -433,6 +433,7 @@ class Bob:
                 self.logger.error(f"No checksum.json within .bob dir found.")
                 return None
             with self.dotbob_checksum_file.open("r") as f:
+                self.logger.debug(f"Loading checksum.json into a Python dictionary.")
                 return json.load(f)
         except Exception as e:
             self.logger.critical(f"Unexpected error during _load_dotbob_checksum_file() : {e}", exc_info=True)
@@ -444,9 +445,12 @@ class Bob:
             # Check checksums is not empty
             if not checksums:
                 raise ValueError(f"Chechsums is an empty dict, cannot set checksum.json to empty.")
+            if not self.dotbob_checksum_file.exists():
+                self.logger.error(f"No checksum.json within .bob dir found.")
+                return None
             # Check that task names are unique
             task_names = list(checksums.keys())
-            if len(task_names) != len(set(task_names)):
+            if len(task_names) != len(set(task_names)): # It is not possible for checksums to have duplicate keys, hence redundant
                 raise ValueError(f"During _save_dotbob_checksum_file(), there are duplicate tasks with the same task_name in 'checksums'. Abort saving to checksum.json.")
             # Validate each task has both "hash_sha256" and "dirty" fields
             for task_name, task_info in checksums.items():

@@ -727,9 +727,9 @@ def test_ensure_dotbob_dir_at_proj_root_missing_task_configs():
 
     bob_instance.logger.error.assert_called_once_with("ValueError: No tasks defined within task_configs, cannot create dotbob_checksum_file with default values.")
 
-@patch.object(Path, "exists", return_value=False) # checksum.json doesn't exist
+@patch.object(Path, "exists", side_effect=[False, True]) # checksum.json doesn't exist initially, then it does when _save_dotbob_checksum_file() is called
 @patch("pathlib.Path.mkdir")
-def test_ensure_dotbob_dir_at_proj_root_non_existent_dotbob_dir(mock_exists, mock_mkdir, tmp_path: Path):
+def test_ensure_dotbob_dir_at_proj_root_non_existent_dotbob_dir(mock_mkdir, tmp_path: Path):
     """Test the successful creation of dotbob dir and checksum file when non of them exist"""
     os.environ["PROJ_ROOT"] = str(tmp_path)
     mock_logger = MagicMock()
@@ -748,13 +748,13 @@ def test_ensure_dotbob_dir_at_proj_root_non_existent_dotbob_dir(mock_exists, moc
         "existing_task_1": {"hash_sha256": "", "dirty": True},
         "existing_task_2": {"hash_sha256": "", "dirty": True},
     }
-    mock_mkdir.assert_called_once_with()  # Check that .bob dir is created
+    mock_mkdir.assert_called_once()  # Check that .bob dir is created
     mock_path_open.assert_called_once_with("w") # Check that the mocked file has been opened once
     handle = mock_path_open() # Retrieve the actual written data
     written_data = "".join(call.args[0] for call in handle.write.call_args_list)
     assert json.loads(written_data) == expected_content # Verify the correct JSON data was written
 
-@patch.object(Path, "exists", return_value=False) # checksum.json doesn't exist
+@patch.object(Path, "exists", side_effect=[False, True]) # checksum.json doesn't exist initially, then it does
 @patch("pathlib.Path.mkdir")
 def test_ensure_dotbob_dir_at_proj_root_existing_dotbob_dir_but_no_dotbob_checksum_file(mock_mkdir, tmp_path: Path):
     """Test when the dotbob dir exsts, but no checksum.json yet. The function should create and populate checksum.json"""
@@ -803,9 +803,9 @@ def test_ensure_dotbob_dir_at_proj_root_both_dotbob_dir_and_dotbob_checksum_file
     mock_path_open.assert_not_called() # Since _update_dotbob_checksum_file() has been mocked, no file open will be executed
     bob_instance.logger.debug.assert_called_once_with(f"checksum.json already exists. Checking for new tasks...")
 
-@patch.object(Path, "exists", return_value=True)
+@patch.object(Path, "exists", return_value=True) # checksum.json exists
 @patch("pathlib.Path.mkdir")
-def test_ensure_dotbob_dir_at_proj_root_with_new_tasks(mock_exists, mock_mkdir, tmp_path: Path):
+def test_ensure_dotbob_dir_at_proj_root_with_new_tasks(mock_mkdir, tmp_path: Path):
     """Test when new tasks are added to task_configs and checksum.json should be updated"""
     os.environ["PROJ_ROOT"] = str(tmp_path)
     mock_logger = MagicMock()
@@ -826,7 +826,7 @@ def test_ensure_dotbob_dir_at_proj_root_with_new_tasks(mock_exists, mock_mkdir, 
     with patch("pathlib.Path.open", mock_open(read_data=json.dumps(existing_dotbob_checksum_file_dict))) as mock_path_open: # Mock the open of self.dotbob_checksum_file within _update_dotbob_checksum_file(), and the return of json.load() with existing_dotbob_checksum_file_dict
         bob_instance.ensure_dotbob_dir_at_proj_root()
 
-    mock_mkdir.assert_called_once_with() # Check that mkdir will still be called irrespective of whether the dotbob dir exists
+    mock_mkdir.assert_called_once_with(exist_ok=True) # Check that mkdir will still be called irrespective of whether the dotbob dir exists
     bob_instance.logger.debug.assert_any_call(f"checksum.json already exists. Checking for new tasks...")
     bob_instance.logger.debug.assert_any_call(f"New tasks detected: {{'new_task'}}. Updating checksum.json...")
 
@@ -907,6 +907,7 @@ def test_update_dotbob_checksum_file_no_new_tasks(mock_path_open, tmp_path: Path
     bob_instance.logger.debug.assert_called_once_with("No new tasks detected. checksum.json is up to date")
 
 
+@patch.object(Path, "exists") # checksum.json exists in _save_dotbob_checksum_file()
 @patch("pathlib.Path.open", new_callable=mock_open, read_data=json.dumps({
     "task1" : {"hash_sha256": "", "dirty": False},
     "task2" : {"hash_sha256": "", "dirty": True},
@@ -938,6 +939,7 @@ def test_update_dotbob_checksum_file_with_new_tasks(mock_path_open, tmp_path: Pa
     }
     assert json.loads(written_data) == expected_data # Verify the correct JSON data was written
 
+@patch.object(Path, "exists") # checksum.json exists in _save_dotbob_checksum_file()
 @patch("pathlib.Path.open", new_callable=mock_open, read_data="")
 def test_update_dotbob_checksum_file_with_empty_or_corrupted_checksum_file(mock_path_open, tmp_path: Path):
     """Test that the function reinitialises the checksum.json when current checksum.json is empty or corrupted"""
@@ -975,3 +977,136 @@ def test_update_dotbob_checksum_file_no_tasks(mock_path_open):
     bob_instance.logger.critical.assert_called_once_with(f"ValueError: No tasks defined within task_configs, aborting _update_dotbob_checksum_file().")
     # Ensure that the file was not written to
     mock_path_open.assert_not_called()
+
+@patch.object(Path, "exists", return_value=False) # checksum.json does not exist
+@patch("pathlib.Path.open", new_callable=mock_open) # Patch opening of self.dotbob_checksum_file if it calls it
+def test_load_dotbob_checksum_file_non_existent_checksum_file(mock_path_open, tmp_path):
+    """Test that it returns None when the checksum file doe not exists"""
+    os.environ["PROJ_ROOT"] = str(tmp_path)
+    mock_logger = MagicMock()
+    bob_instance = Bob(mock_logger)
+
+    bob_instance._load_dotbob_checksum_file()
+    bob_instance.logger.error.assert_called_once_with("No checksum.json within .bob dir found.")
+    mock_path_open.assert_not_called() # There should not be any attempt of file open
+
+@patch.object(Path, "exists", return_value=True) # checksum.json exists
+@patch("pathlib.Path.open", new_callable=mock_open, read_data=json.dumps({
+    "task1" : {"hash_sha256": "", "dirty": False},
+    "task2" : {"hash_sha256": "", "dirty": True},
+}))
+def test_load_dotbob_checksum_file_valid(mock_path_open, tmp_path: Path):
+    """Test loading checksum.json into a dict"""
+    os.environ["PROJ_ROOT"] = str(tmp_path)
+    mock_logger = MagicMock()
+    bob_instance = Bob(mock_logger)
+
+    checksum_file_dict = bob_instance._load_dotbob_checksum_file()
+    mock_path_open.assert_called_once_with("r") # Check that there as been a read attempt of checksum.json
+    bob_instance.logger.debug.assert_called_once_with("Loading checksum.json into a Python dictionary.")
+    assert type(checksum_file_dict) == dict
+    assert "task1" in checksum_file_dict
+    assert "task2" in checksum_file_dict
+
+@patch.object(Path, "exists", return_value=True) # checksum.json exists
+@patch("pathlib.Path.open", new_callable=mock_open)
+def test_save_dotbob_checksum_file_valid(mock_path_open, tmp_path: Path):
+    """Test writing a valid checksum dict into an existing checksum.json"""
+    os.environ["PROJ_ROOT"] = str(tmp_path)
+    mock_logger = MagicMock()
+    bob_instance = Bob(mock_logger)
+
+    checksum_file_dict = {
+        "task1" : {"hash_sha256": "abc123", "dirty": True},
+        "task2" : {"hash_sha256": "def4567", "dirty": False},
+    }
+
+    bob_instance._save_dotbob_checksum_file(checksum_file_dict)
+
+    # Check that checksum.json has been open for write
+    mock_path_open.assert_called_once_with("w")
+    handle = mock_path_open() # Retrieve the actual written data
+    written_data = "".join(call.args[0] for call in handle.write.call_args_list)
+
+    assert json.loads(written_data) == checksum_file_dict
+
+@patch.object(Path, "exists", return_value=False)
+def test_save_dotbob_checksum_file_non_existent_checksum_file(tmp_path: Path):
+    """Test that it returns the correct error msg when self.dotbob_checksum_file does not exist"""
+    os.environ["PROJ_ROOT"] = str(tmp_path)
+    mock_logger = MagicMock()
+    bob_instance = Bob(mock_logger)
+
+    checksum_file_dict = {
+        "task1" : {"hash_sha256": "abc123", "dirty": True},
+        "task2" : {"hash_sha256": "def4567", "dirty": False},
+    }
+
+    bob_instance._save_dotbob_checksum_file(checksum_file_dict)
+    bob_instance.logger.error.assert_called_once_with("No checksum.json within .bob dir found.")
+
+@patch.object(Path, "exists", return_value=True) # checksum.json exists
+@patch("pathlib.Path.open", new_callable=mock_open)
+def test_save_dotbob_checksum_file_duplicate_tasks(mock_path_open, tmp_path: Path):
+    """Test the correct handline when checksum_file_dict has duplicate tasks, redundant task as checksums dict can't contain duplicate"""
+    os.environ["PROJ_ROOT"] = str(tmp_path)
+    mock_logger = MagicMock()
+    bob_instance = Bob(mock_logger)
+
+    checksum_file_dict = {
+        "task1" : {"hash_sha256": "abc123", "dirty": True},
+        "task1" : {"hash_sha256": "def4567", "dirty": False},
+    }
+
+    bob_instance._save_dotbob_checksum_file(checksum_file_dict)
+    mock_path_open.assert_called_once_with("w")
+
+@patch.object(Path, "exists", return_value=True) # checksum.json exists
+@patch("pathlib.Path.open", new_callable=mock_open)
+def test_save_dotbob_checksum_file_missing_required_fields(mock_path_open, tmp_path: Path):
+    """Test with missing 'dirty' field in checksums"""
+    os.environ["PROJ_ROOT"] = str(tmp_path)
+    mock_logger = MagicMock()
+    bob_instance = Bob(mock_logger)
+
+    checksum_file_dict = {
+        "task1" : {"hash_sha256": "abc123", "dirty": True},
+        "task2" : {"hash_sha256": "def4567"},
+    }
+
+    bob_instance._save_dotbob_checksum_file(checksum_file_dict)
+    bob_instance.logger.error.assert_called_once_with("During _save_dotbob_checksum_file(), within the input dict checksums, missing required 'hash_sha256' or/and 'dirty' fields for task2.")
+    mock_path_open.assert_not_called()
+
+@patch.object(Path, "exists", return_value=True) # checksum.json exists
+@patch("pathlib.Path.open", new_callable=mock_open)
+def test_save_dotbob_checksum_file_unexpected_exception(mock_path_open, tmp_path: Path):
+    """Test when there is an unexpected exception"""
+    os.environ["PROJ_ROOT"] = str(tmp_path)
+    mock_logger = MagicMock()
+    bob_instance = Bob(mock_logger)
+
+    checksum_file_dict = {
+        "task1" : {"hash_sha256": "abc123", "dirty": True},
+        "task2" : {"hash_sha256": "def4567", "dirty": True},
+    }
+    mock_path_open.side_effect = Exception("Unexpected error")
+    bob_instance._save_dotbob_checksum_file(checksum_file_dict)
+    bob_instance.logger.critical.assert_called_once_with("Unexpected error during _save_dotbob_checksum_file(): Unexpected error", exc_info=True)
+
+@patch.object(Path, "exists", return_value=True) # checksum.json exists
+@patch("pathlib.Path.open", new_callable=mock_open)
+def test_save_dotbob_checksum_file_invalid_json(mock_path_open, tmp_path: Path):
+    """Test dumping of invalid JSON"""
+    os.environ["PROJ_ROOT"] = str(tmp_path)
+    mock_logger = MagicMock()
+    bob_instance = Bob(mock_logger)
+
+    checksum_file_dict = {
+        "task1" : {"hash_sha256": "abc123", "dirty": True},
+        "task2" : {"hash_sha256": "def4567", "dirty": True},
+    }
+    with patch("json.dump", side_effect=TypeError("Invalid JSON")):
+        bob_instance._save_dotbob_checksum_file(checksum_file_dict)
+
+    bob_instance.logger.critical.assert_called_once_with("Unexpected error during _save_dotbob_checksum_file(): Invalid JSON", exc_info=True)
