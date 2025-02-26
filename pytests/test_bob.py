@@ -1110,3 +1110,17 @@ def test_save_dotbob_checksum_file_invalid_json(mock_path_open, tmp_path: Path):
         bob_instance._save_dotbob_checksum_file(checksum_file_dict)
 
     bob_instance.logger.critical.assert_called_once_with("Unexpected error during _save_dotbob_checksum_file(): Invalid JSON", exc_info=True)
+
+def test_mark_task_as_clean_in_dotbob_checksum_file_invalid_task(tmp_path: Path):
+    """Test marking an invalid task as clean"""
+
+    os.environ["PROJ_ROOT"] = str(tmp_path)
+    mock_logger = MagicMock()
+    bob_instance = Bob(mock_logger)
+    bob_instance.task_configs = {
+        "task1" : {},
+        "task2" : {},
+    }
+
+    bob_instance.mark_task_as_clean_in_dotbob_checksum_file("task3")
+    bob_instance.logger.error.assert_called_once_with("ValueError: Task task3 not found in task_configs. Please ensure discover_tasks() have been executed first.")
