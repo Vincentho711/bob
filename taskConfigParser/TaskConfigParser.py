@@ -42,10 +42,14 @@ class TaskConfigParser:
     def _resolve_files_spec(self, target_dir:Path, files_spec:str) -> str | list[str] | None:
         """Resolve files specification, e.g. content post @output or @input_src"""
         try:
-            if type(files_spec) != str:
-                raise TypeError(f"files_spec = '{files_spec}' must be of type str for it to be resolved.")
+            print(f"files_spec: {files_spec}")
+            print(f"target_dir: {target_dir}")
+            print(f"isinstance(target_dir, Path): {isinstance(target_dir, Path)}")
+            print(f"str(target_dir): {str(target_dir)}")
+            if not isinstance(files_spec, str):
+                raise TypeError(f"files_spec = '{files_spec}' must be of type str for it to be resolved, it is of type '{type(files_spec)}'.")
 
-            if type(target_dir) != Path:
+            if not isinstance(target_dir, Path):
                 raise TypeError(f"target_dir = '{target_dir}' must be of type Path.")
 
             # Not checking whether the target_dir exists
@@ -53,9 +57,14 @@ class TaskConfigParser:
                 self.logger.debug(f"For files_spec = '{files_spec}', resolved reference (entire target dir): {str(target_dir)}")
                 return str(target_dir)
             elif files_spec.startswith("[") and files_spec.endswith("]"): # parse it as a list
+                requested_file_path_str_list = []
                 requested_files = yaml.safe_load(files_spec) # Convert YAML list string to list
-                self.logger.debug(f"For files_spec = '{files_spec}', resolved reference (list of files within target dir): {[str(target_dir / f) for f in requested_files]}")
-                return [str(target_dir / f) for f in requested_files]
+                for f in requested_files:
+                    requested_file_path = target_dir / Path(f)
+                    requested_file_path_str = str(requested_file_path)
+                    requested_file_path_str_list.append(requested_file_path_str)
+                self.logger.debug(f"For files_spec = '{files_spec}', resolved reference (list of files within target dir): {requested_file_path_str_list}")
+                return requested_file_path_str_list
             else: # Assume it is a single file and return the single file file path
                 self.logger.debug(f"For files_spec = '{files_spec}', resolved reference (single file within target dir): {str(target_dir / files_spec)}")
                 return str(target_dir / files_spec)

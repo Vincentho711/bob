@@ -67,6 +67,139 @@ def test_load_task_config_file_valid_yaml(tmp_path: Path):
     assert task_config_parser.task_configs["test_task"]["task_dir"] == "/path/to/"
     assert task_config_parser.task_configs["test_task"]["task_config_file_path"] == task_config_file_path.absolute()
 
+def test_resolve_files_spec_invalid_target_dir_type(tmp_path: Path):
+    """Test resolve_files_spec() invalid target_dir type"""
+    target_dir_1 = ["task1", "task2"]
+    target_dir_2 = "task3"
+    mock_logger = MagicMock()
+    task_config_parser = TaskConfigParser(mock_logger, str(tmp_path))
+
+    files_spec_reference_1 = task_config_parser._resolve_files_spec(target_dir_1, "{@output:task_1:src1.v}")
+    assert files_spec_reference_1 is None
+    task_config_parser.logger.error.assert_called_once_with(f"TypeError: target_dir = '{target_dir_1}' must be of type Path.")
+
+    files_spec_reference_2 = task_config_parser._resolve_files_spec(target_dir_2, "{@output:task_1:src1.v}")
+    assert files_spec_reference_2 is None
+    task_config_parser.logger.error.assert_any_call(f"TypeError: target_dir = '{target_dir_2}' must be of type Path.")
+
+def test_resolve_files_spec_invalid_files_spec_type(tmp_path: Path):
+    """Test resolve_files_spec() with invalid files_spec type"""
+    target_dir = MagicMock(spec=Path)
+    target_dir.__str__.return_value = "/path/to/target_dir/"
+    target_dir.exists.return_value = True
+
+    files_spec_1 = {"key1": "val1", "key2": "val2"}
+    files_spec_2 = tmp_path
+
+    mock_logger = MagicMock()
+    task_config_parser = TaskConfigParser(mock_logger, str(tmp_path))
+    files_spec_reference_1 = task_config_parser._resolve_files_spec(target_dir, files_spec_1)
+    task_config_parser.logger.error.assert_called_once_with(f"TypeError: files_spec = '{files_spec_1}' must be of type str for it to be resolved, it is of type '{type(files_spec_1)}'.")
+    assert files_spec_reference_1 is None
+
+    files_spec_reference_2 = task_config_parser._resolve_files_spec(target_dir, files_spec_2)
+    task_config_parser.logger.error.assert_any_call(f"TypeError: files_spec = '{files_spec_2}' must be of type str for it to be resolved, it is of type '{type(files_spec_2)}'.")
+    assert files_spec_reference_2 is None
+
+def test_resolve_files_spec_entire_target_dir_reference(tmp_path: Path):
+    """Test resolve_files_spec() with files_spec='*"""
+    output_reference_1 = "{@output:task1:*}"
+    files_spec_1 = '*'
+    target_dir_1 = MagicMock(spec=Path)
+    target_dir_1.__str__.return_value = "/path/to/task1/outdir/"
+    target_dir_1.exists.return_value = True
+
+    input_src_reference_2 = "{@input_src:task2:*}"
+    files_spec_2 = '*'
+    target_dir_2 = MagicMock(spec=Path)
+    target_dir_2.__str__.return_value = "/path/to/task2/"
+    target_dir_2.exists.return_value = True
+
+    mock_logger = MagicMock()
+    task_config_parser = TaskConfigParser(mock_logger, str(tmp_path))
+    task_config_parser.task_configs["task1"] = {"input_src": ["src1.v", "src2.v"]}
+    task_config_parser.task_configs["task2"] = {"input_src": ["src3.v", "src4.v", "src5.v"]}
+
+    files_spec_reference_1 = task_config_parser._resolve_files_spec(target_dir_1, files_spec_1)
+    assert isinstance(files_spec_reference_1, str)
+    assert files_spec_reference_1 == str(target_dir_1)
+    task_config_parser.logger.debug.assert_called_once_with(f"For files_spec = '{files_spec_1}', resolved reference (entire target dir): {str(target_dir_1)}")
+
+
+    files_spec_reference_2 = task_config_parser._resolve_files_spec(target_dir_2, files_spec_2)
+    assert isinstance(files_spec_reference_2, str)
+    assert files_spec_reference_2 == str(target_dir_2)
+    task_config_parser.logger.debug.assert_any_call(f"For files_spec = '{files_spec_2}', resolved reference (entire target dir): {str(target_dir_2)}")
+
+def test_resolve_files_spec_list_of_string_valid_with_single_quote(tmp_path: Path):
+    """Test resolving a list of string with '' surrounding the str"""
+    files_spec = "['src1.cpp', 'src2.cpp', 'src3.cpp']"
+    target_dir = MagicMock(spec=Path)
+    target_dir.__str__.return_value = "/path/to/task1/outdir/"
+    target_dir.exists.return_value = True
+
+    # Mock __truediv__ to return a new Path object that correctly joins paths
+    target_dir.__truediv__.side_effect = lambda p: Path(target_dir.__str__.return_value) / p
+
+    mock_logger = MagicMock()
+    task_config_parser = TaskConfigParser(mock_logger, str(tmp_path))
+    files_spec_reference = task_config_parser._resolve_files_spec(target_dir, files_spec)
+
+    expected_output = [
+        str(Path("/path/to/task1/outdir/") / "src1.cpp"),
+        str(Path("/path/to/task1/outdir/") / "src2.cpp"),
+        str(Path("/path/to/task1/outdir/") / "src3.cpp"),
+    ]
+
+    assert files_spec_reference == expected_output
+    task_config_parser.logger.debug.assert_called_once_with(f"For files_spec = '{files_spec}', resolved reference (list of files within target dir): {expected_output}")
+
+def test_resolve_files_spec_list_of_string_valid_with_double_quote(tmp_path: Path):
+    """Test resolving a list of string with "" surrounding the str"""
+    files_spec = '["src1.cpp", "src2.cpp", "src3.cpp"]'
+    target_dir = MagicMock(spec=Path)
+    target_dir.__str__.return_value = "/path/to/task1/outdir/"
+    target_dir.exists.return_value = True
+
+    # Mock __truediv__ to return a new Path object that correctly joins paths
+    target_dir.__truediv__.side_effect = lambda p: Path(target_dir.__str__.return_value) / p
+
+    mock_logger = MagicMock()
+    task_config_parser = TaskConfigParser(mock_logger, str(tmp_path))
+    files_spec_reference = task_config_parser._resolve_files_spec(target_dir, files_spec)
+
+    expected_output = [
+        str(Path("/path/to/task1/outdir/") / "src1.cpp"),
+        str(Path("/path/to/task1/outdir/") / "src2.cpp"),
+        str(Path("/path/to/task1/outdir/") / "src3.cpp"),
+    ]
+
+    assert files_spec_reference == expected_output
+    task_config_parser.logger.debug.assert_called_once_with(f"For files_spec = '{files_spec}', resolved reference (list of files within target dir): {expected_output}")
+
+def test_resolve_files_spec_list_of_string_valid_no_quote(tmp_path: Path):
+    """Test resolving a list of string with nothing surrounding the str"""
+    files_spec = '[src1.cpp, src2.cpp, src3.cpp]'
+    target_dir = MagicMock(spec=Path)
+    target_dir.__str__.return_value = "/path/to/task1/outdir/"
+    target_dir.exists.return_value = True
+
+    # Mock __truediv__ to return a new Path object that correctly joins paths
+    target_dir.__truediv__.side_effect = lambda p: Path(target_dir.__str__.return_value) / p
+
+    mock_logger = MagicMock()
+    task_config_parser = TaskConfigParser(mock_logger, str(tmp_path))
+    files_spec_reference = task_config_parser._resolve_files_spec(target_dir, files_spec)
+
+    expected_output = [
+        str(Path("/path/to/task1/outdir/") / "src1.cpp"),
+        str(Path("/path/to/task1/outdir/") / "src2.cpp"),
+        str(Path("/path/to/task1/outdir/") / "src3.cpp"),
+    ]
+
+    assert files_spec_reference == expected_output
+    task_config_parser.logger.debug.assert_called_once_with(f"For files_spec = '{files_spec}', resolved reference (list of files within target dir): {expected_output}")
+
 def test_resolve_output_reference_no_output_keyword(tmp_path: Path):
     """Test passing an invalid 'value' which does not have the '@output' keyword"""
     value = "{@no_output_keyword}"
