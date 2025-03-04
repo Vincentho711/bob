@@ -200,6 +200,24 @@ def test_resolve_files_spec_list_of_string_valid_no_quote(tmp_path: Path):
     assert files_spec_reference == expected_output
     task_config_parser.logger.debug.assert_called_once_with(f"For files_spec = '{files_spec}', resolved reference (list of files within target dir): {expected_output}")
 
+def test_resolve_files_spec_list_of_string_invalid_with_non_list(tmp_path: Path):
+    """Test resolving a list with invalid content that causes an error"""
+    files_spec = "[None, 123, {'invalid': 'dict'}]"
+
+    target_dir = MagicMock(spec=Path)
+    target_dir.__str__.return_value = "/path/to/task1/outdir/"
+    target_dir.exists.return_value = True
+
+    # Mock __truediv__ to return a new Path object that correctly joins paths
+    target_dir.__truediv__.side_effect = lambda p: Path(target_dir.__str__.return_value) / p
+
+    mock_logger = MagicMock()
+    task_config_parser = TaskConfigParser(mock_logger, str(tmp_path))
+    files_spec_reference = task_config_parser._resolve_files_spec(target_dir, files_spec)
+
+    assert files_spec_reference is None
+    task_config_parser.logger.error.assert_called()
+
 def test_resolve_output_reference_no_output_keyword(tmp_path: Path):
     """Test passing an invalid 'value' which does not have the '@output' keyword"""
     value = "{@no_output_keyword}"
