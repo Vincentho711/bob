@@ -218,6 +218,27 @@ def test_resolve_files_spec_list_of_string_invalid_with_non_list(tmp_path: Path)
     assert files_spec_reference is None
     task_config_parser.logger.error.assert_called()
 
+def test_resolve_files_spec_single_valid_file(tmp_path: Path):
+    """Test resolving a single file, or a long string which would be interpretated as a single file"""
+    files_spec_1 = "single_file.cpp"
+    files_spec_2 = "this is a single file"
+
+    target_dir = MagicMock(spec=Path)
+    target_dir.__str__.return_value = "/path/to/task1/outdir/"
+    target_dir.exists.return_value = True
+
+    # Mock __truediv__ to return a new Path object that correctly joins paths
+    target_dir.__truediv__.side_effect = lambda p: Path(target_dir.__str__.return_value) / p
+
+    mock_logger = MagicMock()
+    task_config_parser = TaskConfigParser(mock_logger, str(tmp_path))
+    files_spec_reference_1 = task_config_parser._resolve_files_spec(target_dir, files_spec_1)
+    assert files_spec_reference_1 == str(Path("/path/to/task1/outdir/") / "single_file.cpp")
+    task_config_parser.logger.debug.assert_called_once_with(f"For files_spec = '{files_spec_1}', resolved reference (single file within target dir): {str(target_dir / files_spec_1)}")
+    files_spec_reference_2 = task_config_parser._resolve_files_spec(target_dir, files_spec_2)
+    assert files_spec_reference_2 == str(Path("/path/to/task1/outdir/") / "this is a single file")
+    task_config_parser.logger.debug.assert_any_call(f"For files_spec = '{files_spec_2}', resolved reference (single file within target dir): {str(target_dir / files_spec_2)}")
+
 def test_resolve_output_reference_no_output_keyword(tmp_path: Path):
     """Test passing an invalid 'value' which does not have the '@output' keyword"""
     value = "{@no_output_keyword}"
@@ -270,3 +291,29 @@ def test_resolve_output_reference_missing_output_dir_field(tmp_path: Path):
     output_reference = task_config_parser._resolve_output_reference(value)
     assert output_reference is None
     task_config_parser.logger.error(f"ValueError: task_configs['{output_task}'] doesn't contain a 'output_dir' attribute. Please ensure a output dir is registered with task '{output_task}' first.")
+
+def test_resolve_output_reference_valid_files_spec_list(tmp_path: Path):
+    """Test the resolve output with a list of string as the files_spec"""
+    files_spec = "['a.cpp', 'b.h', 'c.hpp']"
+    value = f"{{@output:task1:{files_spec}}}"
+    task_outdir = MagicMock(spec=Path)
+    task_outdir.__str__.return_value = "/path/to/outdir/"
+    task_outdir.as_posix.return_value = "/path/to/outdir/"
+    task_outdir.exists.return_value = True
+
+    # Mock __truediv__ to return a new Path object that correctly joins paths
+    task_outdir.__truediv__.side_effect = lambda p: Path(task_outdir.__str__.return_value) / p
+
+    mock_logger = MagicMock()
+    task_config_parser = TaskConfigParser(mock_logger, str(tmp_path))
+    task_config_parser.task_configs["task1"] = {"input_src" : ["src1.v", "src2.v"], "output_dir" : task_outdir}
+    resolved_output_reference = task_config_parser._resolve_output_reference(value)
+
+    expected_output = [
+        str(Path("/path/to/outdir/") / "a.cpp"),
+        str(Path("/path/to/outdir/") / "b.h"),
+        str(Path("/path/to/outdir/") / "c.hpp"),
+    ]
+    task_config_parser.logger.debug.assert_any_call(f"Calling _resolve_files_spec() with target_dir='{task_outdir}', files_spec='{files_spec}'")
+    assert resolved_output_reference == expected_output
+    task_config_parser.logger.debug.assert_any_call(f"For files_spec = '{files_spec}', resolved reference (list of files within target dir): {expected_output}")
