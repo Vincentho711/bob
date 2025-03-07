@@ -328,6 +328,8 @@ def test_discover_task_valid(create_valid_task_config: Path, bob_instance: Bob):
     # Check if the task was correctly added to task_configs
     assert "test_task" in bob_instance.task_configs
     assert bob_instance.task_configs["test_task"]["task_config_path"] == create_valid_task_config
+    assert bob_instance.task_configs["test_task"]["task_dir"] == create_valid_task_config.parent
+    assert isinstance(bob_instance.task_configs["test_task"]["task_dir"], Path)
 
 def test_discover_task_missing_task_name(bob_instance: Bob, tmp_path: Path, caplog):
     """Test when task_config.yaml is missing a task_name field"""
@@ -387,6 +389,7 @@ def test_discover_task_logging(bob_instance, create_valid_task_config):
 
     # Check that the logger's info method was called with the correct message
     mock_logger.info.assert_any_call(f"task_config.yaml found in {create_valid_task_config}")
+    mock_logger.info.assert_any_call(f"task_dir = {create_valid_task_config.parent}")
 
 def test_discover_tasks_multiple_configs_different_hierarchy(create_multiple_valid_task_config):
     """Test when discover_tasks finds multiple task_config.yaml files in different directory hierarchies"""
@@ -407,6 +410,7 @@ def test_discover_tasks_multiple_configs_different_hierarchy(create_multiple_val
         for task_name, task_config_path in zip(expected_task_names, expected_paths):
             assert task_name in bob_instance.task_configs
             assert bob_instance.task_configs[task_name]["task_config_path"] == task_config_path
+            assert bob_instance.task_configs[task_name]["task_dir"] == task_config_path.parent
 
         # Ensure that sys.exit was never called (it should not be triggered in this test)
         mock_exit.assert_not_called()

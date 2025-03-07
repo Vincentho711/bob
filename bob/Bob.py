@@ -212,11 +212,10 @@ class Bob:
     def discover_tasks(self):
         """Discover tasks by finding task_config.yaml files and extracting their task names."""
         try:
-            # task_dirs = [Path(self.proj_root).rglob("task_config.yaml")]
-            for task_dir in Path(self.proj_root).rglob("task_config.yaml"):
-                task_config_path = task_dir
-                print(f"Discovered: {task_config_path}")
+            for task_config_path in Path(self.proj_root).rglob("task_config.yaml"):
+                task_dir = task_config_path.parent
                 self.logger.info(f"task_config.yaml found in {task_config_path}")
+                self.logger.info(f"task_dir = {task_dir}")
                 with open(task_config_path, "r") as f:
                     task_data = yaml.safe_load(f)
                 task_name = task_data.get("task_name")
@@ -224,6 +223,7 @@ class Bob:
                     raise ValueError(f"No task_name defined in {task_config_path}")
                 self.task_configs[task_name] = {}
                 self.task_configs[task_name]["task_config_path"] = task_config_path
+                self.task_configs[task_name]["task_dir"] = task_dir
         except ValueError as e:
             self.logger.error(f"ValueError: {e}")
             exit(1)

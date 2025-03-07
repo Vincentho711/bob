@@ -80,7 +80,7 @@ class TaskConfigParser:
     def _resolve_output_reference(self, value:str) -> str | list[str] | None:
         """Resolve output directory or specific output file references"""
         try:
-            match = re.search(r"\{@output:([^:\[\]]+):(\*|\[.*\])\}", value)
+            match = re.search(r"\{@output:([^:\[\]]+):(\*|\[.*\]|[^:\[\}]+)\}", value)
             if not match:
                 raise ValueError(f"Invalid output reference: '{value}'")
 
@@ -94,7 +94,7 @@ class TaskConfigParser:
             if output_dir is None:
                 raise ValueError(f"task_configs['{output_task}'] doesn't contain a 'output_dir' attribute. Please ensure a output dir is registered with task '{output_task}' first.")
             elif not output_dir.exists():
-                raise FileNotFoundError(f"Output_dir of task '{output_task}' does not exists. Please ensure it exists first.")
+                raise FileNotFoundError(f"Output_dir of task '{output_task}' does not exist. Please ensure it exists first.")
 
             self.logger.debug(f"Calling _resolve_files_spec() with target_dir='{output_dir}', files_spec='{files_spec}'")
             resolved_output_reference = self._resolve_files_spec(Path(output_dir), files_spec)
@@ -114,5 +114,47 @@ class TaskConfigParser:
 
         except Exception as e:
             self.logger.critical(f"Unexpected error during _resolve_output_reference() for value'{value}' : {e}", exc_info=True)
+            return None
+
+    def _resolve_input_reference(self, value:str) -> str | list[str] | None:
+        """Resolve input directory or specific input source files references"""
+        try:
+            print(f"value = {value}")
+            match = re.search(r"\{@input:([^:\[\]]+):(\*|\[.*\]|[^:\[\}]+)\}", value)
+            print(f"match = {match}")
+            if not match:
+                raise ValueError(f"Invalid input reference: '{value}'")
+
+            input_task = match.group(1)
+            files_spec = match.group(2)
+            print(f"input_task = {input_task}")
+            print(f"files_spec = {files_spec}")
+            if input_task not in self.task_configs:
+                raise ValueError(f"Referenced task '{input_task}' not found in task_configs.")
+
+            task_dir = self.task_configs[input_task].get("task_dir", None)
+            if task_dir is None:
+                raise ValueError(f"task_configs['{input_task}'] doesn't contain a 'task_dir' attribute. Please ensure a output dir is registered with task '{input_task}' first.")
+            elif not task_dir.exists():
+                raise FileNotFoundError(f"Task_dir of task '{input_task}' does not exist. Please ensure it exists first.")
+
+            self.logger.debug(f"Calling _resolve_files_spec() with target_dir='{task_dir}', files_spec='{files_spec}'")
+            resolved_input_reference = self._resolve_files_spec(Path(task_dir), files_spec)
+            return resolved_input_reference
+
+        except yaml.YAMLError as ye:
+            self.logger.error(f"Error while parsing list of files within task dir for value '{value}': {ye}")
+            return None
+
+        except FileNotFoundError as fnfe:
+            self.logger.error(f"FileNotFoundError: {fnfe}")
+            return None
+
+        except ValueError as ve:
+            self.logger.error(f"ValueError: {ve}")
+            return None
+
+        except Exception as e:
+            self.logger.critical(f"Unexpected error during _resolve_input_reference() for value '{value}' : {e}", exc_info=True)
             return None
 
