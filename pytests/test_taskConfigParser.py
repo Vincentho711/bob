@@ -368,3 +368,39 @@ def test_resolve_input_reference_valid_single_file(tmp_path: Path):
     task_config_parser.logger.debug.assert_any_call(f"Calling _resolve_files_spec() with target_dir='{task_dir}', files_spec='{files_spec}'")
     assert resolved_input_reference == expected_output
     task_config_parser.logger.debug.assert_any_call(f"For files_spec = '{files_spec}', resolved reference (single file within target dir): {str(task_dir / files_spec)}")
+
+def test_resolve_input_reference_valid_entire_input_dir(tmp_path: Path):
+    """Test resolving an entire input dir of another task"""
+    files_spec = "*"
+    value = f"{{@input:task_1:{files_spec}}}"
+    task_1_dir = MagicMock(spec=Path)
+    task_1_dir.__str__.return_value = "/path/to/task_1"
+    task_1_dir.as_posix.return_value = "/path/to/task_1"
+    task_1_dir.exists.return_value = True
+
+    task_2_dir = MagicMock(spec=Path)
+    task_2_dir.__str__.return_value = "/path/to/task_2"
+    task_2_dir.as_posix.return_value = "/path/to/task_2"
+    task_2_dir.exists.return_value = True
+
+    # Mock __truediv__ to return a new Path object that correctly joins paths
+    task_1_dir.__truediv__.side_effect = lambda p: Path(task_1_dir.__str__.return_value) / p
+    task_2_dir.__truediv__.side_effect = lambda p: Path(task_2_dir.__str__.return_value) / p
+
+    mock_logger = MagicMock()
+    task_config_parser = TaskConfigParser(mock_logger, str(tmp_path))
+    task_config_parser.task_configs["task_1"] = {
+        "task_dir" : task_1_dir,
+        "internal_input_src" : ["single_file.cpp", "my_src.cpp"], "output_dir" : tmp_path
+    }
+    task_config_parser.task_configs["task_2"] = {
+        "task_dir" : task_2_dir,
+        "internal_input_src" : ["a.cpp", "b.cpp"], "output_dir" : tmp_path
+    }
+
+    resolved_input_reference = task_config_parser._resolve_input_reference(value)
+    expected_output = str(task_1_dir)
+
+    task_config_parser.logger.debug.assert_any_call(f"Calling _resolve_files_spec() with target_dir='{task_1_dir}', files_spec='{files_spec}'")
+    assert resolved_input_reference == expected_output
+    task_config_parser.logger.debug(f"For files_spec = '{files_spec}', resolved reference (entire target dir): {str(task_1_dir)}")

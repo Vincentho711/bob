@@ -119,9 +119,7 @@ class TaskConfigParser:
     def _resolve_input_reference(self, value:str) -> str | list[str] | None:
         """Resolve input directory or specific input source files references"""
         try:
-            print(f"value = {value}")
             match = re.search(r"\{@input:([^:\[\]]+):(\*|\[.*\]|[^:\[\}]+)\}", value)
-            print(f"match = {match}")
             if not match:
                 raise ValueError(f"Invalid input reference: '{value}'")
 
