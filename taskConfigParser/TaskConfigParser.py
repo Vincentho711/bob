@@ -156,3 +156,38 @@ class TaskConfigParser:
             self.logger.critical(f"Unexpected error during _resolve_input_reference() for value '{value}' : {e}", exc_info=True)
             return None
 
+    def update_task_env(self, task_name: str, env_key: str, env_val: str | list[str], override_env_val: bool) -> None:
+        """Updates the environment variables for a given task in self.task_configs."""
+        try:
+            if task_name not in self.task_configs:
+                raise KeyError(f"Task '{task_name}' not found in task configurations.")
+            if "task_env" not in self.task_configs[task_name]:
+                self.logger.info(f"Task '{task_name}' does not have a env var dict associated to the 'task_env' key. Creating it from current global env.")
+            task_env = self.task_configs[task_name].setdefault("task_env", os.environ.copy())
+            existing_val = task_env.get(env_key, "")
+
+            if isinstance(existing_val, str):
+                # Attempt to separate str with os.pathsep to see if existing_val is already a list of filepaths
+                existing_val = existing_val.split(os.pathsep)
+                if override_env_val:
+                    # If env_val is a list, assumming it is a list of Paths, join them with pathsep
+                    task_env[env_key] = os.pathsep.join(env_val) if isinstance(env_val, list) else env_val
+                    self.logger.debug(f"Task '{task_name}', overriding existing env_key '{env_key}' with '{task_env[env_key]}'")
+                else:
+                    if isinstance(env_val, list):
+                        self.logger.debug(f"Task '{task_name}', extending a list of env_val = '{env_val}' to env_key = '{env_key}'")
+                        existing_val.extend(env_val)
+                    else:
+                        self.logger.debug(f"Task '{task_name}', appending a single str/filepath env_val = '{env_val}' to env_key = '{env_key}'")
+                        existing_val.append(env_val)
+                    task_env[env_key] = os.pathsep.join(existing_val) if existing_val else ""
+                    self.logger.debug(f"Task '{task_name}', updated env_key = '{env_key}' with env_val = '{task_env[env_key]}'")
+
+        except KeyError as ke:
+            self.logger.error(f"KeyError: {ke}")
+            return
+
+        except Exception as e:
+            self.logger.critical(f"Unexpected error during update_task_env() for task_name = '{task_name}' : {e}", exc_info=True)
+            return
+

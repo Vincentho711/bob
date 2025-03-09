@@ -295,7 +295,7 @@ class Bob:
             if existing_val:
                 if isinstance(env_val, Path):
                     self.task_configs[task_name]["task_env"][env_key] += os.pathsep + str(env_val)
-                    self.logger.debug(f"For {task_name} env, appending path {str(env_val)} to env var {env_key}. {env_key} = {self.task_configs[task_name]["task_env"].get(env_key)}.")
+                    self.logger.debug(f"For {task_name} env, appending path {str(env_val)} to env var {env_key}. {env_key} = {self.task_configs[task_name]['task_env'].get(env_key)}.")
                 # If it is not a Path, we replace existing env_val with the new env_val
                 else:
                     self.task_configs[task_name]["task_env"][env_key] = env_val
