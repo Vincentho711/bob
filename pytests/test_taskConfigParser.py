@@ -404,3 +404,153 @@ def test_resolve_input_reference_valid_entire_input_dir(tmp_path: Path):
     task_config_parser.logger.debug.assert_any_call(f"Calling _resolve_files_spec() with target_dir='{task_1_dir}', files_spec='{files_spec}'")
     assert resolved_input_reference == expected_output
     task_config_parser.logger.debug(f"For files_spec = '{files_spec}', resolved reference (entire target dir): {str(task_1_dir)}")
+
+def test_update_task_env_invalid_task_name(tmp_path: Path):
+    """Test updating the task env of an invalid task"""
+    task_name = 'invalid_task'
+
+    task_1_dir = MagicMock(spec=Path)
+    task_1_dir.__str__.return_value = "/path/to/task_1"
+    task_1_dir.as_posix.return_value = "/path/to/task_1"
+    task_1_dir.exists.return_value = True
+
+    mock_logger = MagicMock()
+    task_config_parser = TaskConfigParser(mock_logger, str(tmp_path))
+    task_config_parser.task_configs["task_1"] = {
+            "task_dir": task_1_dir,
+            "internal_input_src": ["a.cpp", "b.cpp", "c.cpp"]
+    }
+
+    task_config_parser.update_task_env(task_name, "env_key", "env_val", False)
+    task_config_parser.logger.error.assert_called_once_with(
+        f"KeyError: 'Task {task_name} not found in task configurations.'"
+    )
+
+def test_update_task_env_no_task_env_in_task_configs(tmp_path: Path):
+    """Test updating the task but task configs does not have a task_env field"""
+    task_name = "valid_task"
+
+    mock_logger = MagicMock()
+    task_config_parser = TaskConfigParser(mock_logger, str(tmp_path))
+    task_config_parser.task_configs["valid_task"] = {
+        "abc" : {'USER' : 'bob'},
+    }
+
+    task_config_parser.update_task_env(task_name, "env_key", "env_val", False)
+    task_config_parser.logger.info.assert_called_once_with(f"Task '{task_name}' does not have an env var dict associated to the 'task_env' key. Creating it from current global env.")
+    task_config_parser.logger.debug.assert_called_once_with(f"Task '{task_name}', overriding existing or creating env_key='env_key' with env_val='env_val'")
+    expected_env_dict = os.environ.copy()
+    expected_env_dict["env_key"] = "env_val"
+    assert task_config_parser.task_configs[task_name]["task_env"] == expected_env_dict
+
+def test_update_task_env_existing_val_is_list_and_env_val_is_list(tmp_path: Path):
+    """Test with an existing value of a list and env_val is also a list"""
+    task_name = "valid_task"
+    env_key = "env_key"
+    env_val = ["/path/to/a", "/path/to/b"]
+
+    mock_logger = MagicMock()
+    task_config_parser = TaskConfigParser(mock_logger, str(tmp_path))
+    task_config_parser.task_configs["valid_task"] = {
+        "task_env" : {'env_key' : "/opt/homebrew/sbin:/usr/local/bin:/usr/sbin"}
+    }
+    task_config_parser.update_task_env(task_name, env_key, env_val, False)
+    task_config_parser.logger.debug.assert_any_call(f"Task '{task_name}', extending a list of env_val = '{env_val}' to env_key = '{env_key}'")
+    expected_env_dict = {
+        "task_env" : {'env_key' : "/opt/homebrew/sbin:/usr/local/bin:/usr/sbin:/path/to/a:/path/to/b"}
+    }
+    assert task_config_parser.task_configs["valid_task"] == expected_env_dict
+    task_config_parser.logger.debug.assert_any_call(f"Task '{task_name}', updated env_key = '{env_key}' with env_val = '{expected_env_dict["task_env"]["env_key"]}'")
+
+def test_update_task_env_existing_val_is_list_and_env_val_is_str(tmp_path: Path):
+    """Test with an existing value of a list but env_val is only a str"""
+    task_name = "valid_task"
+    env_key = "env_key"
+    env_val = "/path/to/a"
+
+    mock_logger = MagicMock()
+    task_config_parser = TaskConfigParser(mock_logger, str(tmp_path))
+    task_config_parser.task_configs["valid_task"] = {
+        "task_env" : {'env_key' : "/opt/homebrew/sbin:/path/to/a:/path/to/b"}
+    }
+    task_config_parser.update_task_env(task_name, env_key, env_val, False)
+    task_config_parser.logger.debug.assert_any_call(f"Task '{task_name}', appending a single str/filepath env_val = '{env_val}' to env_key = '{env_key}'")
+    expected_env_dict = {
+        "task_env" : {'env_key' : "/opt/homebrew/sbin:/path/to/a:/path/to/b:/path/to/a"}
+    }
+    assert task_config_parser.task_configs["valid_task"] == expected_env_dict
+    task_config_parser.logger.debug.assert_any_call(f"Task '{task_name}', updated env_key = '{env_key}' with env_val = '{expected_env_dict["task_env"]["env_key"]}'")
+
+def test_update_task_env_existing_val_is_str_and_env_val_is_list(tmp_path: Path):
+    """Test with an existing value which is a str but env_val is a list"""
+    task_name = "valid_task"
+    env_key = "env_key"
+    env_val = ["/path/to/a", "/path/to/b"]
+
+    mock_logger = MagicMock()
+    task_config_parser = TaskConfigParser(mock_logger, str(tmp_path))
+    task_config_parser.task_configs["valid_task"] = {
+        "task_env" : {'env_key' : "/opt/homebrew/sbin"}
+    }
+    task_config_parser.update_task_env(task_name, env_key, env_val, False)
+    task_config_parser.logger.debug.assert_any_call(f"Task '{task_name}', extending a list of env_val = '{env_val}' to env_key = '{env_key}'")
+    expected_env_dict = {
+        "task_env" : {'env_key' : "/opt/homebrew/sbin:/path/to/a:/path/to/b"}
+    }
+    assert task_config_parser.task_configs["valid_task"] == expected_env_dict
+    task_config_parser.logger.debug.assert_any_call(f"Task '{task_name}', updated env_key = '{env_key}' with env_val = '{expected_env_dict["task_env"]["env_key"]}'")
+
+def test_update_task_env_existing_val_is_str_and_env_val_is_str(tmp_path: Path):
+    """Test with an existing value which is a str and env_val is a str"""
+    task_name = "valid_task"
+    env_key = "env_key"
+    env_val = "/path/to/a"
+
+    mock_logger = MagicMock()
+    task_config_parser = TaskConfigParser(mock_logger, str(tmp_path))
+    task_config_parser.task_configs["valid_task"] = {
+        "task_env" : {'env_key' : "/opt/homebrew/sbin"}
+    }
+    task_config_parser.update_task_env(task_name, env_key, env_val, False)
+    task_config_parser.logger.debug.assert_any_call(f"Task '{task_name}', appending a single str/filepath env_val = '{env_val}' to env_key = '{env_key}'")
+    expected_env_dict = {
+        "task_env" : {'env_key' : "/opt/homebrew/sbin:/path/to/a"}
+    }
+    assert task_config_parser.task_configs["valid_task"] == expected_env_dict
+    task_config_parser.logger.debug.assert_any_call(f"Task '{task_name}', updated env_key = '{env_key}' with env_val = '{expected_env_dict["task_env"]["env_key"]}'")
+
+def test_update_task_env_existing_val_is_str_override(tmp_path: Path):
+    """Test overriding an existing value which is a str"""
+    task_name = "valid_task"
+    env_key = "env_key"
+    env_val = "/path/to/a"
+
+    mock_logger = MagicMock()
+    task_config_parser = TaskConfigParser(mock_logger, str(tmp_path))
+    task_config_parser.task_configs["valid_task"] = {
+        "task_env" : {'env_key' : "/opt/homebrew/sbin"}
+    }
+    task_config_parser.update_task_env(task_name, env_key, env_val, True)
+    expected_env_dict = {
+        "task_env" : {'env_key' : "/path/to/a"}
+    }
+    assert task_config_parser.task_configs["valid_task"] == expected_env_dict
+    task_config_parser.logger.debug.assert_called_once_with(f"Task '{task_name}', overriding existing or creating env_key='{env_key}' with env_val='{expected_env_dict["task_env"]["env_key"]}'")
+
+def test_update_task_env_existing_val_is_str_override(tmp_path: Path):
+    """Test overriding an existing value which is a list"""
+    task_name = "valid_task"
+    env_key = "env_key"
+    env_val = "/path/to/c"
+
+    mock_logger = MagicMock()
+    task_config_parser = TaskConfigParser(mock_logger, str(tmp_path))
+    task_config_parser.task_configs["valid_task"] = {
+        "task_env" : {'env_key' : "/opt/homebrew/sbin:/path/to/a:/path/to/b"}
+    }
+    task_config_parser.update_task_env(task_name, env_key, env_val, True)
+    expected_env_dict = {
+        "task_env" : {'env_key' : "/path/to/c"}
+    }
+    assert task_config_parser.task_configs["valid_task"] == expected_env_dict
+    task_config_parser.logger.debug.assert_called_once_with(f"Task '{task_name}', overriding existing or creating env_key='{env_key}' with env_val='{expected_env_dict["task_env"]["env_key"]}'")
