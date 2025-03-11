@@ -66,6 +66,7 @@ def test_load_task_config_file_valid_yaml(tmp_path: Path):
     assert "test_task" in task_config_parser.task_configs
     assert task_config_parser.task_configs["test_task"]["task_dir"] == "/path/to/"
     assert task_config_parser.task_configs["test_task"]["task_config_file_path"] == task_config_file_path.absolute()
+    assert task_config_parser.task_configs["test_task"]["task_config_dict"] == mock_yaml_content
 
 def test_resolve_files_spec_invalid_target_dir_type(tmp_path: Path):
     """Test resolve_files_spec() invalid target_dir type"""

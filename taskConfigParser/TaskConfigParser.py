@@ -31,6 +31,7 @@ class TaskConfigParser:
             task_entry = self.task_configs[task_name]
             task_entry.setdefault("task_dir", task_config_file_path.parent.absolute())
             task_entry.setdefault("task_config_file_path", task_config_file_path.absolute())
+            task_entry.setdefault("task_config_dict", task_config_dict)
             return task_config_dict
 
         except yaml.YAMLError as ye:
@@ -198,3 +199,48 @@ class TaskConfigParser:
             self.logger.critical(f"Unexpected error during update_task_env() for task_name = '{task_name}' : {e}", exc_info=True)
             return
 
+    def parse_task_config_dict(self, task_name: str) -> None:
+        """Parse a task config dict based on task type"""
+        try:
+            if task_name not in self.task_configs:
+                raise KeyError(f"Task {task_name} not found in task configurations.")
+
+            task_config_dict = self.task_configs[task_name].get("task_config_dict", None)
+            if task_config_dict is None:
+                raise KeyError(f"Task '{task_name}' does not have a 'task_config_dict' attribute within task_configs. Please ensure that load_task_config() has been executed for task '{task_name}' first.")
+
+            task_type = task_config_dict.get("task_type", None)
+            if task_type is None:
+                raise KeyError(f"For task '{task_name}', task_config.yaml does not contain a mandatory 'task_type' key. Please ensure it exists.")
+
+            if not isinstance(task_type, str):
+                raise TypeError(f"For task '{task_name}', the value of key 'task_type' within task_config.yaml is not of type str. Only str can be identified. Current value = {task_type}.")
+
+            match task_type:
+                case "c_compile":
+                    self.parse_c_compile(task_name)
+                case "cpp_compile":
+                    self.parse_cpp_compile(task_name)
+                case _:
+                    raise ValueError(f"For task_name = '{task_name}', the task_type = '{task_type}' is not a support task type.")
+
+        except ValueError as ve:
+            self.logger.error(f"ValueError: {ve}")
+            return None
+        except TypeError as te:
+            self.logger.error(f"TypeError: {te}")
+            return None
+        except KeyError as ke:
+            self.logger.error(f"KeyError: {ke}")
+            return None
+        except Exception as e:
+            self.logger.critical(f"Unexpected error during parse_task_config_dict() for task_name = '{task_name}' : {e}", exc_info=True)
+            return None
+
+    def parse_c_compile(self, task_name: str):
+        """Set up the task_env for a C compilation task"""
+        pass
+
+    def parse_cpp_compile(self, task_name: str):
+        """Set up the task_env for a C++ compilation task"""
+        pass
