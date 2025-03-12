@@ -555,3 +555,28 @@ def test_update_task_env_existing_val_is_str_override(tmp_path: Path):
     }
     assert task_config_parser.task_configs["valid_task"] == expected_env_dict
     task_config_parser.logger.debug.assert_called_once_with(f"Task '{task_name}', overriding existing or creating env_key='{env_key}' with env_val='{expected_env_dict["task_env"]["env_key"]}'")
+
+def test_parse_task_config_dict_invalid_task_name(tmp_path: Path):
+    """Test parsing a task_name which does not exist"""
+    task_name = "invalid_task"
+    mock_logger = MagicMock()
+    task_config_parser = TaskConfigParser(mock_logger, str(tmp_path))
+    task_config_parser.task_configs["valid_task"] = {
+        "task_env" : {'env_key' : "/opt/homebrew/sbin:/path/to/a:/path/to/b"}
+    }
+    task_config_parser.parse_task_config_dict(task_name)
+    task_config_parser.logger.error.assert_called_once_with(f"KeyError: 'Task {task_name} not found in task configurations.'")
+
+def test_parse_task_config_dict_no_task_config_dict_entry(tmp_path: Path):
+    """Test parsing a task which exists but it doesn't have a 'task_config_dict' attribute within task_configs"""
+    task_name = "valid_task"
+    env_key = "env_key"
+    env_val = "/path/to/c"
+
+    mock_logger = MagicMock()
+    task_config_parser = TaskConfigParser(mock_logger, str(tmp_path))
+    task_config_parser.task_configs["valid_task"] = {
+        "task_env" : {'env_key' : "/opt/homebrew/sbin:/path/to/a:/path/to/b"}
+    }
+    task_config_parser.parse_task_config_dict(task_name)
+    task_config_parser.logger.error.assert_called_once_with(f"KeyError: \"Task '{task_name}' does not have a 'task_config_dict' attribute within task_configs. Please ensure that load_task_config() has been executed for task '{task_name}' first.\"")
