@@ -580,3 +580,72 @@ def test_parse_task_config_dict_no_task_config_dict_entry(tmp_path: Path):
     }
     task_config_parser.parse_task_config_dict(task_name)
     task_config_parser.logger.error.assert_called_once_with(f"KeyError: \"Task '{task_name}' does not have a 'task_config_dict' attribute within task_configs. Please ensure that load_task_config() has been executed for task '{task_name}' first.\"")
+
+def test_parse_task_config_dict_no_task_type(tmp_path: Path):
+    """Test parsing a task_config.yaml which does not have the mandatory field 'task_type'"""
+    task_name = "valid_task"
+    env_key = "env_key"
+    env_val = "/path/to/c"
+
+    mock_logger = MagicMock()
+    task_config_parser = TaskConfigParser(mock_logger, str(tmp_path))
+    task_config_parser.task_configs["valid_task"] = {
+        "task_env" : {'env_key' : "/opt/homebrew/sbin:/path/to/a:/path/to/b"},
+        "task_config_dict" : {"empty_key" : "empty_value"}
+    }
+
+    task_config_parser.parse_task_config_dict(task_name)
+    task_config_parser.logger.error.assert_called_once_with(f"KeyError: \"For task '{task_name}', task_config.yaml does not contain a mandatory 'task_type' key. Please ensure it exists.\"")
+
+def test_parse_task_config_dict_non_str_task_type(tmp_path: Path):
+    """Test parsing a task_config.yaml which contains the 'task_type' key but it is not a str"""
+    task_name = "valid_task"
+    task_type = ["illegal", "list"]
+
+    mock_logger = MagicMock()
+    task_config_parser = TaskConfigParser(mock_logger, str(tmp_path))
+    task_config_parser.task_configs["valid_task"] = {
+        "task_env" : {'env_key' : "/opt/homebrew/sbin:/path/to/a:/path/to/b"},
+        "task_config_dict" : {"task_type" : task_type}
+    }
+    task_config_parser.parse_task_config_dict(task_name)
+    task_config_parser.logger.error.assert_called_once_with(f"TypeError: For task '{task_name}', the value of key 'task_type' within task_config.yaml is not of type str. Only str can be identified. Current value = {task_type}.")
+
+def test_parse_task_config_dict_valid_task_type(tmp_path: Path):
+    """Test parsing a valid task_type"""
+    task_type_1 = "c_compile"
+    task_type_2 = "cpp_compile"
+
+    mock_logger = MagicMock()
+    task_config_parser = TaskConfigParser(mock_logger, str(tmp_path))
+    task_config_parser.task_configs["valid_task_1"] = {
+        "task_env" : {'env_key' : "/opt/homebrew/sbin:/path/to/a:/path/to/b"},
+        "task_config_dict" : {"task_type" : task_type_1}
+    }
+    task_config_parser.task_configs["valid_task_2"] = {
+        "task_env" : {'env_key' : "/opt/homebrew/sbin:/path/to/c:/path/to/d"},
+        "task_config_dict" : {"task_type" : task_type_2}
+    }
+    task_config_parser.parse_c_compile = MagicMock()
+    task_config_parser.parse_cpp_compile = MagicMock()
+
+    task_config_parser.parse_task_config_dict("valid_task_1")
+    task_config_parser.parse_c_compile.assert_called_once_with("valid_task_1")
+    task_config_parser.parse_cpp_compile.assert_not_called()
+
+    task_config_parser.parse_task_config_dict("valid_task_2")
+    task_config_parser.parse_cpp_compile.assert_called_once_with("valid_task_2")
+
+def test_parse_task_config_dict_invalid_task_type(tmp_path: Path):
+    """Test parsing a invalid task_type that isn't supported"""
+    task_name = "valid_task_1"
+    task_type = "unsupported_task_type"
+
+    mock_logger = MagicMock()
+    task_config_parser = TaskConfigParser(mock_logger, str(tmp_path))
+    task_config_parser.task_configs["valid_task_1"] = {
+        "task_env" : {'env_key' : "/opt/homebrew/sbin:/path/to/a:/path/to/b"},
+        "task_config_dict" : {"task_type" : task_type}
+    }
+    task_config_parser.parse_task_config_dict(task_name)
+    task_config_parser.logger.error.assert_called_once_with(f"ValueError: For task_name = '{task_name}', the task_type = '{task_type}' is not a support task type.")
