@@ -237,9 +237,66 @@ class TaskConfigParser:
             self.logger.critical(f"Unexpected error during parse_task_config_dict() for task_name = '{task_name}' : {e}", exc_info=True)
             return None
 
+    def validate_initial_task_config_dict(self, task_name: str) -> bool:
+        """Validate the task_config_dict has basic mandatory fields initially"""
+        try:
+            if task_name not in self.task_configs:
+                raise KeyError(f"Task {task_name} not found in task configurations.")
+
+            task_env = self.task_configs[task_name].get("task_env", None)
+            if task_env is None:
+                raise KeyError(f"For task '{task_name}', 'task_env' is not found within task_configs. Aborting parse_c_compile().")
+
+            task_config_file_path = self.task_configs[task_name].get("task_config_file_path", None)
+
+            if task_config_file_path is None:
+                raise KeyError(f"Task '{task_name}' does not have a mandatory 'task_config_file_path' attribute within task_configs.")
+
+            task_config_dict = self.task_configs[task_name].get("task_config_dict", None)
+
+            if task_config_dict is None:
+                raise KeyError(f"Task '{task_name}' does not have a 'task_config_dict' attribute within task_configs. Please ensure that load_task_config() has been executed for task '{task_name}' first.")
+
+            task_dir = self.task_configs[task_name].get("task_dir", None)
+
+            if task_dir is None:
+                raise KeyError(f"{task_config_file_path} does not contain the mandatory field 'task_dir'.")
+
+            output_dir = self.task_configs[task_name].get("output_dir", None)
+
+            if output_dir is None:
+                raise KeyError(f"{task_config_file_path} does not contain the mandatory field 'output_dir'.")
+
+            task_type = self.task_configs[task_name].get("task_type", None)
+
+            if task_type is None:
+                raise KeyError(f"{task_config_file_path} does not contain the mandatory field 'task_type'.")
+
+            return True
+
+        except KeyError as ke:
+            self.logger.error(f"KeyError: {ke}")
+            return False
+
+        except Exception as e:
+            self.logger.critical(f"Unexpected error during validate_initial_task_config_dict() for task_name = '{task_name}' : {e}", exc_info=True)
+            return False
+
     def parse_c_compile(self, task_name: str):
         """Set up the task_env for a C compilation task"""
-        pass
+        try:
+            if self.validate_initial_task_config_dict(task_name):
+                task_config_dict = self.task_configs[task_name].get("task_config_dict", None)
+                task_config_file_path = self.task_configs[task_name].get("task_config_file_path", None)
+
+                # Fetch mandatory key 'executable_name'
+                executable_name = task_config_dict.get("executable_name", None)
+                if executable_name is None:
+                    raise KeyError(f"{task_config_file_path} which is a 'c_compile' build does not contain a mandatory field 'executable_name'.")
+
+        except KeyError as ke:
+            self.logger.error(f"KeyError: {ke}")
+            return None
 
     def parse_cpp_compile(self, task_name: str):
         """Set up the task_env for a C++ compilation task"""
