@@ -202,20 +202,12 @@ class TaskConfigParser:
     def parse_task_config_dict(self, task_name: str) -> None:
         """Parse a task config dict based on task type"""
         try:
-            if task_name not in self.task_configs:
-                raise KeyError(f"Task {task_name} not found in task configurations.")
+            validate_sucess = self.validate_initial_task_config_dict(task_name)
+            if not validate_sucess:
+                return None
 
             task_config_dict = self.task_configs[task_name].get("task_config_dict", None)
-            if task_config_dict is None:
-                raise KeyError(f"Task '{task_name}' does not have a 'task_config_dict' attribute within task_configs. Please ensure that load_task_config() has been executed for task '{task_name}' first.")
-
             task_type = task_config_dict.get("task_type", None)
-            if task_type is None:
-                raise KeyError(f"For task '{task_name}', task_config.yaml does not contain a mandatory 'task_type' key. Please ensure it exists.")
-
-            if not isinstance(task_type, str):
-                raise TypeError(f"For task '{task_name}', the value of key 'task_type' within task_config.yaml is not of type str. Only str can be identified. Current value = {task_type}.")
-
             match task_type:
                 case "c_compile":
                     self.parse_c_compile(task_name)
@@ -245,7 +237,7 @@ class TaskConfigParser:
 
             task_env = self.task_configs[task_name].get("task_env", None)
             if task_env is None:
-                raise KeyError(f"For task '{task_name}', 'task_env' is not found within task_configs. Aborting parse_c_compile().")
+                raise KeyError(f"For task '{task_name}', 'task_env' is not found within task_configs. validate_initial_task_config_dict() failed.")
 
             task_config_file_path = self.task_configs[task_name].get("task_config_file_path", None)
 
@@ -260,20 +252,26 @@ class TaskConfigParser:
             task_dir = self.task_configs[task_name].get("task_dir", None)
 
             if task_dir is None:
-                raise KeyError(f"{task_config_file_path} does not contain the mandatory field 'task_dir'.")
+                raise KeyError(f"task_configs[{task_name}] does not contain the mandatory field 'task_dir'.")
 
             output_dir = self.task_configs[task_name].get("output_dir", None)
 
             if output_dir is None:
-                raise KeyError(f"{task_config_file_path} does not contain the mandatory field 'output_dir'.")
+                raise KeyError(f"task_configs[{task_name}] does not contain the mandatory field 'output_dir'.")
 
-            task_type = self.task_configs[task_name].get("task_type", None)
+            task_type = task_config_dict.get("task_type", None)
 
             if task_type is None:
                 raise KeyError(f"{task_config_file_path} does not contain the mandatory field 'task_type'.")
 
+            elif not isinstance(task_type, str):
+                raise TypeError(f"{task_config_file_path} has the mandatory field 'task_type' defined as a non string. task_type = {task_type}")
+
             return True
 
+        except TypeError as te:
+            self.logger.error(f"TypeError: {te}")
+            return False
         except KeyError as ke:
             self.logger.error(f"KeyError: {ke}")
             return False
@@ -285,14 +283,13 @@ class TaskConfigParser:
     def parse_c_compile(self, task_name: str):
         """Set up the task_env for a C compilation task"""
         try:
-            if self.validate_initial_task_config_dict(task_name):
-                task_config_dict = self.task_configs[task_name].get("task_config_dict", None)
-                task_config_file_path = self.task_configs[task_name].get("task_config_file_path", None)
+            task_config_dict = self.task_configs[task_name].get("task_config_dict", None)
+            task_config_file_path = self.task_configs[task_name].get("task_config_file_path", None)
 
-                # Fetch mandatory key 'executable_name'
-                executable_name = task_config_dict.get("executable_name", None)
-                if executable_name is None:
-                    raise KeyError(f"{task_config_file_path} which is a 'c_compile' build does not contain a mandatory field 'executable_name'.")
+            # Fetch mandatory key 'executable_name'
+            executable_name = task_config_dict.get("executable_name", None)
+            if executable_name is None:
+                raise KeyError(f"{task_config_file_path} which is a 'c_compile' build does not contain a mandatory field 'executable_name'.")
 
         except KeyError as ke:
             self.logger.error(f"KeyError: {ke}")
