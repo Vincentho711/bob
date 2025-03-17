@@ -157,6 +157,58 @@ class TaskConfigParser:
             self.logger.critical(f"Unexpected error during _resolve_input_reference() for value '{value}' : {e}", exc_info=True)
             return None
 
+    def resolve_reference(self, task_name: str, value: str) -> str | list[str] | None:
+        """
+        Resolves a reference value, whether it's an input, output, or a normal string.
+        Returns absolute file paths as strings.
+        """
+        try:
+            if task_name not in self.task_configs:
+                raise KeyError(f"Task {task_name} not found in task configurations.")
+
+            # Check if value matches output reference pattern
+            if re.match(r"\{@output:([^:\[\]]+):(\*|\[.*\]|[^:\[\}]+)\}", value):
+                resolved_value = self._resolve_output_reference(value)
+            # Check if value matches input reference pattern
+            elif re.match(r"\{@input:([^:\[\]]+):(\*|\[.*\]|[^:\[\}]+)\}", value):
+                resolved_value = self._resolve_input_reference(value)
+            else:
+                # If it's a normal string, assume it's a direct file path within current task_dir
+                task_dir_path = Path(self.task_configs[task_name].get("task_dir", None))
+                if task_dir_path is None:
+                    raise KeyError(f"Task '{task_name}' does not have a 'task_dir' attribute with its task_config.")
+                resolved_value = task_dir_path / value  # Join task_dir and value
+
+                # Return the absolute path
+                resolved_value = resolved_value.resolve()
+
+                # Convert to string before returning
+                resolved_value = str(resolved_value)
+
+            if resolved_value is None:
+                raise ValueError(f"Errors during resolving reference with value='{value}' and task_name='{task_name}'.")
+
+            if isinstance(resolved_value, str):
+                resolved_path = Path(resolved_value).resolve()
+                return [str(p) for p in resolved_path.glob("*")] if resolved_path.is_dir() else str(resolved_path)
+
+            if isinstance(resolved_value, list):
+                return [str(Path(p).resolve()) for p in resolved_value]
+
+            raise TypeError(f"Unexpected resolved type: {type(resolved_value)}")
+
+        except ValueError as ve:
+            self.logger.error(f"ValueError: {ve}")
+
+        except TypeError as te:
+            self.logger.error(f"TypeError: {te}")
+
+        except KeyError as ke:
+            self.logger.error(f"KeyError: {ke}")
+
+        except Exception as e:
+            self.logger.critical(f"Unexpected error during resolve_reference() for task_name='{task_name}', value='{value}' : {e}", exc_info=True)
+
     def update_task_env(self, task_name: str, env_key: str, env_val: str | list[str], override_env_val: bool = False) -> None:
         """Updates the environment variables for a given task in self.task_configs."""
         try:
@@ -286,11 +338,50 @@ class TaskConfigParser:
             task_config_dict = self.task_configs[task_name].get("task_config_dict", None)
             task_config_file_path = self.task_configs[task_name].get("task_config_file_path", None)
 
+            self.logger.debug(f"For task '{task_name}', parsing c_compile task type.")
+
             # Fetch mandatory key 'executable_name'
             executable_name = task_config_dict.get("executable_name", None)
             if executable_name is None:
                 raise KeyError(f"{task_config_file_path} which is a 'c_compile' build does not contain a mandatory field 'executable_name'.")
+            elif not isinstance(executable_name, str):
+                raise TypeError(f"{task_config_file_path} mandatory field 'executable_name' is not of type str. Currnt type = {type(executable_name)}. Please ensure it is a str.")
+            elif ".exe" not in executable_name:
+                raise ValueError(f"{task_config_file_path} mandatory field 'executable_name' does not contain '.exe'. Current executable_name='{executable_name}'. Please ensure that '.exe' exists in the str.")
+            self.update_task_env(task_name, "bob_executable_name", executable_name, True)
 
+            # Fetch mandatory key 'src_files'
+            unresolved_src_files = task_config_dict.get("src_files", None)
+            if unresolved_src_files is None:
+                raise KeyError(f"{task_config_file_path} which is a 'c_compile' build does not contain a mandatory field 'src_files'. ")
+            elif not isinstance(unresolved_src_files, (str, list)):
+                raise TypeError(f"{task_config_file_path} mandatory field 'src_files' should be either a str or a list. Current type = {type(unresolved_src_files)}.")
+
+            resolved_src_files : list[str] = []
+
+            # Modify it into a list if it is a str for ease of manipulation
+            unresolved_src_files = [unresolved_src_files] if isinstance(unresolved_src_files, str) else unresolved_src_files
+
+            # Resolve every src file reference
+            for unresolved_src_file in unresolved_src_files:
+                resolved_reference = self.resolve_reference(task_name, unresolved_src_file)
+
+                self.logger.debug(f"task_name='{task_name}', unresolved_src_file='{unresolved_src_file}', resolved_reference='{resolved_reference}'.")
+
+                if isinstance(resolved_reference, str):
+                    resolved_src_files.append(resolved_reference)
+                elif isinstance(resolved_src_files, list):
+                    resolved_src_files.extend(resolved_reference)
+                else:
+                    self.logger.warning(f"Resolved reference='{resolved_reference}' is neither of type str or list. Skip appending to resolved_src_files list.")
+
+
+        except TypeError as te:
+            self.logger.error(f"TypeError: {te}")
+            return None
+        except ValueError as ve:
+            self.logger.error(f"ValueError: {ve}")
+            return None
         except KeyError as ke:
             self.logger.error(f"KeyError: {ke}")
             return None
