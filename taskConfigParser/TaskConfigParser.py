@@ -87,18 +87,24 @@ class TaskConfigParser:
 
             output_task = match.group(1)
             files_spec = match.group(2)
+            print(f"output_task={output_task}, files_spec={files_spec}")
 
             if output_task not in self.task_configs:
                 raise ValueError(f"Referenced task '{output_task}' not found in task_configs.")
 
             output_dir = self.task_configs[output_task].get("output_dir", None)
+            print(f"output_dir={output_dir}")
             if output_dir is None:
+                print(f"output_dir is None")
                 raise ValueError(f"task_configs['{output_task}'] doesn't contain a 'output_dir' attribute. Please ensure a output dir is registered with task '{output_task}' first.")
             elif not output_dir.exists():
+                print(f"output_dir does not exist.")
                 raise FileNotFoundError(f"Output_dir of task '{output_task}' does not exist. Please ensure it exists first.")
 
+            print(f"Calling _resolve_files_spec()")
             self.logger.debug(f"Calling _resolve_files_spec() with target_dir='{output_dir}', files_spec='{files_spec}'")
             resolved_output_reference = self._resolve_files_spec(Path(output_dir), files_spec)
+            print(f"resolved_output_reference={resolved_output_reference}")
             return resolved_output_reference
 
         except yaml.YAMLError as ye:
@@ -157,23 +163,30 @@ class TaskConfigParser:
             self.logger.critical(f"Unexpected error during _resolve_input_reference() for value '{value}' : {e}", exc_info=True)
             return None
 
-    def resolve_reference(self, task_name: str, value: str) -> str | list[str] | None:
+    def resolve_reference(self, task_name: str, value: str) -> tuple[str | list[str], str] | None:
         """
         Resolves a reference value, whether it's an input, output, or a normal string.
         Returns absolute file paths as strings.
         """
         try:
+            print(f"task_name={task_name}")
+            print(f"value={value}")
+            resolved_type = "unknown"
             if task_name not in self.task_configs:
                 raise KeyError(f"Task {task_name} not found in task configurations.")
 
             # Check if value matches output reference pattern
             if re.match(r"\{@output:([^:\[\]]+):(\*|\[.*\]|[^:\[\}]+)\}", value):
+                print(f"matched output")
+                resolved_type = "output"
                 resolved_value = self._resolve_output_reference(value)
             # Check if value matches input reference pattern
             elif re.match(r"\{@input:([^:\[\]]+):(\*|\[.*\]|[^:\[\}]+)\}", value):
+                resolved_type = "input"
                 resolved_value = self._resolve_input_reference(value)
             else:
                 # If it's a normal string, assume it's a direct file path within current task_dir
+                resolved_type = "direct"
                 task_dir_path = Path(self.task_configs[task_name].get("task_dir", None))
                 if task_dir_path is None:
                     raise KeyError(f"Task '{task_name}' does not have a 'task_dir' attribute with its task_config.")
@@ -190,12 +203,14 @@ class TaskConfigParser:
 
             if isinstance(resolved_value, str):
                 resolved_path = Path(resolved_value).resolve()
-                return [str(p) for p in resolved_path.glob("*")] if resolved_path.is_dir() else str(resolved_path)
+                print(f"type(resolved_path)={type(resolved_path)}")
+                print(f"resolved_path.is_dir()={resolved_path.is_dir()}")
+                return ([str(p) for p in resolved_path.glob("*")] if (resolved_path.is_dir() and resolved_type == "input") else str(resolved_path)), resolved_type
 
             if isinstance(resolved_value, list):
-                return [str(Path(p).resolve()) for p in resolved_value]
+                return [str(Path(p).resolve()) for p in resolved_value], resolved_type
 
-            raise TypeError(f"Unexpected resolved type: {type(resolved_value)}")
+            raise TypeError(f"Unexpected resolved_value: {resolved_value}, resolved_type: {resolved_type}")
 
         except ValueError as ve:
             self.logger.error(f"ValueError: {ve}")
