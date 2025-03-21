@@ -598,6 +598,34 @@ def test_resolve_reference_input_reference_every_files(mock_is_dir, tmp_path: Pa
     expected_files = str(Path(task_2_dir) / files_spec)
     assert resolved_value == expected_files
 
+def test_resolve_reference_direct_reference_valid(tmp_path):
+    """Test resolving a direct reference under the same task"""
+    task_name = "task_1"
+    referenced_task_name = task_name
+    files_spec = "single_file.cpp"
+    value = f"{files_spec}"
+
+
+    task_1_dir = MagicMock(spec=Path)
+    task_1_dir.__str__.return_value = "/path/to/task_1"
+    task_1_dir.as_posix.return_value = "/path/to/task_1"
+    task_1_dir.exists.return_value = True
+
+    # Mock __truediv__ to return a new Path object that correctly joins paths
+    task_1_dir.__truediv__.side_effect = lambda p: Path(task_1_dir.__str__.return_value) / p
+
+    mock_logger = MagicMock()
+    task_config_parser = TaskConfigParser(mock_logger, str(tmp_path))
+
+    task_config_parser.task_configs[task_name] = {
+        "task_dir" : task_1_dir,
+        "internal_input_src" : ["single_file.cpp", "my_src.cpp"], "output_dir" : tmp_path
+    }
+    resolved_value, resolved_type = task_config_parser.resolve_reference(task_name, value)
+    assert resolved_type == "direct"
+    expected_files = str(Path(task_1_dir) / files_spec)
+    assert resolved_value == expected_files
+
 def test_update_task_env_invalid_task_name(tmp_path: Path):
     """Test updating the task env of an invalid task"""
     task_name = 'invalid_task'
