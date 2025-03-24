@@ -10,6 +10,20 @@ class TaskConfigParser:
         self.logger = logger
         self.proj_root = proj_root
 
+    def inherit_task_configs(self, task_configs: dict):
+        """Inherit task_configs from bob, and store it as a local attribute"""
+        try:
+            if isinstance(task_configs, dict):
+                self.task_configs = task_configs
+            else:
+                raise TypeError(f"task_configs has to be of type 'dict', it is currently a {type(task_configs)}.")
+
+        except TypeError as te:
+            self.logger.error(f"TypeError: {te}")
+
+        except Exception as e:
+            self.logger.critical(f"Unexpected error during inherit_task_configs() : {e}", exc_info=True)
+
     def _load_task_config_file(self, task_config_file_path: Path) -> dict | None:
         """Loads a task_config.yaml given file path"""
         try:
@@ -25,9 +39,9 @@ class TaskConfigParser:
                 self.logger.error(f"'{task_config_file_path}' doesn't contain a mandatory key 'task_name'. Please ensure it exists first. Aborting parsing this task_config.yaml.")
                 return None
             if task_name in self.task_configs:
-                self.logger.error(f"'{task_name}' already exists within TaskConfigParser.task_configs. Please ensure there is no duplicate task names. Aborting parsing of '{task_config_file_path}'.")
-                return None
-            self.task_configs[task_name] = {}
+                self.logger.warning(f"'{task_name}' already exists within TaskConfigParser.task_configs. Updating existing task_configs[{task_name}].")
+            else:
+                self.task_configs[task_name] = {}
             task_entry = self.task_configs[task_name]
             task_entry.setdefault("task_dir", task_config_file_path.parent.absolute())
             task_entry.setdefault("task_config_file_path", task_config_file_path.absolute())
@@ -372,23 +386,43 @@ class TaskConfigParser:
             elif not isinstance(unresolved_src_files, (str, list)):
                 raise TypeError(f"{task_config_file_path} mandatory field 'src_files' should be either a str or a list. Current type = {type(unresolved_src_files)}.")
 
-            resolved_src_files : list[str] = []
+            # resolved_src_files : list[str] = []
 
             # Modify it into a list if it is a str for ease of manipulation
             unresolved_src_files = [unresolved_src_files] if isinstance(unresolved_src_files, str) else unresolved_src_files
 
+            # Set up task_configs to contain internal_src_files, external_src_files and output_src_files attributes
+            self.task_configs[task_name].setdefault("internal_src_files", [])
+            self.task_configs[task_name].setdefault("external_src_files", [])
+            self.task_configs[task_name].setdefault("output_src_files", [])
+
+            # Retrieve references
+            internal_src_files = self.task_configs[task_name]["internal_src_files"]
+            external_src_files = self.task_configs[task_name]["external_src_files"]
+            output_src_files = self.task_configs[task_name]["output_src_files"]
+
             # Resolve every src file reference
             for unresolved_src_file in unresolved_src_files:
-                resolved_reference = self.resolve_reference(task_name, unresolved_src_file)
+                resolved_reference, resolved_type = self.resolve_reference(task_name, unresolved_src_file)
 
-                self.logger.debug(f"task_name='{task_name}', unresolved_src_file='{unresolved_src_file}', resolved_reference='{resolved_reference}'.")
+                self.logger.debug(f"task_name='{task_name}', unresolved_src_file='{unresolved_src_file}', resolved_reference='{resolved_reference}', resolved_type='{resolved_type}'.")
 
                 if isinstance(resolved_reference, str):
-                    resolved_src_files.append(resolved_reference)
-                elif isinstance(resolved_src_files, list):
-                    resolved_src_files.extend(resolved_reference)
+                    if resolved_type == "direct":
+                        internal_src_files.append(resolved_reference)
+                    elif resolved_type == "input":
+                        external_src_files.append(resolved_reference)
+                    elif resolved_type == "output":
+                        output_src_files.append(resolved_reference)
+                elif isinstance(resolved_reference, list):
+                    if resolved_type == "direct":
+                        internal_src_files.extend(resolved_reference)
+                    elif resolved_type == "input":
+                        external_src_files.extend(resolved_reference)
+                    elif resolved_reference == "output":
+                        output_src_files.extend(resolved_reference)
                 else:
-                    self.logger.warning(f"Resolved reference='{resolved_reference}' is neither of type str or list. Skip appending to resolved_src_files list.")
+                    self.logger.warning(f"Resolved reference='{resolved_reference}' is neither of type str or list. type({resolved_reference})={type(resolved_reference)}. Skip appending to resolved_src_files list.")
 
 
         except TypeError as te:

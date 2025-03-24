@@ -1,0 +1,5 @@
+task_name: "hello_world_c_compile"
+task_type: "c_compile"
+executable_name: "hello_world.exe"
+src_files:
+  - "hello_world.cpp"

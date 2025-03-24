@@ -68,6 +68,35 @@ def test_load_task_config_file_valid_yaml(tmp_path: Path):
     assert task_config_parser.task_configs["test_task"]["task_config_file_path"] == task_config_file_path.absolute()
     assert task_config_parser.task_configs["test_task"]["task_config_dict"] == mock_yaml_content
 
+def test_load_task_config_file_existing_task_name(tmp_path: Path):
+    """Test loading a task which already exists in task_configs, expected output is updating the existing task_configs[{task_name}]"""
+    mock_logger = MagicMock()
+    task_config_parser = TaskConfigParser(mock_logger, str(tmp_path))
+    task_config_file_path = MagicMock(spec=Path)
+    task_config_file_path.__str__.return_value = "/path/to/task_config.yaml"
+    task_config_file_path.absolute.return_value = "/path/to/task_config.yaml"
+    task_config_file_path.parent.absolute.return_value = "/path/to/"
+    task_config_file_path.__fspath__.return_value = "/path/to/task_config.yaml"
+    task_config_file_path.exists.return_value = True
+
+    task_config_parser.task_configs["existing_task"] = {"task_type" : "c_compile", "task_dir" : "original_task_dir"}
+
+    # Simulated YAML content
+    mock_yaml_content = {
+        "task_name" : "existing_task",
+        "description": "This is an existing task",
+        "rtl_sources": ["source1.c", "source2.c"]
+    }
+
+    with patch("builtins.open", mock_open(read_data="fake content")), \
+         patch("yaml.safe_load", return_value=mock_yaml_content):
+        task_config_dict = task_config_parser._load_task_config_file(task_config_file_path)
+
+    assert task_config_dict == mock_yaml_content
+    assert "task_config_dict" in task_config_parser.task_configs["existing_task"]
+    assert task_config_parser.task_configs["existing_task"].get("task_dir") == "original_task_dir"
+    task_config_parser.logger.warning.assert_called_once()
+
 def test_resolve_files_spec_invalid_target_dir_type(tmp_path: Path):
     """Test resolve_files_spec() invalid target_dir type"""
     target_dir_1 = ["task1", "task2"]

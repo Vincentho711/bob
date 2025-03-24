@@ -56,9 +56,9 @@ def create_valid_task_config(tmp_path: Path) -> Path:
     task_name: "test_task"
     description: "A sample task"
     """
-    task_config_path = tmp_path / "task_config.yaml"
-    task_config_path.write_text(task_config)
-    return task_config_path
+    task_config_file_path = tmp_path / "task_config.yaml"
+    task_config_file_path.write_text(task_config)
+    return task_config_file_path
 
 @pytest.fixture
 def create_multiple_valid_task_config(monkeypatch) -> tuple[Bob, list[Path]]:
@@ -327,7 +327,7 @@ def test_discover_task_valid(create_valid_task_config: Path, bob_instance: Bob):
 
     # Check if the task was correctly added to task_configs
     assert "test_task" in bob_instance.task_configs
-    assert bob_instance.task_configs["test_task"]["task_config_path"] == create_valid_task_config
+    assert bob_instance.task_configs["test_task"]["task_config_file_path"] == create_valid_task_config
     assert bob_instance.task_configs["test_task"]["task_dir"] == create_valid_task_config.parent
     assert isinstance(bob_instance.task_configs["test_task"]["task_dir"], Path)
 
@@ -337,8 +337,8 @@ def test_discover_task_missing_task_name(bob_instance: Bob, tmp_path: Path, capl
     task_config = """
     description: "A sample task"
     """
-    task_config_path = tmp_path / "task_config.yaml"
-    task_config_path.write_text(task_config)
+    task_config_file_path = tmp_path / "task_config.yaml"
+    task_config_file_path.write_text(task_config)
 
     # Set proj_root to the directory containing the invalid task_config.yaml
     bob_instance.proj_root = str(tmp_path)
@@ -359,8 +359,8 @@ def test_discover_task_no_files(bob_instance, tmp_path):
 
 def test_discover_task_unexpected_error(bob_instance, tmp_path):
     """Test when discover_tasks raises an unexpected error"""
-    task_config_path = tmp_path / "task_config.yaml"
-    task_config_path.write_text("task_name: test_task")  # Valid content
+    task_config_file_path = tmp_path / "task_config.yaml"
+    task_config_file_path.write_text("task_name: test_task")  # Valid content
 
     # Set the proj_root to the directory containing the task_config.yaml
     bob_instance.proj_root = str(tmp_path)
@@ -407,10 +407,10 @@ def test_discover_tasks_multiple_configs_different_hierarchy(create_multiple_val
         # Check that task names are correctly extracted and stored in task_configs
         expected_task_names = ["task_1", "task_2", "task_3", "task_4"]
         assert len(bob_instance.task_configs) == 4
-        for task_name, task_config_path in zip(expected_task_names, expected_paths):
+        for task_name, task_config_file_path in zip(expected_task_names, expected_paths):
             assert task_name in bob_instance.task_configs
-            assert bob_instance.task_configs[task_name]["task_config_path"] == task_config_path
-            assert bob_instance.task_configs[task_name]["task_dir"] == task_config_path.parent
+            assert bob_instance.task_configs[task_name]["task_config_file_path"] == task_config_file_path
+            assert bob_instance.task_configs[task_name]["task_dir"] == task_config_file_path.parent
 
         # Ensure that sys.exit was never called (it should not be triggered in this test)
         mock_exit.assert_not_called()
@@ -509,7 +509,7 @@ def test_create_all_task_env_valid_tasks(create_multiple_valid_task_config):
     bob_instance.create_all_task_env()
 
     assert len(bob_instance.task_configs) == 4
-    for task_name, task_config_path in zip(expected_task_names, expected_paths):
+    for task_name, task_config_file_path in zip(expected_task_names, expected_paths):
         assert task_name in bob_instance.task_configs
         assert type(bob_instance.task_configs[task_name]["task_env"]) == dict
         assert bob_instance.task_configs[task_name]["task_env"].get("PROJ_ROOT") == cwd

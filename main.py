@@ -4,6 +4,8 @@ import os
 import sys
 import logging
 
+from taskConfigParser.TaskConfigParser import TaskConfigParser
+
 # Define ANSI color codes for terminal output
 class ColorFormatter(logging.Formatter):
     COLORS = {
@@ -117,6 +119,17 @@ def main() -> None:
 
     bob.task_configs["new_task"] = {}
     bob.ensure_dotbob_dir_at_proj_root()
+
+    print(bob.task_configs)
+
+    task_config_parser = TaskConfigParser(bob.logger, bob.proj_root)
+    task_config_parser.inherit_task_configs(bob.task_configs)
+    print("")
+    print(f"task_configs_parser.task_configs={task_config_parser.task_configs}")
+    hello_world_c_compile_config_file = task_config_parser.task_configs["hello_world_c_compile"].get("task_config_file_path", None)
+    if hello_world_c_compile_config_file:
+        task_config_parser._load_task_config_file(hello_world_c_compile_config_file)
+        task_config_parser.parse_task_config_dict("hello_world_c_compile")
 
 if __name__ == "__main__":
     main()
