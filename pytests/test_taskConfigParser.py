@@ -94,8 +94,16 @@ def test_load_task_config_file_existing_task_name(tmp_path: Path):
 
     assert task_config_dict == mock_yaml_content
     assert "task_config_dict" in task_config_parser.task_configs["existing_task"]
-    assert task_config_parser.task_configs["existing_task"].get("task_dir") == "original_task_dir"
-    task_config_parser.logger.warning.assert_called_once()
+    # Check that logger warning was called twice with the expected messages
+    expected_warnings = [
+        "'existing_task' already exists within TaskConfigParser.task_configs. Updating existing task_configs[existing_task].",
+        "Existing attribute task_configs['task_dir']=original_task_dir will be replaced with '/path/to/'."
+    ]
+    logged_warnings = [call.args[0] for call in mock_logger.warning.call_args_list]
+
+    assert all(msg in logged_warnings for msg in expected_warnings)
+    assert len(logged_warnings) == 2
+    assert task_config_parser.task_configs["existing_task"].get("task_dir") == str(task_config_file_path.parent.absolute()) # Check that existing fields are overriden
 
 def test_resolve_files_spec_invalid_target_dir_type(tmp_path: Path):
     """Test resolve_files_spec() invalid target_dir type"""

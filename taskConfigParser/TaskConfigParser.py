@@ -43,9 +43,18 @@ class TaskConfigParser:
             else:
                 self.task_configs[task_name] = {}
             task_entry = self.task_configs[task_name]
-            task_entry.setdefault("task_dir", task_config_file_path.parent.absolute())
-            task_entry.setdefault("task_config_file_path", task_config_file_path.absolute())
-            task_entry.setdefault("task_config_dict", task_config_dict)
+            if "task_dir" in task_entry:
+                self.logger.warning(f"Existing attribute task_configs['task_dir']={task_entry['task_dir']} will be replaced with '{task_config_file_path.parent.absolute()}'.")
+            task_entry["task_dir"] = task_config_file_path.parent.absolute()
+
+            if "task_config_file_path" in task_entry:
+                self.logger.warning(f"Existing attribute task_configs['task_config_file_path']={task_entry['task_config_file_path']} will be replaced with '{task_config_file_path.absolute()}'.")
+            task_entry["task_config_file_path"] = task_config_file_path.absolute()
+
+            if "task_config_dict" in task_entry:
+                self.logger.warning(f"Existing attribute task_configs['task_config_dict'] already exists. It will be replaced with '{task_config_dict}'")
+            task_entry["task_config_dict"] = task_config_dict
+
             return task_config_dict
 
         except yaml.YAMLError as ye:
