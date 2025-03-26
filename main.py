@@ -130,6 +130,7 @@ def main() -> None:
     if hello_world_c_compile_config_file:
         task_config_parser._load_task_config_file(hello_world_c_compile_config_file)
         task_config_parser.parse_task_config_dict("hello_world_c_compile")
+        print(f"task_configs['hello_world_c_compile']={task_config_parser.task_configs["hello_world_c_compile"]}")
 
 if __name__ == "__main__":
     main()

@@ -330,6 +330,9 @@ def test_discover_task_valid(create_valid_task_config: Path, bob_instance: Bob):
     assert bob_instance.task_configs["test_task"]["task_config_file_path"] == create_valid_task_config
     assert bob_instance.task_configs["test_task"]["task_dir"] == create_valid_task_config.parent
     assert isinstance(bob_instance.task_configs["test_task"]["task_dir"], Path)
+    build_root = Path(bob_instance.proj_root) / "build"
+    task_outdir = build_root / "test_task"
+    assert bob_instance.task_configs["test_task"]["output_dir"] == task_outdir
 
 def test_discover_task_missing_task_name(bob_instance: Bob, tmp_path: Path, caplog):
     """Test when task_config.yaml is missing a task_name field"""

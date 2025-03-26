@@ -224,6 +224,9 @@ class Bob:
                 self.task_configs[task_name] = {}
                 self.task_configs[task_name]["task_config_file_path"] = task_config_file_path
                 self.task_configs[task_name]["task_dir"] = task_dir
+                build_root = Path(self.proj_root) / "build"
+                task_outdir = build_root / task_name
+                self.task_configs[task_name]["output_dir"] = task_outdir
         except ValueError as e:
             self.logger.error(f"ValueError: {e}")
             exit(1)
@@ -540,6 +543,34 @@ class Bob:
         except Exception as e:
             self.logger.critical(f"Unexpected error during mark_task_as_clean_in_dotbob_checksum_file(): {e}", exc_info=True)
             return None
+
+    def resolve_task_configs_output_src_files(self, task_name: str) -> list[str]:
+        """Resolves output source files for a given task by replacing directories with their contained files."""
+        try:
+            if task_name not in self.task_configs:
+                raise ValueError(f"Task '{task_name}' not found in task_configs.")
+            output_src_files = self.task_configs[task_name].get("output_src_files", [])
+            resolved_output_src_files = []
+
+            for path in output_src_files:
+                if os.path.isdir(path):
+                    # List all files in the directory recursively
+                    for root, _, files in os.walk(path):
+                        for file in files:
+                            resolved_output_src_files.append(os.path.join(root, file))
+                elif os.path.isfile(path):
+                    resolved_output_src_files.append(path)
+                else:
+                    raise ValueError(f"For task '{task_name}', the output_src_files path '{path}' does not exists or it is not a valid file/directory.")
+            # Update the task_configs[task_name]["output_src_files"]
+            self.task_configs[task_name]["output_src_files"] = resolved_output_src_files
+
+            return resolved_output_src_files
+
+        except ValueError as ve:
+            self.logger.error(f"ValueError: {ve}")
+        except Exception as e:
+            self.logger.critical(f"Unexpected error during resolve_task_configs_output_src_files(): {e}", exc_info=True)
 
     def set_bob_dir(self) -> None:
         """Sets BOB_DIR based on proj_root"""
