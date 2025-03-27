@@ -1161,3 +1161,61 @@ def test_mark_task_as_clean_in_dotbob_checksum_file_invalid_task(mock_path_open,
     }
     assert json.loads(written_data) == expected_data
     bob_instance.logger.debug.assert_called_once_with(f"Marked task task1 as clean.")
+
+def test_task_configs_output_src_files_empty():
+    """Test resolving an empty output_src_files list"""
+    mock_logger = MagicMock()
+    bob_instance = Bob(mock_logger)
+    task_name = "valid_task"
+    bob_instance.task_configs[task_name] = {"output_src_files":[]}
+    assert bob_instance.resolve_task_configs_output_src_files(task_name) == []
+
+@patch("os.path.isfile", return_value=False)
+def test_task_configs_output_src_files_nonexistent_files(mock_isfile):
+    """Output_src_files contains filepaths, but files do not exist"""
+    mock_logger = MagicMock()
+    bob_instance = Bob(mock_logger)
+    task_name = "valid_task"
+    paths = ["/fake/path/file1.txt", "/fake/path/file2.txt"]
+    bob_instance.task_configs[task_name] = {"output_src_files":paths}
+    bob_instance.resolve_task_configs_output_src_files(task_name)
+
+    # Check that the function terminates after first non-existent file
+    bob_instance.logger.error.assert_called_once_with(f"ValueError: For task 'valid_task', the output_src_files path '{paths[0]}' does not exists or it is not a valid file/directory.") 
+    assert bob_instance.logger.error.call_count == 1
+
+@patch("os.path.isfile", return_value=True)
+def test_task_configs_output_src_files_existing_files(mock_isfile):
+    """Output_src_files contains filepaths, and all of them exists"""
+    mock_logger = MagicMock()
+    bob_instance = Bob(mock_logger)
+    task_name = "valid_task"
+    paths = ["/fake/path/file1.txt", "/fake/path/file2.txt"]
+    bob_instance.task_configs[task_name] = {"output_src_files":paths}
+    assert bob_instance.resolve_task_configs_output_src_files(task_name) == paths
+
+@patch("os.path.isdir", side_effect=lambda path: path in ["/valid/dir1", "/valid/dir2"])
+@patch("os.walk", side_effect=lambda path: iter(
+    {"/valid/dir1": [("/valid/dir1", [], ["fileA.txt", "fileB.txt"])], 
+     "/valid/dir2": [("/valid/dir2", [], ["fileC.txt", "fileD.txt"])]}[path]
+))
+def test_task_configs_output_src_files_two_dirs(mock_walk, mock_isdir):
+    """Output_src_files contains 2 directories, both exists"""
+    mock_logger = MagicMock()
+    bob_instance = Bob(mock_logger)
+    task_name = "valid_task"
+    bob_instance.task_configs[task_name] = {"output_src_files": ["/valid/dir1", "/valid/dir2"]}
+    expected_files = ["/valid/dir1/fileA.txt", "/valid/dir1/fileB.txt", "/valid/dir2/fileC.txt", "/valid/dir2/fileD.txt"]
+    assert sorted(bob_instance.resolve_task_configs_output_src_files(task_name)) == sorted(expected_files)
+
+@patch("os.path.isdir", return_value=False)
+def test_task_configs_output_src_files_nonexistent_dir(mock_isdir):
+    """Output_src_files contains 1 directory, but the directory does not exist"""
+    mock_logger = MagicMock()
+    bob_instance = Bob(mock_logger)
+    task_name = "valid_task"
+    bob_instance.task_configs[task_name] = {"output_src_files": ["/invalid/dir"]}
+    bob_instance.resolve_task_configs_output_src_files(task_name)
+    bob_instance.logger.error.assert_called_once_with(f"ValueError: For task 'valid_task', the output_src_files path '/invalid/dir' does not exists or it is not a valid file/directory.")
+
+
