@@ -1218,4 +1218,30 @@ def test_task_configs_output_src_files_nonexistent_dir(mock_isdir):
     bob_instance.resolve_task_configs_output_src_files(task_name)
     bob_instance.logger.error.assert_called_once_with(f"ValueError: For task 'valid_task', the output_src_files path '/invalid/dir' does not exists or it is not a valid file/directory.")
 
+def test_ensure_src_files_existence_all_existing_files(monkeypatch):
+    """Test the function when all the source files exist"""
+    mock_logger = MagicMock()
+    bob_instance = Bob(mock_logger)
+    bob_instance.task_configs["test_task"] = {
+        "internal_src_files": ["/tmp/existing1.v"],
+        "external_src_files": ["/tmp/existing2.v"],
+        "output_src_files": ["/tmp/existing3.v"]
+    }
+    monkeypatch.setattr(os.path, "isfile", lambda path: path in ["/tmp/existing1.v", "/tmp/existing2.v", "/tmp/existing3.v"])
 
+    assert bob_instance.ensure_src_files_existence("test_task") is True
+
+def test_ensure_src_files_existence_missing_files(monkeypatch):
+    """Test ensure_src_files() with a missing file"""
+    mock_logger = MagicMock()
+    bob_instance = Bob(mock_logger)
+    bob_instance.task_configs["test_task"] = {
+        "internal_src_files": ["/tmp/missing1.v"],
+        "external_src_files": ["/tmp/missing2.v"],
+        "output_src_files": ["/tmp/existing3.v"]
+    }
+    monkeypatch.setattr(os.path, "isfile", lambda path: path == "/tmp/existing3.v")
+
+    assert bob_instance.ensure_src_files_existence("test_task") is False
+    bob_instance.logger.error.assert_any_call(f" - /tmp/missing1.v")
+    bob_instance.logger.error.assert_any_call(f" - /tmp/missing2.v")

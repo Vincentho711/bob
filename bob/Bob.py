@@ -572,6 +572,169 @@ class Bob:
         except Exception as e:
             self.logger.critical(f"Unexpected error during resolve_task_configs_output_src_files(): {e}", exc_info=True)
 
+    def update_task_env(self, task_name: str, env_key: str, env_val: str | list[str], override_env_val: bool = False) -> None:
+        """Updates the environment variables for a given task in self.task_configs."""
+        try:
+            if task_name not in self.task_configs:
+                raise KeyError(f"Task {task_name} not found in task configurations.")
+
+            if "task_env" not in self.task_configs[task_name]:
+                self.logger.info(f"Task '{task_name}' does not have an env var dict associated to the 'task_env' key. Creating it from current global env.")
+
+            task_env = self.task_configs[task_name].get("task_env", None)
+            if task_env is None:
+                raise KeyError(f"Task '{task_name}' does not have a 'task_env' attribute within task_configs")
+
+            existing_val = task_env.get(env_key, None)
+
+            if override_env_val or existing_val is None:
+                task_env[env_key] = os.pathsep.join(env_val) if isinstance(env_val, list) else env_val
+                self.logger.debug(f"Task '{task_name}', overriding existing or creating env_key='{env_key}' with env_val='{task_env[env_key]}'")
+                return;
+
+            # An existing_val already exists
+            # Attempt to separate str with os.pathsep to see if existing_val is already a list of filepaths
+            existing_val = existing_val.split(os.pathsep)
+
+            # Extend if env_val is a list, else just append the str
+            if isinstance(env_val, list):
+                self.logger.debug(f"Task '{task_name}', extending a list of env_val = '{env_val}' to env_key = '{env_key}'")
+                existing_val.extend(env_val)
+            else:
+                self.logger.debug(f"Task '{task_name}', appending a single str/filepath env_val = '{env_val}' to env_key = '{env_key}'")
+                existing_val.append(env_val)
+
+            # Add os.pathsep as separators
+            task_env[env_key] = os.pathsep.join(existing_val) if existing_val else ""
+            self.logger.debug(f"Task '{task_name}', updated env_key = '{env_key}' with env_val = '{task_env[env_key]}'")
+
+        except KeyError as ke:
+            self.logger.error(f"KeyError: {ke}")
+            return
+
+        except Exception as e:
+            self.logger.critical(f"Unexpected error during update_task_env() for task_name = '{task_name}' : {e}", exc_info=True)
+            return
+
+    def ensure_src_files_existence(self, task_name: str) -> bool:
+        """Validate that all files within 'internal_src_files', 'external_src_files' and 'output_src_files' exists"""
+        try:
+            if task_name not in self.task_configs:
+                self.logger.error(f"Task '{task_name}' not found in configuration.")
+                return False
+
+            missing_files = []
+            task_config = self.task_configs[task_name]
+
+            for key in ["internal_src_files", "external_src_files", "output_src_files"]:
+                for file_path in task_config.get(key, []):
+                    if not os.path.isfile(file_path):
+                        missing_files.append(file_path)
+
+            if missing_files:
+                self.logger.error(f"Task '{task_name}' is missing the following files:")
+                for file in missing_files:
+                    self.logger.error(f" - {file}")
+                return False
+
+            return True
+
+        except Exception as e:
+            self.logger.critical(f"Unexpected error during update_task_env() for task_name = '{task_name}' : {e}", exc_info=True)
+            return False
+
+    def execute_c_compile(self, task_name: str) -> bool:
+        """Execute a C compile with gcc, using attributes within env var"""
+        try:
+            if task_name not in self.task_configs:
+                raise ValueError(f"Task '{task_name}' not found in task_configs.")
+            task_config_dict = self.task_configs[task_name].get("task_config_dict", None)
+            if task_config_dict is None:
+                raise KeyError(f"Task '{task_name}' does not have a 'task_config_dict' attribute.")
+            task_type = task_config_dict.get("task_type", None)
+            if task_type is None:
+                raise ValueError(f"Task '{task_name}' does not have a 'task_type' attribute.")
+            if task_type != "c_compile":
+                raise ValueError(f"Task '{task_name}' has task type '{task_type}' which is not 'c_compile'. Please exeute the correct function to execute build.")
+            # Resolve output_src_files list
+            self.resolve_task_configs_output_src_files(task_name)
+            task_env = self.task_configs[task_name].get("task_env", None)
+            if task_env is None:
+                raise KeyError(f"Task '{task_name}' does not have a 'task_env' attribute.")
+            # Promote task_configs attributes to env var such that they can be used in subprocess
+            # Ensuer that all src_files exist
+            # Promote internal_src_files, external_src_files and output_src_files to task env var "C_COMPILE_SRC_FILES"
+            if not self.ensure_src_files_existence(task_name):
+                self.logger.error(f"Aborting execute_c_compile as one or more source files are missing.")
+                return False
+            src_files = sum((self.task_configs[task_name].get(key, []) for key in ["internal_src_files", "external_src_files", "output_src_files"]), [])
+            self.logger.debug(f"Task '{task_name}' has src_files={src_files}")
+            self.update_task_env(task_name, "C_COMPILE_SRC_FILES", src_files)
+            executable_name = task_config_dict.get("executable_name", None)
+            if executable_name:
+                self.update_task_env(task_name, "C_COMPILE_EXECUTABLE_NAME", executable_name)
+
+            output_dir = self.task_configs[task_name].get("output_dir", None)
+            if output_dir is None:
+                self.logger.error(f"Task '{task_name}' does not have the mandatory attribute 'output_dir'. Aborting execute_c_compile().")
+                return False
+            if executable_name:
+                executable_path = output_dir / executable_name
+                self.update_task_env(task_name, "C_COMPILE_EXECUTABLE_PATH", executable_path)
+
+            # Check if we have external objects
+            external_objects = self.task_configs[task_name].get("external_objects", [])
+            if external_objects:
+                self.logger.debug(f"Task '{task_name}' has external_objects={external_objects}")
+                self.update_task_env(task_name, "C_COMPILE_EXTERNAL_OBJECT_PATHS", external_objects)
+
+            # During compilation, header dirs containing the header files will have to be included
+            include_header_dirs = self.task_configs[task_name].get("include_header_dirs", [])
+            if include_header_dirs:
+                self.logger.debug(f"Task '{task_name}' has include_header_dirs='{include_header_dirs}'")
+                self.update_task_env(task_name, "C_COMPILE_INCLUDE_HEADER_DIRS", str(include_header_dirs))
+
+            # Execute gcc compile
+            # Compile each .c file to .o file
+            object_files = []
+            for src in src_files:
+                obj_file = os.path.join(output_dir, os.path.basename(src).replace(".c", ".o"))
+                cmd_compile = ["gcc", "-c", src, "-o", obj_file]
+                if include_header_dirs:
+                    for inc_dir in include_header_dirs:
+                        cmd_compile.extend(["-I", inc_dir])
+                self.logger.info(f"Executing c_compile command: {cmd_compile}")
+                result = subprocess.run(cmd_compile, env=task_env, capture_output=True, text=True)
+
+                if result.returncode != 0:
+                    self.logger.error(f"GCC compilation failed for file '{src}': {result.stderr}")
+                    return False
+                object_files.append(obj_file)
+
+            self.logger.info(f"GCC compilation succeeded for task '{task_name}'. Output: {object_files}")
+
+            # If 'executable_name' exists within task_config.yaml, then link object files into an executable
+            # Link all .o files, including external ones) to create the final executable
+            if executable_name:
+                cmd_link = ["gcc"] + object_files + external_objects + ["-o", executable_path]
+                self.logger.info(f"Executing c_link command: {cmd_link}")
+                result = subprocess.run(cmd_link, env=task_env, capture_output=True, text=True)
+
+                if result.returncode != 0:
+                    self.logger.error(f"GCC compilation failed for task '{task_name}': {result.stderr}")
+                    return False
+
+                self.logger.info(f"GCC link succeeded for task '{task_name}'. Output: {executable_path}")
+            return True
+
+        except ValueError as ve:
+            self.logger.error(f"ValueError: {ve}")
+            return False
+        except Exception as e:
+            self.logger.critical(f"Unexpected error during resolve_task_configs_output_src_files(): {e}", exc_info=True)
+            return False
+
+
     def set_bob_dir(self) -> None:
         """Sets BOB_DIR based on proj_root"""
         try:

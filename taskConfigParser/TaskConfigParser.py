@@ -378,15 +378,50 @@ class TaskConfigParser:
 
             self.logger.debug(f"For task '{task_name}', parsing c_compile task type.")
 
-            # Fetch mandatory key 'executable_name'
+            # Fetch 'external_objects' if it exists. If it does, add that while linking
+            unresolved_external_objects = task_config_dict.get("external_objects", [])
+            if not unresolved_external_objects:
+                self.logger.debug(f"{task_config_file_path} which is a 'c_compile' build does not contain a 'external_objects' field. Will not link external objects.")
+            if isinstance(unresolved_external_objects, str):
+                unresolved_external_objects = [unresolved_external_objects]
+
+            self.task_configs[task_name].setdefault("external_objects", [])
+            external_objects = self.task_configs[task_name]["external_objects"]
+            for unresolved_external_object in unresolved_external_objects:
+                self.logger.debug(f"unresolved_external_object={unresolved_external_object}")
+                if ".o" not in unresolved_external_object:
+                    raise ValueError(f"'.o' must exists in the unresolved_external_object='{unresolved_external_object}'")
+                resolved_reference, resolved_type = self.resolve_reference(task_name, unresolved_external_object)
+                self.logger.debug(f"task_name='{task_name}', unresolved_external_object='{unresolved_external_object}', resolved_reference='{resolved_reference}', resolved_type='{resolved_type}'.")
+                if resolved_type != "output":
+                    raise ValueError(f"external object must have resolved_type=output.")
+                external_objects.append(resolved_reference)
+
+            # Fetch 'include_headers_from_tasks' if it exists. If it does, add them to the -I option during GCC compilation
+            include_headers_from_tasks = task_config_dict.get("include_headers_from_tasks", [])
+            if not include_headers_from_tasks:
+                self.logger.debug(f"{task_config_file_path} which is a 'c_compile' build does not contain a 'include_headers_from_tasks' field. Will not include header dirs during linking.")
+            if isinstance(include_headers_from_tasks, str):
+                include_headers_from_tasks = [include_headers_from_tasks]
+            self.task_configs[task_name].setdefault("include_header_dirs", [])
+            include_header_dirs = self.task_configs[task_name]["include_header_dirs"]
+            for task in include_headers_from_tasks:
+                # Grab the task dir of the corresponding task
+                task_dir = self.task_configs[task].get("task_dir", None)
+                if task_dir is None:
+                    raise KeyError(f"Task '{task}' does not have a 'task_dir' attribute within task_configs.")
+                include_header_dirs.append(task_dir)
+
+            # Fetch 'executable_name' if it exists. If it does, that means .exe should be generated
             executable_name = task_config_dict.get("executable_name", None)
             if executable_name is None:
-                raise KeyError(f"{task_config_file_path} which is a 'c_compile' build does not contain a mandatory field 'executable_name'.")
+                self.logger.debug(f"{task_config_file_path} which is a 'c_compile' build does not contain a 'executable_name' field. Only .o will be generated.")
             elif not isinstance(executable_name, str):
-                raise TypeError(f"{task_config_file_path} mandatory field 'executable_name' is not of type str. Currnt type = {type(executable_name)}. Please ensure it is a str.")
+                raise TypeError(f"{task_config_file_path} field 'executable_name' is not of type str. Currnt type = {type(executable_name)}. Please ensure it is a str.")
             elif ".exe" not in executable_name:
-                raise ValueError(f"{task_config_file_path} mandatory field 'executable_name' does not contain '.exe'. Current executable_name='{executable_name}'. Please ensure that '.exe' exists in the str.")
-            self.update_task_env(task_name, "bob_executable_name", executable_name, True)
+                raise ValueError(f"{task_config_file_path} field 'executable_name' does not contain '.exe'. Current executable_name='{executable_name}'. Please ensure that '.exe' exists in the str.")
+            else:
+                self.update_task_env(task_name, "bob_executable_name", executable_name, True)
 
             # Fetch mandatory key 'src_files'
             unresolved_src_files = task_config_dict.get("src_files", None)

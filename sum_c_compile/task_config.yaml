@@ -1,0 +1,4 @@
+task_name: "sum_c_compile"
+task_type: "c_compile"
+src_files:
+  - "sum.c"
