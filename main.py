@@ -89,7 +89,7 @@ def main() -> None:
     bob.parse_ip_cfg()
     bob.set_env_var_path("last_dir", bob_proj_root / "last_dir")
     bob.load_ip_cfg()
-    print(bob.parse_ip_cfg())
+    print(f"bob.parseip_cfg() = {bob.parse_ip_cfg()}")
 
     bob.discover_tasks()
     print(bob.task_configs)

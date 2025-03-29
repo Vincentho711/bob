@@ -107,11 +107,15 @@ class Bob:
             self.logger.error(f"Error: {e}")
             sys.exit(1)
         except Exception as e:
-            self.logger.critical(f"Unexpected error during parse_ip_cfg(): {e}", exc_info=True)
+            self.logger.critical(f"Unexpected error during load_ip_cfg(): {e}", exc_info=True)
 
-    def parse_ip_cfg(self) -> Dict[str, Any]:
+    def parse_ip_cfg(self) -> None:
         """Parse and resolve placeholders in the entire ip_config dict"""
-        return self._resolve_value(self.ip_config)
+        try:
+            self.ip_config = self._resolve_value(self.ip_config)
+            self.logger.debug(f"self.ip_config = {self.ip_config}")
+        except Exception as e:
+            self.logger.critical(f"Unexpected error during parse_ip_cfg(): {e}", exc_info=True)
 
     def _resolve_value(self, value: Any, resolved_cache=None) -> Any:
         """
