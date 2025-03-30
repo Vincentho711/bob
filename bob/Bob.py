@@ -22,9 +22,6 @@ class Bob:
         self.dotbob_dir: Path = Path(self.proj_root) / ".bob"
         self.dotbob_checksum_file: Path = self.dotbob_dir / "checksum.json"
         self.dependency_graph = None
-        self.dependency_count = {}
-        self.ready_queue = None
-        self.lock = multiprocessing.Lock() # Synchronisation lock
 
     def get_proj_root(self) -> Path:
         return Path(self.proj_root)
@@ -624,50 +621,53 @@ class Bob:
             self.logger.critical(f"Unexpected error during resolve_task_configs_output_src_files(): {e}", exc_info=True)
             return None
 
-    def schedule_tasks(self):
+    def schedule_tasks(self, dependency_count, ready_queue):
         """Schedules tasks dynamically while respecting dependencies"""
         try:
-            dependency_graph = self.dependency_graph
-            if dependency_graph is None:
+            if self.dependency_graph is None:
                 raise ValueError(f"self.dependency_graph = None. Please ensure build_task_dependency is run, and Bob's attribute has been updated.")
 
             # Track number of dependencies (indegree) for each task
-            dependency_count = {task: dependency_graph.in_degree(task) for task in dependency_graph.nodes}
-            ready_queue = multiprocessing.Queue() # Process-safe queue
+            for task in self.dependency_graph.nodes:
+                dependency_count[task] = self.dependency_graph.in_degree(task)
 
             # Populate queue withi initial tasks (indegree = 0)
             for task, count in dependency_count.items():
                 if count == 0:
                     ready_queue.put(task)
-
-            self.ready_queue = ready_queue
-            self.dependency_count = dependency_count
-
+            self.logger.debug(f"Initial ready queue: {ready_queue.qsize()}")
             return dependency_count, ready_queue
+
         except Exception as e:
             self.logger.critical(f"Unexpected error during schedule_tasks(): {e}", exc_info=True)
 
     def execute_tasks(self):
         """Executes tasks with dynamic scheduling and parallel execution"""
         try:
-            dependency_count, ready_queue = self.schedule_tasks()
-            self.logger.debug(f"dependency_count={dependency_count}")
-            process_pool = [] # Store active process handles
-            self.logger.debug(f"ready_queue = {ready_queue}")
+            with multiprocessing.Manager() as manager:
+                dependency_count = manager.dict()
+                ready_queue = manager.Queue()
+                lock = manager.Lock()
 
-            while not self.ready_queue.empty() or process_pool:
-                # Launch all available tasks in parallel
-                while not self.ready_queue.empty():
-                    task = self.ready_queue.get()
-                    process = multiprocessing.Process(target=self.execute_task, args=(task, self.dependency_graph, self.dependency_count, self.ready_queue, self.lock))
-                    process.start()
-                    process_pool.append(process)
+                dependency_count, ready_queue = self.schedule_tasks(dependency_count, ready_queue)
+                self.logger.debug(f"dependency_count={dependency_count}")
 
-                # Remove completed tasks from process pool
-                for process in process_pool:
-                    if not process.is_alive():
-                        process.join()
-                        process_pool.remove(process)
+                process_pool = [] # Store active process handles
+                self.logger.debug(f"ready_queue= {ready_queue}")
+
+                while not ready_queue.empty() or process_pool:
+                    # Launch all available tasks in parallel
+                    while not ready_queue.empty():
+                        task = ready_queue.get()
+                        process = multiprocessing.Process(target=self.execute_task, args=(task, self.dependency_graph, dependency_count, ready_queue, lock))
+                        process.start()
+                        process_pool.append(process)
+
+                    # Remove completed tasks from process pool
+                    for process in process_pool:
+                        if not process.is_alive():
+                            process.join()
+                            process_pool.remove(process)
 
         except Exception as e:
             self.logger.critical(f"Unexpected error during execute_task(): {e}", exc_info=True)
