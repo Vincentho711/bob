@@ -4,6 +4,8 @@ import os
 import sys
 import logging
 
+from ipConfigParser.IpConfigParser import IpConfigParser
+from pytests.test_ipConfigParser import ip_config_parser
 from taskConfigParser.TaskConfigParser import TaskConfigParser
 
 # Define ANSI color codes for terminal output
@@ -46,22 +48,6 @@ console_handler.setFormatter(ColorFormatter(LOG_FORMAT, datefmt=DATE_FORMAT))
 logger.addHandler(console_handler)
 
 
-try:
-    # PROJ_ROOT = Path(__file__).resolve().parent
-    cwd = os.getcwd()
-    # Check if there is an ip_config.yaml in proj_root
-    proj_root_ip_cfg_path = Path(cwd) / "ip_config.yaml"
-    if not proj_root_ip_cfg_path.exists():
-        raise FileNotFoundError(f"An ip_config.yaml must be defined within the project root under {cwd}.")
-    os.environ["PROJ_ROOT"] = str(cwd)
-    logger.info(f"PROJ_ROOT set to: {cwd}")
-except FileNotFoundError as fnfe:
-    logger.critical(f"Error locating ip_config.yaml at project root. {fnfe}")
-    exit(1)
-except Exception as e:
-    logger.critical(f"Error setting FUJI_ROOT: {e}", exc_info=True)
-    exit(1)
-
 def test_log_levels():
     # Log messages for each level to test color formatting
     logger.debug("This is a DEBUG level message.")
@@ -71,6 +57,22 @@ def test_log_levels():
     logger.critical("This is a CRITICAL level message.")
 
 def main() -> None:
+    try:
+        # PROJ_ROOT = Path(__file__).resolve().parent
+        cwd = os.getcwd()
+        # Check if there is an ip_config.yaml in proj_root
+        proj_root_ip_cfg_path = Path(cwd) / "ip_config.yaml"
+        if not proj_root_ip_cfg_path.exists():
+            raise FileNotFoundError(f"An ip_config.yaml must be defined within the project root under {cwd}.")
+        os.environ["PROJ_ROOT"] = str(cwd)
+        logger.info(f"PROJ_ROOT set to: {cwd}")
+    except FileNotFoundError as fnfe:
+        logger.critical(f"Error locating ip_config.yaml at project root. {fnfe}")
+        exit(1)
+    except Exception as e:
+        logger.critical(f"Error setting FUJI_ROOT: {e}", exc_info=True)
+        exit(1)
+
     bob = Bob(logger)
     logger.info(f"Class name: {Bob.__name__}")
     bob_proj_root = bob.get_proj_root()
@@ -86,10 +88,13 @@ def main() -> None:
 
     test_log_levels()
 
-    bob.parse_ip_cfg()
-    bob.set_env_var_path("last_dir", bob_proj_root / "last_dir")
-    bob.load_ip_cfg()
-    print(f"bob.parseip_cfg() = {bob.parse_ip_cfg()}")
+    ip_config_parser = IpConfigParser(bob.logger, bob.proj_root)
+    ip_config_parser.load_ip_cfg()
+    ip_config_parser.parse_ip_cfg()
+    dependency_graph = ip_config_parser.build_task_dependency_graph()
+
+    # Assign dependency_graph to bob, such that it can use it in schedule_tasks()
+    bob.dependency_graph = dependency_graph
 
     bob.discover_tasks()
     print(bob.task_configs)
@@ -133,7 +138,7 @@ def main() -> None:
         # Pass the updated task_config back to bob
         bob.task_configs["sum_c_compile"] = task_config_parser.task_configs["sum_c_compile"]
         # Execute c compile
-        assert(bob.execute_c_compile("sum_c_compile"))
+        # assert(bob.execute_c_compile("sum_c_compile"))
     hello_world_c_compile_config_file = task_config_parser.task_configs["hello_world_c_compile"].get("task_config_file_path", None)
     if hello_world_c_compile_config_file:
         task_config_parser._load_task_config_file(hello_world_c_compile_config_file)
@@ -142,8 +147,10 @@ def main() -> None:
         # Pass the updated task_config back to bob
         bob.task_configs["hello_world_c_compile"] = task_config_parser.task_configs["hello_world_c_compile"]
         # Execute c compile + c link
-        assert(bob.execute_c_compile("hello_world_c_compile"))
+        # assert(bob.execute_c_compile("hello_world_c_compile"))
         # print(f"task_config['hello_world_c_compile'] = {bob.task_configs['hello_world_c_compile']}")
+
+    bob.execute_tasks()
 
 if __name__ == "__main__":
     main()

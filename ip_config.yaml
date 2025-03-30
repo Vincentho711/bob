@@ -17,24 +17,42 @@ sources:
   xdc: "${directories.src_dir}/constraints/arty.xdc"
 
 tasks:
-  hello_world:
-    # script: build_scripts/fpga_build.tcl
-    # output_dir: ${directories.build_dir}/fpga
+  sum_c_compile:
     depends_on: []
-    # source_files:
-    #   - "${sources.top_level}"
-    #   - "${sources.sv}"
-    # constraint_file: "${sources.xdc}"
-    # fpga_part: ${project.fpga_part}
-
-  tb_hello_world:
-    # script: build_scripts/tb_build.sh
-    # output_dir: ${build_dir}/tb
+  hello_world_c_compile:
     depends_on:
-      - hello_world
-      - bye_world
-    # source_files:
-    #   - "${sources.top_level}"
-    #   - "${sources.sv}"
+      - sum_c_compile
+  # hello_world:
+  #   # script: build_scripts/fpga_build.tcl
+  #   # output_dir: ${directories.build_dir}/fpga
+  #   depends_on: []
+  # hello_world_2:
+  #   depends_on:
+  #     - hello_world_3
+  #     - hello_world_6
+  # hello_world_3:
+  #   depends_on:
+  #     - hello_world_4
+  #     - hello_world_5
+  # hello_world_4:
+  #   depends_on: []
+  # hello_world_5: []
+  #   depends_on: []
+
+  #   # source_files:
+  #   #   - "${sources.top_level}"
+  #   #   - "${sources.sv}"
+  #   # constraint_file: "${sources.xdc}"
+  #   # fpga_part: ${project.fpga_part}
+  #
+  # tb_hello_world:
+  #   # script: build_scripts/tb_build.sh
+  #   # output_dir: ${build_dir}/tb
+  #   depends_on:
+  #     - hello_world
+  #     - bye_world
+  #   # source_files:
+  #   #   - "${sources.top_level}"
+  #   #   - "${sources.sv}"
 
 

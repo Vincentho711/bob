@@ -156,8 +156,8 @@ def test_resolve_env_var_absolute_path(ip_config_parser):
     assert resolved_config["directories"]["root_dir"].startswith('/')
     assert resolved_config["directories"]["src_dir"].startswith('/')
 
-def test_build_task_dependency_graph_valid_1(tmp_path: Path):
-    """Test building a valid ip_config.yaml with config 1"""
+def test_build_task_dependency_graph_valid_tree_1(tmp_path: Path):
+    """Test building a valid ip_config.yaml with 3 different separate build chians."""
     mock_logger = MagicMock()
     ip_config_parser = IpConfigParser(mock_logger, str(tmp_path))
     ip_config_parser.ip_config = {
@@ -198,3 +198,43 @@ def test_build_task_dependency_graph_valid_1(tmp_path: Path):
     assert isinstance(graph, DiGraph)
     execution_chains = ip_config_parser.build_execution_chains()
     assert execution_chains == [['sum_c_compile', 'hello_world_c_compile'], ['hello_world'], ['hello_world_6', 'hello_world_4', 'hello_world_5', 'hello_world_3', 'hello_world_2']]
+
+def test_build_task_dependency_graph_valid_tree_2(tmp_path: Path):
+    """A single task is being depended upon by 2 tasks, i.e. both task 'sum_c_compile' and 'hello_world_2' depends on 'hello_world_3' """
+    mock_logger = MagicMock()
+    ip_config_parser = IpConfigParser(mock_logger, str(tmp_path))
+    ip_config_parser.ip_config = {
+        "tasks" : {
+            "sum_c_compile" : {
+                "depends_on" : ["hello_world_3"]
+            },
+            "hello_world_c_compile" : {
+                "depends_on" : ["sum_c_compile"]
+            },
+            "hello_world" : {
+                "depends_on" : []
+            },
+            "hello_world_2" : {
+                "depends_on" : [
+                    "hello_world_3",
+                    "hello_world_6"
+                ]
+            },
+            "hello_world_3" : {
+                "depends_on" : [
+                    "hello_world_4",
+                    "hello_world_5"
+                ]
+            },
+            "hello_world_4" : {
+                "depends_on" : []
+            },
+            "hello_world_5" : {
+                "depends_on" : []
+            },
+            "hello_world_6" : {
+                "depends_on" : []
+            }
+        }
+    }
+

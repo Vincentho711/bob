@@ -1,10 +1,11 @@
 from pathlib import Path
 from typing import Any, Dict
-import re
+from networkx import DiGraph
 import os
 import sys
 import yaml
 import subprocess
+import multiprocessing
 import logging
 import shutil
 import hashlib
@@ -20,6 +21,10 @@ class Bob:
         self.task_configs: Dict[str, Any] = {}
         self.dotbob_dir: Path = Path(self.proj_root) / ".bob"
         self.dotbob_checksum_file: Path = self.dotbob_dir / "checksum.json"
+        self.dependency_graph = None
+        self.dependency_count = {}
+        self.ready_queue = None
+        self.lock = multiprocessing.Lock() # Synchronisation lock
 
     def get_proj_root(self) -> Path:
         return Path(self.proj_root)
@@ -92,126 +97,6 @@ class Bob:
             self.logger.error(f"Error: {te}")
         except Exception as e:
             self.logger.critical(f"Unexpected error during append_env_var_path(): {e}", exc_info=True)
-
-    def load_ip_cfg(self) -> None:
-        """Load the ip_config.yaml into an internal dict"""
-        try:
-            ip_cfg_path: Path = Path(self.proj_root) / "ip_config.yaml"
-            if not ip_cfg_path.exists():
-                raise FileNotFoundError(f"No ip_config.yaml is found under {self.proj_root}. Since {ip_cfg_path} is not found, parsing skipped.")
-            with open(ip_cfg_path, "r") as yaml_file:
-                self.ip_config = yaml.safe_load(yaml_file)
-            self.logger.info(f"Parsing {ip_cfg_path}")
-
-        except (FileNotFoundError, ValueError) as e:
-            self.logger.error(f"Error: {e}")
-            sys.exit(1)
-        except Exception as e:
-            self.logger.critical(f"Unexpected error during load_ip_cfg(): {e}", exc_info=True)
-
-    def parse_ip_cfg(self) -> None:
-        """Parse and resolve placeholders in the entire ip_config dict"""
-        try:
-            self.ip_config = self._resolve_value(self.ip_config)
-            self.logger.debug(f"self.ip_config = {self.ip_config}")
-        except Exception as e:
-            self.logger.critical(f"Unexpected error during parse_ip_cfg(): {e}", exc_info=True)
-
-    def _resolve_value(self, value: Any, resolved_cache=None) -> Any:
-        """
-        Resolve the placeholders in the values (e.g., ${directories.root_dir})
-        while ensuring correct path joining where applicable.
-        """
-        try:
-            if resolved_cache is None:
-                resolved_cache = {}
-            if isinstance(value, str):
-                if value in resolved_cache:
-                    return resolved_cache[value] # Prevent duplicate resolution
-                resolved_value = self._resolve_placeholder(value, resolved_cache)
-                # if it is at the bottom of the hierarchy and all the elements in a list have been resolved, just return that list
-                if (isinstance(resolved_value, list)):
-                    return resolved_value
-                # Don't correct path format if it is a string and there is a leading '/' which indicates abs path
-                if resolved_value.startswith('/'):
-                    return resolved_value
-                else:
-                    resolved_cache[value] = self._ensure_correct_path_format(value, resolved_value)
-                    return resolved_cache[value]
-            elif isinstance(value, list):
-                return [self._resolve_value(item, resolved_cache) for item in value]
-            elif isinstance(value, dict):
-                return {key: self._resolve_value(val, resolved_cache) for key, val in value.items()}
-            return value
-        except Exception as e:
-            self.logger.critical(f"Unexpected error during _resolve_value(): {e}", exc_info=True)
-            sys.exit(1)
-
-    def _resolve_placeholder(self, value: str, resolved_cache: Dict[str, str]) -> Any:
-        """
-        Resolve placeholders, supporting both environment variables and hierarchical variables.
-        Environment variables take precedence over hierarchical values.
-        Resolve a placeholder like ${directories.root_dir} , or ${PROJ_ROOT} to their actual values.
-        Uses caching to prevent duplicate resolution and avoids circular references.
-        """
-        # Regular expression to match ${<hierarchy>}
-        try:
-            placeholder_pattern = r"\$\{([^}]+)\}"
-            matches = re.findall(placeholder_pattern, value)
-
-            for match in matches:
-                # Check if it is a environment variable first
-                if match in os.environ:
-                    resolved_value = os.environ[match]
-                else:
-                    resolved_value = self._get_value_from_hierarchy(match, resolved_cache)
-                if resolved_value is not None:
-                    if isinstance(resolved_value, list):
-                        # If it's a list, resolve each element separately
-                        resolved_value = [self._resolve_placeholder(str(item), resolved_cache) for item in resolved_value]
-                        return resolved_value # Return the fully resolved list
-                    elif not isinstance(resolved_value, str):
-                        resolved_value = str(resolved_value)
-                    value = value.replace(f"${{{match}}}", resolved_value)
-                else:
-                    self.logger.error(f"Warning: No matching value found for placeholder {match}")
-
-            return value
-        except Exception as e:
-            self.logger.critical(f"Unexpected error during _resolve_placeholder(): {e}", exc_info=True)
-            sys.exit(1)
-
-    def _get_value_from_hierarchy(self, hierarchy: str, resolved_cache: Dict[str, str]) -> str | None:
-        """Fetch the value from the hierarchy (e.g., directories.root_dir)"""
-        try:
-            if hierarchy in resolved_cache:
-                return resolved_cache[hierarchy]
-            keys = hierarchy.split('.')
-            value = self.ip_config
-
-            for key in keys:
-                if key in value:
-                    value = value[key]
-                else:
-                    self.logger.error(f"No matching value found for hierarchy {hierarchy}")
-                    return None
-            resolved_value = self._resolve_value(value, resolved_cache)
-            resolved_cache[hierarchy] = resolved_value
-            self.logger.debug(f"hierarchy: {hierarchy}, value: {resolved_value}")
-            return resolved_value
-        except Exception as e:
-            self.logger.critical(f"Unexpected error during _get_value_from_hierarchy(): {e}", exc_info=True)
-            sys.exit(1)
-
-    def _ensure_correct_path_format(self, original: str, resolved: str) -> str:
-        """
-        Ensure correct path joining when a placeholder is part of a file/directory path.
-        This prevents incorrect constructs like `.//src`.
-        """
-        if "/" in original or "\\" in original:  # Check if the value is path-like
-            parts = resolved.split("/")
-            return str(Path(*parts))  # Use pathlib to reconstruct the path correctly
-        return resolved
 
     def discover_tasks(self):
         """Discover tasks by finding task_config.yaml files and extracting their task names."""
@@ -647,7 +532,7 @@ class Bob:
             self.logger.critical(f"Unexpected error during update_task_env() for task_name = '{task_name}' : {e}", exc_info=True)
             return False
 
-    def execute_c_compile(self, task_name: str) -> bool:
+    def execute_c_compile(self, task_name: str) -> subprocess.Popen | None:
         """Execute a C compile with gcc, using attributes within env var"""
         try:
             if task_name not in self.task_configs:
@@ -670,7 +555,7 @@ class Bob:
             # Promote internal_src_files, external_src_files and output_src_files to task env var "C_COMPILE_SRC_FILES"
             if not self.ensure_src_files_existence(task_name):
                 self.logger.error(f"Aborting execute_c_compile as one or more source files are missing.")
-                return False
+                return None
             src_files = sum((self.task_configs[task_name].get(key, []) for key in ["internal_src_files", "external_src_files", "output_src_files"]), [])
             self.logger.debug(f"Task '{task_name}' has src_files={src_files}")
             self.update_task_env(task_name, "C_COMPILE_SRC_FILES", src_files)
@@ -681,7 +566,7 @@ class Bob:
             output_dir = self.task_configs[task_name].get("output_dir", None)
             if output_dir is None:
                 self.logger.error(f"Task '{task_name}' does not have the mandatory attribute 'output_dir'. Aborting execute_c_compile().")
-                return False
+                return None
             if executable_name:
                 executable_path = output_dir / executable_name
                 self.update_task_env(task_name, "C_COMPILE_EXECUTABLE_PATH", executable_path)
@@ -708,12 +593,13 @@ class Bob:
                     for inc_dir in include_header_dirs:
                         cmd_compile.extend(["-I", inc_dir])
                 self.logger.info(f"Executing c_compile command: {cmd_compile}")
-                result = subprocess.run(cmd_compile, env=task_env, capture_output=True, text=True)
+                process = subprocess.Popen(cmd_compile, env=task_env, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
-                if result.returncode != 0:
-                    self.logger.error(f"GCC compilation failed for file '{src}': {result.stderr}")
-                    return False
+                # if result.returncode != 0:
+                #     self.logger.error(f"GCC compilation failed for file '{src}': {result.stderr}")
+                #     return False
                 object_files.append(obj_file)
+                process.wait()
 
             self.logger.info(f"GCC compilation succeeded for task '{task_name}'. Output: {object_files}")
 
@@ -722,21 +608,100 @@ class Bob:
             if executable_name:
                 cmd_link = ["gcc"] + object_files + external_objects + ["-o", executable_path]
                 self.logger.info(f"Executing c_link command: {cmd_link}")
-                result = subprocess.run(cmd_link, env=task_env, capture_output=True, text=True)
+                process = subprocess.Popen(cmd_link, env=task_env, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
-                if result.returncode != 0:
-                    self.logger.error(f"GCC compilation failed for task '{task_name}': {result.stderr}")
-                    return False
+                # if result.returncode != 0:
+                #     self.logger.error(f"GCC compilation failed for task '{task_name}': {result.stderr}")
+                #     return False
 
                 self.logger.info(f"GCC link succeeded for task '{task_name}'. Output: {executable_path}")
-            return True
+            return process
 
         except ValueError as ve:
             self.logger.error(f"ValueError: {ve}")
-            return False
+            return None
         except Exception as e:
             self.logger.critical(f"Unexpected error during resolve_task_configs_output_src_files(): {e}", exc_info=True)
-            return False
+            return None
+
+    def schedule_tasks(self):
+        """Schedules tasks dynamically while respecting dependencies"""
+        try:
+            dependency_graph = self.dependency_graph
+            if dependency_graph is None:
+                raise ValueError(f"self.dependency_graph = None. Please ensure build_task_dependency is run, and Bob's attribute has been updated.")
+
+            # Track number of dependencies (indegree) for each task
+            dependency_count = {task: dependency_graph.in_degree(task) for task in dependency_graph.nodes}
+            ready_queue = multiprocessing.Queue() # Process-safe queue
+
+            # Populate queue withi initial tasks (indegree = 0)
+            for task, count in dependency_count.items():
+                if count == 0:
+                    ready_queue.put(task)
+
+            self.ready_queue = ready_queue
+            self.dependency_count = dependency_count
+
+            return dependency_count, ready_queue
+        except Exception as e:
+            self.logger.critical(f"Unexpected error during schedule_tasks(): {e}", exc_info=True)
+
+    def execute_tasks(self):
+        """Executes tasks with dynamic scheduling and parallel execution"""
+        try:
+            dependency_count, ready_queue = self.schedule_tasks()
+            self.logger.debug(f"dependency_count={dependency_count}")
+            process_pool = [] # Store active process handles
+            self.logger.debug(f"ready_queue = {ready_queue}")
+
+            while not self.ready_queue.empty() or process_pool:
+                # Launch all available tasks in parallel
+                while not self.ready_queue.empty():
+                    task = self.ready_queue.get()
+                    process = multiprocessing.Process(target=self.execute_task, args=(task, self.dependency_graph, self.dependency_count, self.ready_queue, self.lock))
+                    process.start()
+                    process_pool.append(process)
+
+                # Remove completed tasks from process pool
+                for process in process_pool:
+                    if not process.is_alive():
+                        process.join()
+                        process_pool.remove(process)
+
+        except Exception as e:
+            self.logger.critical(f"Unexpected error during execute_task(): {e}", exc_info=True)
+
+    def execute_task(self, task_name:str, dependency_graph: DiGraph, dependency_count: dict[str, int], ready_queue: multiprocessing.Queue, lock: multiprocessing.Lock):
+        """Executes a single task in a separate process"""
+        try:
+            task_config = self.task_configs.get(task_name, {})
+            if not task_config:
+                self.logger.error(f"Task '{task_name}' not found in configuration.")
+                return
+            task_config_dict = task_config.get("task_config_dict", {})
+            if not task_config_dict:
+                raise KeyError(f"task_configs[{task_name}] does not have 'task_config_dict' attribute.")
+            task_type = task_config_dict.get("task_type", "")
+            if task_type == "c_compile":
+                self.logger.debug(f"Executing execute_c_compile()")
+                process = self.execute_c_compile(task_name)
+            else:
+                self.logger.error(f"Undefined 'task_type' in task_configs[{task_name}]['task_config_dict'].")
+                process = None
+
+            if process:
+                process.wait() # Ensure task completion before marking it as done
+
+            with lock:
+                for dependent in dependency_graph.successors(task_name):
+                    dependency_count[dependent] -= 1
+                    if dependency_count[dependent] == 0:
+                        ready_queue.put(dependent)
+        except KeyError as ke:
+            self.logger.error(f"KeyError: {ke}")
+        except Exception as e:
+            self.logger.critical(f"Unexpected error during execute_task(): {e}", exc_info=True)
 
 
     def set_bob_dir(self) -> None:
