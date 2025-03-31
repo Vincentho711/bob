@@ -590,28 +590,35 @@ class Bob:
                     for inc_dir in include_header_dirs:
                         cmd_compile.extend(["-I", inc_dir])
                 self.logger.info(f"Executing c_compile command: {cmd_compile}")
+                print(f"Executing c_compile command: {cmd_compile}")
                 process = subprocess.Popen(cmd_compile, env=task_env, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-
-                # if result.returncode != 0:
-                #     self.logger.error(f"GCC compilation failed for file '{src}': {result.stderr}")
-                #     return False
-                object_files.append(obj_file)
                 process.wait()
 
+                if process.returncode != 0:
+                    self.logger.error(f"GCC compilation failed for file '{src}': {process.stderr}")
+                    print(f"GCC compilation failed for file '{src}': {process.stderr}")
+                    return None
+                object_files.append(obj_file)
+
             self.logger.info(f"GCC compilation succeeded for task '{task_name}'. Output: {object_files}")
+            print(f"GCC compilation succeeded for task '{task_name}'. Output: {object_files}")
 
             # If 'executable_name' exists within task_config.yaml, then link object files into an executable
             # Link all .o files, including external ones) to create the final executable
             if executable_name:
                 cmd_link = ["gcc"] + object_files + external_objects + ["-o", executable_path]
                 self.logger.info(f"Executing c_link command: {cmd_link}")
+                print(f"Executing c_link command: {cmd_link}")
                 process = subprocess.Popen(cmd_link, env=task_env, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                process.wait()
 
-                # if result.returncode != 0:
-                #     self.logger.error(f"GCC compilation failed for task '{task_name}': {result.stderr}")
-                #     return False
+                if process.returncode != 0:
+                    self.logger.error(f"GCC compilation failed for task '{task_name}': {process.stderr}")
+                    print(f"GCC compilation failed for task '{task_name}': {process.stderr}")
+                    return None
 
                 self.logger.info(f"GCC link succeeded for task '{task_name}'. Output: {executable_path}")
+                print(f"GCC link succeeded for task '{task_name}'. Output: {executable_path}")
             return process
 
         except ValueError as ve:
@@ -653,21 +660,30 @@ class Bob:
                 self.logger.debug(f"dependency_count={dependency_count}")
 
                 process_pool = [] # Store active process handles
-                self.logger.debug(f"ready_queue= {ready_queue}")
+                # Prevent spawning too many process all at once and spending too much time in context switching
+                # Tasks are dispached in controlled batches
+                # I.e. If num_workers = 8, only 8 tasks are dispached in a batch
+                num_workers = min(multiprocessing.cpu_count(), len(dependency_count))
+                self.logger.debug(f"num_workers = {num_workers}")
+                self.logger.debug(f"ready_queue = {ready_queue}")
 
                 while not ready_queue.empty() or process_pool:
                     # Launch all available tasks in parallel
-                    while not ready_queue.empty():
-                        task = ready_queue.get()
+                    while not ready_queue.empty() and len(process_pool) < num_workers:
+                        try:
+                            task = ready_queue.get(timeout=1) # Prevent blocking indefinitely
+                        except Empty:
+                            break
+
                         process = multiprocessing.Process(target=self.execute_task, args=(task, self.dependency_graph, dependency_count, ready_queue, lock))
                         process.start()
                         process_pool.append(process)
 
                     # Remove completed tasks from process pool
-                    for process in process_pool:
-                        if not process.is_alive():
-                            process.join()
-                            process_pool.remove(process)
+                    process_pool[:] = [p for p in process_pool if p.is_alive()]
+
+                self.logger.debug(f"At the end of execute_tasks(): dependency_count={dependency_count}")
+                self.logger.debug(f"At the end of execute_tasks(): ready_queue.qsize()={ready_queue.qsize()}")
 
         except Exception as e:
             self.logger.critical(f"Unexpected error during execute_task(): {e}", exc_info=True)

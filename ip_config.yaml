@@ -17,11 +17,11 @@ sources:
   xdc: "${directories.src_dir}/constraints/arty.xdc"
 
 tasks:
-  sum_c_compile:
+  arith_c_compile:
     depends_on: []
   hello_world_c_compile:
     depends_on:
-      - sum_c_compile
+      - arith_c_compile
   # hello_world:
   #   # script: build_scripts/fpga_build.tcl
   #   # output_dir: ${directories.build_dir}/fpga

@@ -4,6 +4,7 @@ executable_name: "hello_world.exe"
 src_files:
   - "hello_world.c"
 external_objects:
-  - "{@output:sum_c_compile:sum.o}"
+  - "{@output:arith_c_compile:sum.o}"
+  - "{@output:arith_c_compile:subtract.o}"
 include_headers_from_tasks:
-  - "sum_c_compile"
+  - "arith_c_compile"

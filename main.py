@@ -99,7 +99,6 @@ def main() -> None:
     bob.discover_tasks()
     print(bob.task_configs)
     bob.setup_build_dirs()
-    # bob.remove_task_build_dirs(["hello_world","tb_hello_world"])
     print(type(os.environ))
     bob.create_all_task_env()
     for task_name, task_config in bob.task_configs.items():
@@ -131,12 +130,12 @@ def main() -> None:
     task_config_parser.inherit_task_configs(bob.task_configs)
     print("")
     print(f"task_configs_parser.task_configs={task_config_parser.task_configs}")
-    sum_c_compile_config_file = task_config_parser.task_configs["sum_c_compile"].get("task_config_file_path", None)
-    if sum_c_compile_config_file:
-        task_config_parser._load_task_config_file(sum_c_compile_config_file)
-        task_config_parser.parse_task_config_dict("sum_c_compile")
+    arith_c_compile_config_file = task_config_parser.task_configs["arith_c_compile"].get("task_config_file_path", None)
+    if arith_c_compile_config_file:
+        task_config_parser._load_task_config_file(arith_c_compile_config_file)
+        task_config_parser.parse_task_config_dict("arith_c_compile")
         # Pass the updated task_config back to bob
-        bob.task_configs["sum_c_compile"] = task_config_parser.task_configs["sum_c_compile"]
+        bob.task_configs["arith_c_compile"] = task_config_parser.task_configs["arith_c_compile"]
         # Execute c compile
         # assert(bob.execute_c_compile("sum_c_compile"))
     hello_world_c_compile_config_file = task_config_parser.task_configs["hello_world_c_compile"].get("task_config_file_path", None)
