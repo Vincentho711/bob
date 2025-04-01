@@ -554,12 +554,12 @@ def test_resolve_reference_input_reference_with_list_of_files(tmp_path: Path):
     assert resolved_paths == expected_output
 
 @patch.object(Path, "is_dir", return_value=True) # Mock resolved_path.is_dir()
-@patch.object(Path, "glob", return_value=[
+@patch("pathlib.Path.iterdir", return_value=[
         Path("/mock/path/task_2/file1.v"),
         Path("/mock/path/task_2/file2.sv"),
         Path("/mock/path/task_2/file3.txt")
 ])
-def test_resolve_reference_input_reference_every_files(mock_glob, mock_is_dir, tmp_path: Path):
+def test_resolve_reference_input_reference_every_files(mock_iterdir, mock_is_dir, tmp_path: Path):
     """Test whether an input reference like "{@input:task_2:*}" can be succesfully resolved to a list of file paths in str"""
     task_name = "task_1"
     referenced_task_name = "task_2"
@@ -593,12 +593,61 @@ def test_resolve_reference_input_reference_every_files(mock_glob, mock_is_dir, t
     }
     resolved_value, resolved_type = task_config_parser.resolve_reference(task_name, value)
     # Check that the returned value matches the expected list of file paths
-    expected_files = [str(f.resolve()) for f in mock_glob.return_value]
+    expected_files = [str(f.resolve()) for f in mock_iterdir.return_value]
     assert resolved_type == "input"
     assert resolved_value == expected_files
 
+@patch("pathlib.Path.resolve", return_value=Path("/mock/path"))
+@patch("pathlib.Path.is_dir", return_value=True)
+@patch("pathlib.Path.iterdir")
+@patch.object(TaskConfigParser, "_resolve_input_reference")  # Mock the method
+def test_resolve_reference_input_reference_every_files_exclusion_list(mock_resolve_input_reference, mock_iterdir, mock_is_dir, mock_resolve, tmp_path: Path):
+    """Test whether an input reference like "{@input:task_2:*}" can be succesfully resolved, but the task_config.yaml within the task dir should be excluded."""
+    task_name = "task_1"
+    referenced_task_name = "task_2"
+    files_spec = "*"
+    value = f"{{@input:{referenced_task_name}:{files_spec}}}"
+
+    mock_logger = MagicMock()
+    task_config_parser = TaskConfigParser(mock_logger, str(tmp_path))
+
+    task_config_parser.task_configs[task_name] = {
+        "task_dir" : Path("/mock/path"),
+        "internal_input_src" : ["single_file.cpp", "my_src.cpp", ""], "output_dir" : tmp_path
+    }
+    task_config_parser.task_configs[referenced_task_name] = {
+        "task_dir" : Path("/mock/referenced_task")
+    }
+
+    # Mock the return of _resolve_input_reference to return task_dir as str
+    mock_resolve_input_reference.return_value = str(task_config_parser.task_configs[referenced_task_name]["task_dir"])
+
+    # Mock directory contents, including "task_config.yaml"
+    mock_file1 = MagicMock(spec=Path)
+    mock_file1.name = "file1.txt"
+    mock_file1.__str__.return_value = "/mock/referenced_task/file1.txt"
+
+    mock_task_config = MagicMock(spec=Path)
+    mock_task_config.name = "task_config.yaml"  # Explicitly set correct name
+    mock_task_config.__str__.return_value = "/mock/referenced_task/task_config.yaml"
+
+    mock_file2 = MagicMock(spec=Path)
+    mock_file2.name = "file2.log"
+    mock_file2.__str__.return_value = "/mock/referenced_task/file2.log"
+
+    # Set return value of iterdir() to include "task_config.yaml"
+    mock_iterdir.return_value = [mock_file1, mock_task_config, mock_file2]
+
+
+    resolved_value, resolved_type = task_config_parser.resolve_reference(task_name, value)
+    # Expected filtered result (excluding "task_config.yaml")
+    expected_files = ["/mock/referenced_task/file1.txt", "/mock/referenced_task/file2.log"]
+
+    assert resolved_value == expected_files, f"Expected {expected_files}, but got {resolved_value}"
+    assert resolved_type == "input"
+
 @patch.object(Path, "is_dir", return_value=False) # Mock resolved_path.is_dir()
-def test_resolve_reference_input_reference_every_files(mock_is_dir, tmp_path: Path):
+def test_resolve_reference_input_reference_single_file(mock_is_dir, tmp_path: Path):
     """Test resolving an input reference of a single file like "{@input:task_2:single_file.cpp}" """
     task_name = "task_1"
     referenced_task_name = "task_2"

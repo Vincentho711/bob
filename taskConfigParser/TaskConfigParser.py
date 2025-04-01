@@ -192,8 +192,6 @@ class TaskConfigParser:
         Returns absolute file paths as strings.
         """
         try:
-            print(f"task_name={task_name}")
-            print(f"value={value}")
             resolved_type = "unknown"
             if task_name not in self.task_configs:
                 raise KeyError(f"Task {task_name} not found in task configurations.")
@@ -224,11 +222,22 @@ class TaskConfigParser:
             if resolved_value is None:
                 raise ValueError(f"Errors during resolving reference with value='{value}' and task_name='{task_name}'.")
 
+            self.logger.debug(f"resolved_value={resolved_value}")
+
             if isinstance(resolved_value, str):
                 resolved_path = Path(resolved_value).resolve()
-                print(f"type(resolved_path)={type(resolved_path)}")
-                print(f"resolved_path.is_dir()={resolved_path.is_dir()}")
-                return ([str(p) for p in resolved_path.glob("*")] if (resolved_path.is_dir() and resolved_type == "input") else str(resolved_path)), resolved_type
+                self.logger.debug(f"type(resolved_path)={type(resolved_path)}")
+                self.logger.debug(f"resolved_path.is_dir()={resolved_path.is_dir()}")
+                exclusion_list = {"task_config.yaml"}
+                if resolved_path.is_dir() and resolved_type == "input":
+                    resolved_filepaths = []
+                    for p in resolved_path.iterdir():
+                        self.logger.debug(f"p={p}, p.name={p.name}")
+                        if p.name not in exclusion_list:
+                            resolved_filepaths.append(str(p))
+                    return resolved_filepaths, resolved_type
+                else:
+                    return str(resolved_path), resolved_type
 
             if isinstance(resolved_value, list):
                 return [str(Path(p).resolve()) for p in resolved_value], resolved_type
@@ -468,6 +477,8 @@ class TaskConfigParser:
                 else:
                     self.logger.warning(f"Resolved reference='{resolved_reference}' is neither of type str or list. type({resolved_reference})={type(resolved_reference)}. Skip appending to resolved_src_files list.")
 
+            # input_src_files consists of internal_src_files and external_src_files
+            self.task_configs[task_name].setdefault("input_src_files", internal_src_files + external_src_files)
 
         except TypeError as te:
             self.logger.error(f"TypeError: {te}")

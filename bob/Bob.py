@@ -1,6 +1,6 @@
 from pathlib import Path
 from typing import Any, Dict
-from networkx import DiGraph
+from networkx import DiGraph, topological_sort
 import os
 import sys
 import yaml
@@ -261,20 +261,20 @@ class Bob:
         except Exception as e:
             self.logger.critical(f"Unexpected error during create_dotbob_dir_at_proj_root() : {e}", exc_info=True)
 
-    def _compute_task_src_files_hash_sha256(self, task_name: str) -> str | None:
-        """Compute a SHA256 checksum from a list of src files for a task"""
+    def _compute_task_input_src_files_hash_sha256(self, task_name: str) -> str | None:
+        """Compute a SHA256 checksum from a list of input src files for a task"""
         try:
             if task_name not in self.task_configs:
                 self.logger.error(f"Task '{task_name}' does not exist in task_configs. Please run discover_tasks() first.")
                 return None
 
-            src_files = self.task_configs[task_name].get("src_files", [])
-            if not src_files:
-                self.logger.error(f"Task '{task_name}' has no source files defined.")
+            input_src_files = self.task_configs[task_name].get("input_src_files", [])
+            if not input_src_files:
+                self.logger.error(f"Task '{task_name}' has no input source files defined.")
                 return None
 
             hash_sha256 = hashlib.sha256()
-            for file_path in sorted(src_files, key=lambda p: p.as_posix()):
+            for file_path in sorted(input_src_files, key=lambda p: p.as_posix()):
                 if file_path.exists() and file_path.is_file():
                     with file_path.open("rb") as f:
                         while chunk := f.read(8192):
@@ -282,7 +282,7 @@ class Bob:
             return hash_sha256.hexdigest()
 
         except Exception as e:
-            self.logger.critical(f"Unexpected error during _compute_task_src_files_hash_sha256(): {e}", exc_info=True)
+            self.logger.critical(f"Unexpected error during _compute_task_input_src_files_hash_sha256(): {e}", exc_info=True)
 
     def _update_dotbob_checksum_file(self) -> None:
         """Update checksum.json to include new tasks without modifying existing entries."""
@@ -367,7 +367,7 @@ class Bob:
                 self.logger.error(f"No source files defined for task {task_name}. Skipping build for this task.")
                 return False
 
-            current_hash_sha256 = self._compute_task_src_files_hash_sha256(task_name)
+            current_hash_sha256 = self._compute_task_input_src_files_hash_sha256(task_name)
 
             if current_hash_sha256 is None:
                 raise RuntimeError(f"_compute_task_src_files_checksum() returned None, hence current checksum cannot be computed for task {task_name}.")
@@ -627,6 +627,78 @@ class Bob:
         except Exception as e:
             self.logger.critical(f"Unexpected error during resolve_task_configs_output_src_files(): {e}", exc_info=True)
             return None
+    # def filter_tasks_to_rebuild(self) -> DiGraph:
+    #     """Determines which tasks need to be rebuilt based on dependency_tracking and return a reduced dependency_graph"""
+    #     try:
+    #         # Track tasks that need to be rebuilt
+    #         needs_rebuild = {}
+    #
+    #         # Reverse topological order ensures dependencies are processed first
+    #         for task in reversed(list(topological_sort(self.dependency_graph))):
+    #             # A task must be rebuilt if:
+    #             # - It explicitly needs rebuilding (should_rebuild_task is True)
+    #             # - Any of its prerequisite tasks require rebuilding
+    #             prerequisite_tasks = list(self.dependency_graph.predecessors(task))
+    #
+    #             if self.should_rebuild_task(task) or any(needs_rebuild.get(dep, False) for dep in prerequisite_tasks):
+    #                 needs_rebuild[task] = True
+    #             else:
+    #                 needs_rebuild[task] = False
+    #
+    #         # Create a new dependency_graph containing only tasks that need rebuilding
+    #         rebuild_graph = self.dependency_graph.subgraph([task for task, rebuild in needs_rebuild.items() if rebuild]).copy()
+    #         return rebuild_graph
+    #
+    #     except Exception as e:
+    #         self.logger.critical(f"Unexpected error during filter_tasks_to_rebuild(): {e}", exc_info=True)
+
+    def filter_tasks_to_rebuild(self) -> DiGraph:
+        """Returns a filtered dependency graph with only tasks that need to be rebuilt."""
+        # A task must be rebuilt if:
+        # - It explicitly needs rebuilding (should_rebuild_task is True)
+        # - Any of its prerequisite tasks require rebuilding
+        try:
+            rebuild_graph = DiGraph()
+
+            tasks_to_rebuild = set()
+            checked_tasks = set()
+
+            def should_rebuild_recursive(task):
+                """Recursively determines if a task needs rebuilding."""
+                if task in checked_tasks:
+                    return task in tasks_to_rebuild  # If already checked, return previous decision
+
+                checked_tasks.add(task)
+
+                if self.should_rebuild_task(task):  # Task itself requires rebuild
+                    tasks_to_rebuild.add(task)
+                    return True
+
+                # If any dependency needs a rebuild, this task must also rebuild
+                for dependency in self.dependency_graph.predecessors(task):
+                    if should_rebuild_recursive(dependency):
+                        tasks_to_rebuild.add(task)
+                        return True
+
+                return False
+
+            # Iterate over all tasks and determine rebuild requirements
+            for task in self.dependency_graph.nodes:
+                should_rebuild_recursive(task)
+
+            # Construct the rebuild graph with only required tasks
+            for task in tasks_to_rebuild:
+                rebuild_graph.add_node(task)
+                for successor in self.dependency_graph.successors(task):
+                    if successor in tasks_to_rebuild:
+                        rebuild_graph.add_edge(task, successor)
+
+            self.logger.debug(f"Filtered rebuild graph: {rebuild_graph.nodes}")
+            return rebuild_graph
+
+        except Exception as e:
+            self.logger.critical(f"Unexpected error in filter_tasks_to_rebuild(): {e}", exc_info=True)
+            return DiGraph()  # Return empty graph on failure
 
     def schedule_tasks(self, dependency_count, ready_queue):
         """Schedules tasks dynamically while respecting dependencies"""

@@ -1,6 +1,8 @@
 import os
 import shutil
 from sys import exc_info
+from unittest import mock
+from networkx import DiGraph
 import pytest
 import logging
 import json
@@ -726,7 +728,7 @@ def test_ensure_dotbob_dir_at_proj_root_with_new_tasks(mock_mkdir, tmp_path: Pat
     written_data = "".join(call.args[0] for call in handle.write.call_args_list)
     assert json.loads(written_data) == expected_updated_dotbob_checksum_file_dict # Verify the correct JSON data was written
 
-def test_compute_task_src_files_hash_sha256_task_not_exists():
+def test_compute_task_input_src_files_hash_sha256_task_not_exists():
     """Test the function with a non-existent task_name"""
     mock_logger = MagicMock()
     bob_instance = Bob(mock_logger)
@@ -734,23 +736,23 @@ def test_compute_task_src_files_hash_sha256_task_not_exists():
             "existing_task_1" : {},
             "existing_task_2" : {},
     }
-    result = bob_instance._compute_task_src_files_hash_sha256("non_existent_task")
+    result = bob_instance._compute_task_input_src_files_hash_sha256("non_existent_task")
     assert result is None
     bob_instance.logger.error.assert_called_once_with("Task 'non_existent_task' does not exist in task_configs. Please run discover_tasks() first.")
 
-def test_compute_task_src_files_hash_sha256_task_empty_src_files():
-    """Test the function with an existing task but the task doesn't have any source files"""
+def test_compute_task_input_src_files_hash_sha256_task_empty_input_src_files():
+    """Test the function with an existing task but the task doesn't have any input source files"""
     mock_logger = MagicMock()
     bob_instance = Bob(mock_logger)
     bob_instance.task_configs = {
         "task1" : {},
     }
-    bob_instance.task_configs["task1"]["src_files"] = []
-    result = bob_instance._compute_task_src_files_hash_sha256("task1")
+    bob_instance.task_configs["task1"]["input_src_files"] = []
+    result = bob_instance._compute_task_input_src_files_hash_sha256("task1")
     assert result is None
-    bob_instance.logger.error.assert_called_once_with(f"Task 'task1' has no source files defined.")
+    bob_instance.logger.error.assert_called_once_with(f"Task 'task1' has no input source files defined.")
 
-def test_compute_task_src_files_hash_sha256_task_valid_files():
+def test_compute_task_input_src_files_hash_sha256_task_valid_files():
     """Test the function of compute the hash_sha256 of a task with 2 files"""
     mock_logger = MagicMock()
     bob_instance = Bob(mock_logger)
@@ -768,12 +770,12 @@ def test_compute_task_src_files_hash_sha256_task_valid_files():
     mock_file_2.as_posix.return_value = "/fake/path/file2" # Mocking as_posix()
 
     bob_instance.task_configs = {
-        "task1" : {"src_files": [mock_file_1, mock_file_2]}
+        "task1" : {"input_src_files": [mock_file_1, mock_file_2]}
     }
     expected_hash_sha256 = hashlib.sha256(b"data1data2").hexdigest()
 
     with patch("builtins.open", create=True):
-        result = bob_instance._compute_task_src_files_hash_sha256("task1")
+        result = bob_instance._compute_task_input_src_files_hash_sha256("task1")
 
     assert result == expected_hash_sha256
 
@@ -1128,3 +1130,117 @@ def test_ensure_src_files_existence_missing_files(monkeypatch):
     assert bob_instance.ensure_src_files_existence("test_task") is False
     bob_instance.logger.error.assert_any_call(f" - /tmp/missing1.v")
     bob_instance.logger.error.assert_any_call(f" - /tmp/missing2.v")
+
+@pytest.fixture
+def sample_dependency_graph():
+    """Creates a sample dependency graph for testing"""
+    #         arith_c_compile
+    #            │
+    #            ▼
+    # hello_world_c_compile
+    #
+    # hello_world_4   hello_world_5
+    #       │              │
+    #       ▼              ▼
+    #       ───► hello_world_3 ───► hello_world_2 ◄── hello_world_6
+
+    graph = DiGraph()
+    graph.add_edges_from([
+        ("arith_c_compile", "hello_world_c_compile"),
+        ("hello_world_3", "hello_world_2"),
+        ("hello_world_4", "hello_world_3"),
+        ("hello_world_5", "hello_world_3"),
+        ("hello_world_3", "hello_world_2"),
+        ("hello_world_6", "hello_world_2")
+    ])
+    return graph
+
+@pytest.fixture
+def bob_with_graph(sample_dependency_graph):
+    """Creates a Bob instance with a mocked dependency graph"""
+    mock_logger = MagicMock()
+    bob_instance = Bob(mock_logger)
+    bob_instance.dependency_graph = sample_dependency_graph
+    return bob_instance
+
+def test_filter_tasks_to_rebuild_no_rebuild_required(bob_with_graph):
+    """All tasks are up-to-date, no rebuids should be required"""
+    with patch.object(bob_with_graph, "should_rebuild_task", return_value=False):
+        result_graph = bob_with_graph.filter_tasks_to_rebuild()
+        assert len(result_graph.nodes) == 0, "Graph should be empty if no rebuilds are needed"
+
+def test_filter_tasks_to_rebuild_single_task_rebuild(bob_with_graph):
+    """Only 'arith_c_compile' requires rebuilding, but since 'hello_world_c_compile' depends on it, it also needs rebuilding"""
+    with patch.object(bob_with_graph, "should_rebuild_task", side_effect=lambda task: task == "arith_c_compile"):
+        result_graph = bob_with_graph.filter_tasks_to_rebuild()
+        assert set(result_graph.nodes) == {"arith_c_compile", "hello_world_c_compile"}, "Only arith_c_compile and its dependent should be rebuilt"
+
+def test_filter_tasks_to_rebuild_all_tasks_required(bob_with_graph):
+    """Every tasks requires rebuilding"""
+    with patch.object(bob_with_graph, "should_rebuild_task", return_value=True):
+        result_graph = bob_with_graph.filter_tasks_to_rebuild()
+        assert set(result_graph.nodes) == set(bob_with_graph.dependency_graph.nodes), "All tasks should be in the rebuild graph"
+
+def test_filter_tasks_to_rebuild_deep_dependency_rebuild(bob_with_graph):
+    """A deeply ensted dependency should cause all downstream tasks to rebuild"""
+    with patch.object(bob_with_graph, "should_rebuild_task", side_effect=lambda task: task == "hello_world_4"):
+        result_graph = bob_with_graph.filter_tasks_to_rebuild()
+        expected_rebuild_tasks = {"hello_world_4", "hello_world_3", "hello_world_2"}
+        assert set(result_graph.nodes) == expected_rebuild_tasks, "All dependent tasks should be marked for rebuild"
+
+def test_filter_tasks_to_rebuild_branching_dependency(bob_with_graph):
+    """If a task with multiple dependecies is affected, ensure all upstream dependencies are correctly handled"""
+    with patch.object(bob_with_graph, "should_rebuild_task", side_effect=lambda task: task in ["hello_world_5", "hello_world_6"]):
+        result_graph = bob_with_graph.filter_tasks_to_rebuild()
+        expected_rebuild_tasks = {"hello_world_5", "hello_world_3", "hello_world_2", "hello_world_6"}
+        assert set(result_graph.nodes) == expected_rebuild_tasks, "Tasks dependent on multiple rebuild sources must also rebuild"
+
+@pytest.fixture
+def bob_with_complex_graph(bob_with_graph):
+    """Set up a more complex dependency graph for additional test cases."""
+    graph = DiGraph()
+    # Graph structure:
+    # A → B → C
+    # D → E → C
+    # F → G
+    graph.add_edges_from([
+        ("A", "B"), ("B", "C"),
+        ("D", "E"), ("E", "C"),
+        ("F", "G")
+    ])
+
+    bob_with_graph.dependency_graph = graph
+    return bob_with_graph
+
+def test_filter_tasks_to_rebuild_deep_dependency_chain(bob_with_complex_graph):
+    """Tests if rebuild correctly propagates through long chains A → B → C."""
+    with patch.object(bob_with_complex_graph, "should_rebuild_task", side_effect=lambda task: task == "A"):
+        result_graph = bob_with_complex_graph.filter_tasks_to_rebuild()
+        assert set(result_graph.nodes) == {"A", "B", "C"}, "C should be rebuilt due to dependency on A."
+
+def test_filter_tasks_to_rebuild_multiple_independent_chains(bob_with_complex_graph):
+    """Ensure independent chains do not trigger unnecessary rebuilds."""
+    with patch.object(bob_with_complex_graph, "should_rebuild_task", side_effect=lambda task: task == "F"):
+        result_graph = bob_with_complex_graph.filter_tasks_to_rebuild()
+        assert set(result_graph.nodes) == {"F", "G"}, "Only F and G should be rebuilt."
+
+def test_filter_tasks_to_rebuild_diamond_dependency_structure(bob_with_complex_graph):
+    """Tests if rebuild propagates correctly in a diamond structure."""
+    with patch.object(bob_with_complex_graph, "should_rebuild_task", side_effect=lambda task: task == "D"):
+        result_graph = bob_with_complex_graph.filter_tasks_to_rebuild()
+        assert set(result_graph.nodes) == {"D", "E", "C"}, "C should rebuild since E depends on D."
+
+def test_filter_tasks_to_rebuild_cyclic_dependency_handling(bob_with_complex_graph):
+    """Tests if the function can detect and handle cyclic dependencies."""
+    # Introduce a cycle: C → A
+    bob_with_complex_graph.dependency_graph.add_edge("C", "A")
+
+    with patch.object(bob_with_complex_graph, "should_rebuild_task", return_value=True):
+        result_graph = bob_with_complex_graph.filter_tasks_to_rebuild()
+        assert len(result_graph.nodes) == len(bob_with_complex_graph.dependency_graph.nodes), "All nodes should be rebuilt due to a cycle."
+
+def test_filter_tasks_to_rebuild_mixed_rebuild_scenarios(bob_with_complex_graph):
+    """Complex case where different nodes need rebuilding selectively."""
+    with patch.object(bob_with_complex_graph, "should_rebuild_task", side_effect=lambda task: task in ["B", "D"]):
+        result_graph = bob_with_complex_graph.filter_tasks_to_rebuild()
+        assert set(result_graph.nodes) == {"B", "C", "D", "E"}, "C and E should be rebuilt due to dependencies on B and D."
