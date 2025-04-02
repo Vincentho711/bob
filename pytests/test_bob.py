@@ -752,29 +752,63 @@ def test_compute_task_input_src_files_hash_sha256_task_empty_input_src_files():
     assert result is None
     bob_instance.logger.error.assert_called_once_with(f"Task 'task1' has no input source files defined.")
 
-def test_compute_task_input_src_files_hash_sha256_task_valid_files():
-    """Test the function of compute the hash_sha256 of a task with 2 files"""
+def test_compute_task_input_src_files_hash_sha256_missing_task_config_file_path():
+    """Test the function with an existing task but it does not have a task_config_file_path attribute within task_configs[task_name]"""
     mock_logger = MagicMock()
     bob_instance = Bob(mock_logger)
+    task_name = "task1"
 
-    mock_file_1 = MagicMock()
+    mock_file_1 = MagicMock(spec=Path)
     mock_file_1.exists.return_value = True
     mock_file_1.is_file.return_value = True
     mock_file_1.open.return_value.__enter__.return_value.read.side_effect = [b"data1", b""]
     mock_file_1.as_posix.return_value = "/fake/path/file1" # Mocking as_posix()
 
-    mock_file_2 = MagicMock()
+    bob_instance.task_configs = {
+        task_name : {
+            "input_src_files": [str(mock_file_1)]
+        },
+    }
+    result = bob_instance._compute_task_input_src_files_hash_sha256(task_name)
+    assert result is None
+    bob_instance.logger.error.assert_called_once_with(f"Task '{task_name}' does not contain a 'task_config_file_path' attribute within task_configs[{task_name}].")
+
+def test_compute_task_input_src_files_hash_sha256_task_valid_files():
+    """Test the function of compute the hash_sha256 of a task with 2 files"""
+    mock_logger = MagicMock()
+    bob_instance = Bob(mock_logger)
+
+    mock_file_1 = MagicMock(spec=Path)
+    mock_file_1.exists.return_value = True
+    mock_file_1.is_file.return_value = True
+    mock_file_1.open.return_value.__enter__.return_value.read.side_effect = [b"data1", b""]
+    mock_file_1.as_posix.return_value = "/fake/path/file1" # Mocking as_posix()
+
+    mock_file_2 = MagicMock(spec=Path)
     mock_file_2.exists.return_value = True
     mock_file_2.is_file.return_value = True
     mock_file_2.open.return_value.__enter__.return_value.read.side_effect = [b"data2", b""]
     mock_file_2.as_posix.return_value = "/fake/path/file2" # Mocking as_posix()
 
-    bob_instance.task_configs = {
-        "task1" : {"input_src_files": [mock_file_1, mock_file_2]}
-    }
-    expected_hash_sha256 = hashlib.sha256(b"data1data2").hexdigest()
+    task_config_file_path = MagicMock(spec=Path)
+    task_config_file_path.exists.return_value = True
+    task_config_file_path.is_file.return_value = True
+    task_config_file_path.open.return_value.__enter__.return_value.read.side_effect = [b"data3", b""]
+    task_config_file_path.as_posix.return_value = "/fake/path/task_config.yaml"
 
-    with patch("builtins.open", create=True):
+    bob_instance.task_configs = {
+        "task1" : {
+            "task_config_file_path": task_config_file_path,
+            "input_src_files": [str(mock_file_1), str(mock_file_2)]
+        }
+    }
+
+    expected_hash_sha256 = hashlib.sha256()
+    for data in [b"data1", b"data2", b"data3"]:  # Order must be consistent
+        expected_hash_sha256.update(data)
+    expected_hash_sha256 = expected_hash_sha256.hexdigest()
+
+    with patch("builtins.map", return_value=[mock_file_1, mock_file_2, task_config_file_path]):
         result = bob_instance._compute_task_input_src_files_hash_sha256("task1")
 
     assert result == expected_hash_sha256
@@ -1003,6 +1037,72 @@ def test_save_dotbob_checksum_file_invalid_json(mock_path_open, tmp_path: Path):
 
     bob_instance.logger.critical.assert_called_once_with("Unexpected error during _save_dotbob_checksum_file(): Invalid JSON", exc_info=True)
 
+@patch.object(Path, "exists", return_value=True) # checksum.json exists
+@patch.object(Bob,"_load_dotbob_checksum_file")
+@patch("pathlib.Path.open", new_callable=mock_open)
+def test_mark_task_as_dirty_in_dotbob_checksum_file_valid_task_already_dirty(mock_path_open, mock_load_chksum_file, mock_exists, tmp_path: Path):
+    """Test marking a valid task as clean"""
+    mock_load_chksum_file.return_value = {
+        "task1" : {"hash_sha256": "abc123", "dirty": True},
+        "task2" : {"hash_sha256": "def4567", "dirty": True},
+    }
+
+    os.environ["PROJ_ROOT"] = str(tmp_path)
+    mock_logger = MagicMock()
+    bob_instance = Bob(mock_logger)
+    bob_instance.task_configs = {
+        "task1" : {},
+        "task2" : {},
+    }
+
+    bob_instance.mark_task_as_dirty_in_dotbob_checksum_file("task1")
+
+    # Check that checksum.json has been open for write
+    mock_path_open.assert_called_once_with("w")
+    handle = mock_path_open() # Retrieve the actual written data
+    written_data = "".join(call.args[0] for call in handle.write.call_args_list)
+
+    expected_data = {
+        "task1" : {"hash_sha256": "abc123", "dirty": True},
+        "task2" : {"hash_sha256": "def4567", "dirty": True},
+
+    }
+    assert json.loads(written_data) == expected_data
+    bob_instance.logger.debug.assert_called_with(f"Marked task 'task1' as dirty.")
+
+@patch.object(Path, "exists", return_value=True) # checksum.json exists
+@patch.object(Bob,"_load_dotbob_checksum_file")
+@patch("pathlib.Path.open", new_callable=mock_open)
+def test_mark_task_as_dirty_in_dotbob_checksum_file_valid_task_not_dirty(mock_path_open, mock_load_chksum_file, mock_exists, tmp_path: Path):
+    """Test marking a valid task as clean"""
+    mock_load_chksum_file.return_value = {
+        "task1" : {"hash_sha256": "abc123", "dirty": False},
+        "task2" : {"hash_sha256": "def4567", "dirty": False},
+    }
+
+    os.environ["PROJ_ROOT"] = str(tmp_path)
+    mock_logger = MagicMock()
+    bob_instance = Bob(mock_logger)
+    bob_instance.task_configs = {
+        "task1" : {},
+        "task2" : {},
+    }
+
+    bob_instance.mark_task_as_dirty_in_dotbob_checksum_file("task1")
+
+    # Check that checksum.json has been open for write
+    mock_path_open.assert_called_once_with("w")
+    handle = mock_path_open() # Retrieve the actual written data
+    written_data = "".join(call.args[0] for call in handle.write.call_args_list)
+
+    expected_data = {
+        "task1" : {"hash_sha256": "abc123", "dirty": True},
+        "task2" : {"hash_sha256": "def4567", "dirty": False},
+
+    }
+    assert json.loads(written_data) == expected_data
+    bob_instance.logger.debug.assert_called_with(f"Marked task 'task1' as dirty.")
+
 def test_mark_task_as_clean_in_dotbob_checksum_file_invalid_task(tmp_path: Path):
     """Test marking an invalid task as clean"""
     os.environ["PROJ_ROOT"] = str(tmp_path)
@@ -1014,17 +1114,23 @@ def test_mark_task_as_clean_in_dotbob_checksum_file_invalid_task(tmp_path: Path)
     }
 
     bob_instance.mark_task_as_clean_in_dotbob_checksum_file("task3")
-    bob_instance.logger.error.assert_called_once_with("ValueError: Task task3 not found in task_configs. Please ensure discover_tasks() have been executed first.")
+    bob_instance.logger.error.assert_called_once_with("ValueError: Task 'task3' not found in task_configs. Please ensure discover_tasks() have been executed first.")
 
+@patch.object(Bob, "_compute_task_input_src_files_hash_sha256")
 @patch.object(Path, "exists", return_value=True) # checksum.json exists
 @patch.object(Bob,"_load_dotbob_checksum_file")
 @patch("pathlib.Path.open", new_callable=mock_open)
-def test_mark_task_as_clean_in_dotbob_checksum_file_invalid_task(mock_path_open, mock_load_chksum_file, tmp_path: Path):
+def test_mark_task_as_clean_in_dotbob_checksum_file_valid_task(mock_path_open, mock_load_chksum_file, mock_exists, mock_compute, tmp_path: Path):
     """Test marking a valid task as clean"""
     mock_load_chksum_file.return_value = {
         "task1" : {"hash_sha256": "abc123", "dirty": True},
         "task2" : {"hash_sha256": "def4567", "dirty": True},
     }
+
+    # Mock return of _compute_task_input_src_files_hash_sha256()
+    expected_hash_sha256 = "rj2728qa"
+    mock_compute.return_value = expected_hash_sha256
+
     os.environ["PROJ_ROOT"] = str(tmp_path)
     mock_logger = MagicMock()
     bob_instance = Bob(mock_logger)
@@ -1032,6 +1138,7 @@ def test_mark_task_as_clean_in_dotbob_checksum_file_invalid_task(mock_path_open,
         "task1" : {},
         "task2" : {},
     }
+
     bob_instance.mark_task_as_clean_in_dotbob_checksum_file("task1")
 
     # Check that checksum.json has been open for write
@@ -1040,12 +1147,12 @@ def test_mark_task_as_clean_in_dotbob_checksum_file_invalid_task(mock_path_open,
     written_data = "".join(call.args[0] for call in handle.write.call_args_list)
 
     expected_data = {
-        "task1" : {"hash_sha256": "abc123", "dirty": False},
+        "task1" : {"hash_sha256": expected_hash_sha256, "dirty": False},
         "task2" : {"hash_sha256": "def4567", "dirty": True},
 
     }
     assert json.loads(written_data) == expected_data
-    bob_instance.logger.debug.assert_called_once_with(f"Marked task task1 as clean.")
+    bob_instance.logger.debug.assert_called_with(f"Marked task 'task1' as clean and updated hash_sha256.")
 
 def test_task_configs_output_src_files_empty():
     """Test resolving an empty output_src_files list"""

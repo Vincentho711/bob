@@ -268,18 +268,33 @@ class Bob:
                 self.logger.error(f"Task '{task_name}' does not exist in task_configs. Please run discover_tasks() first.")
                 return None
 
-            input_src_files = self.task_configs[task_name].get("input_src_files", [])
+            input_src_files = self.task_configs[task_name].get("input_src_files")
             if not input_src_files:
                 self.logger.error(f"Task '{task_name}' has no input source files defined.")
                 return None
 
+            task_config_file_path = self.task_configs[task_name].get("task_config_file_path")
+            if not task_config_file_path:
+                self.logger.error(f"Task '{task_name}' does not contain a 'task_config_file_path' attribute within task_configs[{task_name}].")
+                return None
+            task_config_file_path = str(task_config_file_path)
+
+            # Prepare and sort the list of files for checksum calculation
+            all_src_files = sorted(input_src_files + [task_config_file_path])
+            self.logger.debug(f"Task '{task_name}' source files sorted: {all_src_files}")
+            print(f"Task '{task_name}' source files sorted: {all_src_files}")
+
             hash_sha256 = hashlib.sha256()
-            for file_path in sorted(input_src_files, key=lambda p: p.as_posix()):
+            for file_path in map(Path, all_src_files):
+                print(type(file_path))
                 if file_path.exists() and file_path.is_file():
                     with file_path.open("rb") as f:
                         while chunk := f.read(8192):
                             hash_sha256.update(chunk)
-            return hash_sha256.hexdigest()
+            computed_hash = hash_sha256.hexdigest()
+            self.logger.debug(f"Computed hash_sha256 for task '{task_name}': {computed_hash}")
+            print(f"Computed hash_sha256 for task '{task_name}': {computed_hash}")
+            return computed_hash
 
         except Exception as e:
             self.logger.critical(f"Unexpected error during _compute_task_input_src_files_hash_sha256(): {e}", exc_info=True)
@@ -403,20 +418,60 @@ class Bob:
             self.logger.critical(f"Unexpected error during should_rebuild_task(): {e}", exc_info=True)
             return None
 
-    def mark_task_as_clean_in_dotbob_checksum_file(self, task_name: str) -> None:
-        """Mark a task as clean after a succesful build"""
+    def mark_task_as_dirty_in_dotbob_checksum_file(self, task_name: str) -> None:
+        """Mark a task as dirty before the build is started"""
         try:
             if task_name not in self.task_configs:
-                raise ValueError(f"Task {task_name} not found in task_configs. Please ensure discover_tasks() have been executed first.")
+                raise ValueError(f"Task '{task_name}' not found in task_configs. Please ensure discover_tasks() have been executed first.")
 
             dotbob_checksum_file_dict: dict = self._load_dotbob_checksum_file()
 
             if task_name not in dotbob_checksum_file_dict:
-                raise KeyError(f"Within mark_task_as_clean_in_dotbob_checksum_file(), the task {task_name} does not exists in checksum.json, aborting marking it as clean.")
+                raise KeyError(f"Within mark_task_as_dirty_in_dotbob_checksum_file(), the task '{task_name}' does not exists in checksum.json, aborting marking it as dirty.")
+
+            dotbob_checksum_file_dict[task_name]["dirty"] = True
+
+            self._save_dotbob_checksum_file(dotbob_checksum_file_dict)
+            self.logger.debug(f"Marked task '{task_name}' as dirty.")
+            print(f"Marked task '{task_name}' as dirty.")
+
+        except ValueError as ve:
+            self.logger.error(f"ValueError: {ve}")
+            return None
+
+        except KeyError as ke:
+            self.logger.error(f"KeyError: {ke}")
+            return None
+
+        except Exception as e:
+            self.logger.critical(f"Unexpected error during mark_task_as_dirty_in_dotbob_checksum_file(): {e}", exc_info=True)
+            return None
+
+    def mark_task_as_clean_in_dotbob_checksum_file(self, task_name: str) -> None:
+        """Mark a task as clean and compute the updated hash_sha256 after a successful build"""
+        try:
+            if task_name not in self.task_configs:
+                raise ValueError(f"Task '{task_name}' not found in task_configs. Please ensure discover_tasks() have been executed first.")
+
+            dotbob_checksum_file_dict: dict = self._load_dotbob_checksum_file()
+
+            if task_name not in dotbob_checksum_file_dict:
+                raise KeyError(f"Within mark_task_as_clean_in_dotbob_checksum_file(), the task '{task_name}' does not exists in checksum.json, aborting marking it as clean.")
 
             dotbob_checksum_file_dict[task_name]["dirty"] = False
+
+            updated_hash_sha256 = self._compute_task_input_src_files_hash_sha256(task_name)
+            self.logger.debug(f"Marking task '{task_name}' as clean after successful build.")
+            self.logger.debug(f"Previous hash_sha256={dotbob_checksum_file_dict[task_name]["hash_sha256"]}")
+            self.logger.debug(f"Updated hash_sha256={updated_hash_sha256}")
+            print(f"Marking task '{task_name}' as clean after successful build.")
+            print(f"Previous hash_sha256={dotbob_checksum_file_dict[task_name]["hash_sha256"]}")
+            print(f"Updated hash_sha256={updated_hash_sha256}")
+            dotbob_checksum_file_dict[task_name]["hash_sha256"] = updated_hash_sha256
+
             self._save_dotbob_checksum_file(dotbob_checksum_file_dict)
-            self.logger.debug(f"Marked task {task_name} as clean.")
+            self.logger.debug(f"Marked task '{task_name}' as clean and updated hash_sha256.")
+            print(f"Marked task '{task_name}' as clean and updated hash_sha256.")
 
         except ValueError as ve:
             self.logger.error(f"ValueError: {ve}")
@@ -529,7 +584,7 @@ class Bob:
             self.logger.critical(f"Unexpected error during update_task_env() for task_name = '{task_name}' : {e}", exc_info=True)
             return False
 
-    def execute_c_compile(self, task_name: str) -> subprocess.Popen | None:
+    def execute_c_compile(self, task_name: str) -> bool:
         """Execute a C compile with gcc, using attributes within env var"""
         try:
             if task_name not in self.task_configs:
@@ -552,7 +607,7 @@ class Bob:
             # Promote internal_src_files, external_src_files and output_src_files to task env var "C_COMPILE_SRC_FILES"
             if not self.ensure_src_files_existence(task_name):
                 self.logger.error(f"Aborting execute_c_compile as one or more source files are missing.")
-                return None
+                return False
             src_files = sum((self.task_configs[task_name].get(key, []) for key in ["internal_src_files", "external_src_files", "output_src_files"]), [])
             self.logger.debug(f"Task '{task_name}' has src_files={src_files}")
             self.update_task_env(task_name, "C_COMPILE_SRC_FILES", src_files)
@@ -563,7 +618,7 @@ class Bob:
             output_dir = self.task_configs[task_name].get("output_dir", None)
             if output_dir is None:
                 self.logger.error(f"Task '{task_name}' does not have the mandatory attribute 'output_dir'. Aborting execute_c_compile().")
-                return None
+                return False
             if executable_name:
                 executable_path = output_dir / executable_name
                 self.update_task_env(task_name, "C_COMPILE_EXECUTABLE_PATH", executable_path)
@@ -591,13 +646,12 @@ class Bob:
                         cmd_compile.extend(["-I", inc_dir])
                 self.logger.info(f"Executing c_compile command: {cmd_compile}")
                 print(f"Executing c_compile command: {cmd_compile}")
-                process = subprocess.Popen(cmd_compile, env=task_env, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-                process.wait()
+                process = subprocess.run(cmd_compile, env=task_env, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
                 if process.returncode != 0:
                     self.logger.error(f"GCC compilation failed for file '{src}': {process.stderr}")
                     print(f"GCC compilation failed for file '{src}': {process.stderr}")
-                    return None
+                    return False
                 object_files.append(obj_file)
 
             self.logger.info(f"GCC compilation succeeded for task '{task_name}'. Output: {object_files}")
@@ -609,24 +663,24 @@ class Bob:
                 cmd_link = ["gcc"] + object_files + external_objects + ["-o", executable_path]
                 self.logger.info(f"Executing c_link command: {cmd_link}")
                 print(f"Executing c_link command: {cmd_link}")
-                process = subprocess.Popen(cmd_link, env=task_env, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-                process.wait()
+                process = subprocess.run(cmd_link, env=task_env, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
                 if process.returncode != 0:
                     self.logger.error(f"GCC compilation failed for task '{task_name}': {process.stderr}")
                     print(f"GCC compilation failed for task '{task_name}': {process.stderr}")
-                    return None
+                    return False
 
                 self.logger.info(f"GCC link succeeded for task '{task_name}'. Output: {executable_path}")
                 print(f"GCC link succeeded for task '{task_name}'. Output: {executable_path}")
-            return process
+            return True
 
         except ValueError as ve:
             self.logger.error(f"ValueError: {ve}")
-            return None
+            return False
         except Exception as e:
             self.logger.critical(f"Unexpected error during resolve_task_configs_output_src_files(): {e}", exc_info=True)
-            return None
+            return False
+
     # def filter_tasks_to_rebuild(self) -> DiGraph:
     #     """Determines which tasks need to be rebuilt based on dependency_tracking and return a reduced dependency_graph"""
     #     try:
@@ -767,25 +821,38 @@ class Bob:
             if not task_config:
                 self.logger.error(f"Task '{task_name}' not found in configuration.")
                 return
+
             task_config_dict = task_config.get("task_config_dict", {})
             if not task_config_dict:
                 raise KeyError(f"task_configs[{task_name}] does not have 'task_config_dict' attribute.")
+
             task_type = task_config_dict.get("task_type", "")
+
+            # Obtain lock before reading checksum.json, and marking task as dirty
+            with lock:
+                self.mark_task_as_dirty_in_dotbob_checksum_file(task_name)
+
             if task_type == "c_compile":
                 self.logger.debug(f"Executing execute_c_compile()")
-                process = self.execute_c_compile(task_name)
+                success = self.execute_c_compile(task_name)
             else:
                 self.logger.error(f"Undefined 'task_type' in task_configs[{task_name}]['task_config_dict'].")
-                process = None
+                success = False
 
-            if process:
-                process.wait() # Ensure task completion before marking it as done
+            # if process:
+            #     process.wait() # Ensure task completion before marking it as done
 
-            with lock:
-                for dependent in dependency_graph.successors(task_name):
-                    dependency_count[dependent] -= 1
-                    if dependency_count[dependent] == 0:
-                        ready_queue.put(dependent)
+            self.logger.debug(f"execute_task() for task '{task_name}' completed with success={success}.")
+
+            if success:
+                with lock:
+                    # Mark task as clean and update hash_sha256 if it runs successfully
+                    self.mark_task_as_clean_in_dotbob_checksum_file(task_name)
+                    for dependent in dependency_graph.successors(task_name):
+                        dependency_count[dependent] -= 1
+                        if dependency_count[dependent] == 0:
+                            ready_queue.put(dependent)
+
         except KeyError as ke:
             self.logger.error(f"KeyError: {ke}")
         except Exception as e:
