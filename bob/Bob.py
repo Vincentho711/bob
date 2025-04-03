@@ -1,6 +1,6 @@
 from pathlib import Path
 from typing import Any, Dict
-from networkx import DiGraph, topological_sort
+from networkx import DiGraph, topological_sort, is_directed_acyclic_graph
 import os
 import sys
 import yaml
@@ -376,10 +376,16 @@ class Bob:
             if task_name not in self.task_configs:
                 raise ValueError(f"Task {task_name} not found in task_configs. Please ensure discover_tasks() have been executed first.")
 
-            src_files = self.task_configs[task_name].get("src_files", [])
+            task_config_file_path = self.task_configs[task_name].get("task_config_file_path")
 
-            if not src_files:
-                self.logger.error(f"No source files defined for task {task_name}. Skipping build for this task.")
+            if not task_config_file_path:
+                self.logger.error(f"No 'task_config_file_path' attribute defined within task_configs[{task_name}]. Skipping build for this task.")
+                return False
+
+            internal_src_files = self.task_configs[task_name].get("internal_src_files", [])
+
+            if not internal_src_files:
+                self.logger.error(f"No internal source files defined for task {task_name}. Skipping build for this task.")
                 return False
 
             current_hash_sha256 = self._compute_task_input_src_files_hash_sha256(task_name)
@@ -392,17 +398,14 @@ class Bob:
             previous_hash_sha256 = previous_task_checksum_entry.get("hash_sha256")
             hash_sha256_is_dirty = previous_task_checksum_entry.get("dirty", True)
 
+            self.logger.debug(f"Task '{task_name}' is_dirty = {hash_sha256_is_dirty}")
+            self.logger.debug(f"    previous_hash_sha256 = {previous_hash_sha256}")
+            self.logger.debug(f"    current_hash_sha256  = {current_hash_sha256}")
+
             if previous_hash_sha256 == current_hash_sha256 and not hash_sha256_is_dirty:
-                self.logger.info(f"For task {task_name}, hash_sha256 unchanged, skipping build.")
+                self.logger.info(f"For task {task_name}, hash_sha256 unchanged. Will skip this build if all its dependencies also can be skipped.")
                 return False
 
-            # Mark as dirty since hash_sha256 has changed
-            dotbob_checksum_file_dict[task_name] = {
-                "hash_sha256": current_hash_sha256,
-                "dirty": True
-            }
-            # Update the checksum.json with the updated hash_sha256 and dirty fields
-            self._save_dotbob_checksum_file(dotbob_checksum_file_dict)
             self.logger.info(f"For task {task_name}, hash_sha256 has changed, triggering rebuild.")
             return True
 
@@ -755,16 +758,23 @@ class Bob:
             return DiGraph()  # Return empty graph on failure
 
     def schedule_tasks(self, dependency_count, ready_queue):
-        """Schedules tasks dynamically while respecting dependencies"""
+        """Filter dependency_graph based on whether tasks need to be rebuilt. Schedules tasks dynamically while respecting dependencies"""
         try:
             if self.dependency_graph is None:
                 raise ValueError(f"self.dependency_graph = None. Please ensure build_task_dependency is run, and Bob's attribute has been updated.")
+
+            filtered_dependency_graph = self.filter_tasks_to_rebuild()
+            self.logger.debug(f"Filtered tasks to rebuild. filtered_dependency_graph = {filtered_dependency_graph}")
+            self.dependency_graph = filtered_dependency_graph
+
+            # Show visualisation of the filtered dependency graph
+            self.visualise_dependency_graph()
 
             # Track number of dependencies (indegree) for each task
             for task in self.dependency_graph.nodes:
                 dependency_count[task] = self.dependency_graph.in_degree(task)
 
-            # Populate queue withi initial tasks (indegree = 0)
+            # Populate queue within initial tasks (indegree = 0)
             for task, count in dependency_count.items():
                 if count == 0:
                     ready_queue.put(task)
@@ -773,6 +783,70 @@ class Bob:
 
         except Exception as e:
             self.logger.critical(f"Unexpected error during schedule_tasks(): {e}", exc_info=True)
+
+    def visualise_dependency_graph(self) -> None:
+        """Visualise a directed acyclic graph (DAG) in the terminal using ASCII characters."""
+        try:
+            dependency_graph = self.dependency_graph
+            if not isinstance(dependency_graph, DiGraph):
+                raise TypeError(f"Dependency graph must be a directed graph (nx.DiGraph).")
+
+            if not is_directed_acyclic_graph(dependency_graph):
+                raise ValueError(f"Dependency graph must be a Directed Acyclic Graph (DAG).")
+
+            # Perform a topological sort to determine execution order
+            execution_order = list(topological_sort(dependency_graph))
+
+            # Build adjacency list for easier traversal
+            adjacency_list = {node: list(dependency_graph.successors(node)) for node in execution_order}
+
+            # Keep track of visited nodes
+            visited_nodes = set()
+
+            # Helper function for DFS traversal and visualization
+            def dfs(node, prefix="", branches=None):
+                if branches is None:
+                    branches = []
+
+                if node in visited_nodes:
+                    return
+                visited_nodes.add(node)
+
+                # Construct visual prefix
+                branch_str = "".join("│   " if b else "    " for b in branches[:-1])
+                branch_str += "├── " if branches else "* "
+
+                print(f"{branch_str}[{node}]")
+
+                children = adjacency_list.get(node, [])
+                num_children = len(children)
+
+                for i, child in enumerate(children):
+                    new_branches = branches + [i < num_children - 1]
+                    dfs(child, prefix, new_branches)
+
+            print("\nDependency Graph Visualisation:\n")
+
+            # Find root nodes (nodes with no incoming edges)
+            root_nodes = [n for n in execution_order if dependency_graph.in_degree(n) == 0]
+
+            # Start DFS from root nodes
+            for root in root_nodes:
+                dfs(root)
+
+            print()
+
+        except ValueError as ve:
+            self.logger.error(f"ValueError: {ve}")
+            return None
+
+        except TypeError as te:
+            self.logger.error(f"TypeError: {te}")
+            return None
+
+        except Exception as e:
+            self.logger.critical(f"Unexpected error during visualise_dependency_graph(): {e}")
+            return None
 
     def execute_tasks(self):
         """Executes tasks with dynamic scheduling and parallel execution"""

@@ -1,8 +1,9 @@
 import os
 import shutil
-from sys import exc_info
+import sys
 from unittest import mock
 from networkx import DiGraph
+from io import StringIO
 import pytest
 import logging
 import json
@@ -1351,3 +1352,61 @@ def test_filter_tasks_to_rebuild_mixed_rebuild_scenarios(bob_with_complex_graph)
     with patch.object(bob_with_complex_graph, "should_rebuild_task", side_effect=lambda task: task in ["B", "D"]):
         result_graph = bob_with_complex_graph.filter_tasks_to_rebuild()
         assert set(result_graph.nodes) == {"B", "C", "D", "E"}, "C and E should be rebuilt due to dependencies on B and D."
+
+@pytest.fixture
+def bob_with_sample_dependency_graph_for_visualisation():
+    """
+    Creates a sample dependency graph with branches and merging dependencies.
+    """
+    G = DiGraph()
+    G.add_edges_from([
+        ("setup", "compile_a"),
+        ("setup", "compile_b"),
+        ("compile_a", "link"),
+        ("compile_b", "link"),
+        ("link", "package"),
+        ("test", "package"),
+        ("package", "deploy")
+    ])
+    mock_logger = MagicMock()
+    bob_instance = Bob(mock_logger)
+    bob_instance.dependency_graph = G
+    return bob_instance
+
+def test_visualise_dependency_graph(bob_with_sample_dependency_graph_for_visualisation):
+    """Tests that the visualised dependency graph prints the correct execution order."""
+    # Redirect stdout to capture printed output
+    captured_output = StringIO()
+    sys.stdout = captured_output
+
+    bob_with_sample_dependency_graph_for_visualisation.visualise_dependency_graph()
+
+    # Reset stdout
+    sys.stdout = sys.__stdout__
+
+    # Get printed output and split into lines
+    output_lines = captured_output.getvalue().strip().split("\n")
+
+    # Expected Execution Order
+    expected_lines = """
+    Dependency Graph Visualisation:
+
+    * [setup]
+    ├── [compile_a]
+    │   ├── [link]
+    │       ├── [package]
+    │           ├── [deploy]
+    ├── [compile_b]
+    * [test]
+    """
+    # Check output structure
+    assert len(output_lines) == 9, "Output line count mismatch"
+    assert "Dependency Graph Visualisation" in output_lines[0]
+    assert "" in output_lines[1]
+    assert "* [setup]" in output_lines[2]
+    assert " [compile_a]" in output_lines[3]
+    assert " [link]" in output_lines[4]
+    assert " [package]" in output_lines[5]
+    assert " [deploy]" in output_lines[6]
+    assert " [compile_b]" in output_lines[7]
+    assert "* [test]" in output_lines[8]
