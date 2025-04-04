@@ -39,9 +39,9 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 # Add a file handler without color formatting, file_handler has be configured prior to console_handler to remove color code printed to log file
-file_handler = logging.FileHandler(LOG_FILE, mode="a")
-file_handler.setFormatter(logging.Formatter(LOG_FORMAT, datefmt=DATE_FORMAT))  # Use regular formatter without color
-logger.addHandler(file_handler)
+# file_handler = logging.FileHandler(LOG_FILE, mode="a")
+# file_handler.setFormatter(logging.Formatter(LOG_FORMAT, datefmt=DATE_FORMAT))  # Use regular formatter without color
+# logger.addHandler(file_handler)
 # Add the custom color formatter to the console handler
 console_handler = logging.StreamHandler()
 console_handler.setFormatter(ColorFormatter(LOG_FORMAT, datefmt=DATE_FORMAT))
@@ -84,7 +84,7 @@ def main() -> None:
     bob.set_env_var_path("bob_dir", bob_proj_root / "bob")
     bob.set_env_var_path("bob_dir", bob_proj_root / "bobaa")
 
-    bob.run_subprocess()
+    # bob.run_subprocess()
 
     test_log_levels()
 

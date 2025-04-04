@@ -1,3 +1,4 @@
+from io import TextIOWrapper
 from pathlib import Path
 from typing import Any, Dict
 from networkx import DiGraph, topological_sort, is_directed_acyclic_graph
@@ -10,6 +11,7 @@ import logging
 import shutil
 import hashlib
 import json
+import datetime
 
 class Bob:
     def __init__(self, logger: logging.Logger) -> None:
@@ -25,17 +27,6 @@ class Bob:
 
     def get_proj_root(self) -> Path:
         return Path(self.proj_root)
-
-    def run_subprocess(self) -> None:
-        """Runs a subprocess to print environment variables."""
-        try:
-            self.logger.debug("Executing subprocess: env")
-            subprocess.run(["env"], env=os.environ, check=True)
-            self.logger.info("Subprocess executed successfully.")
-        except subprocess.CalledProcessError as e:
-            self.logger.error(f"Subprocess execution failed: {e}", exc_info=True)
-        except Exception as e:
-            self.logger.critical(f"Unexpected error during subprocess execution: {e}", exc_info=True)
 
     def set_env_var_val(self, env_key: str, env_val: str) -> None:
         """Set an env var to a value"""
@@ -436,7 +427,6 @@ class Bob:
 
             self._save_dotbob_checksum_file(dotbob_checksum_file_dict)
             self.logger.debug(f"Marked task '{task_name}' as dirty.")
-            print(f"Marked task '{task_name}' as dirty.")
 
         except ValueError as ve:
             self.logger.error(f"ValueError: {ve}")
@@ -587,6 +577,22 @@ class Bob:
             self.logger.critical(f"Unexpected error during update_task_env() for task_name = '{task_name}' : {e}", exc_info=True)
             return False
 
+    def run_subprocess(self, task_name, cmd, env, log_file):
+        """Executes a command as a subprocess and logs output line-by-line."""
+        try:
+            with subprocess.Popen(cmd, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True) as process:
+                for line in process.stdout:
+                    timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    formatted_line = f"[{timestamp}] {line.strip()}"
+                    print(formatted_line)  # Prints to log file (redirected)
+                    log_file.write(formatted_line + "\n")
+
+                process.wait()
+                return process.returncode == 0
+
+        except Exception as e:
+            self.logger.critical(f"Unexpected error during run_subprocess() for task_name = '{task_name}' : {e}", exc_info=True)
+
     def execute_c_compile(self, task_name: str) -> bool:
         """Execute a C compile with gcc, using attributes within env var"""
         try:
@@ -605,6 +611,16 @@ class Bob:
             task_env = self.task_configs[task_name].get("task_env", None)
             if task_env is None:
                 raise KeyError(f"Task '{task_name}' does not have a 'task_env' attribute.")
+
+            output_dir = self.task_configs[task_name].get("output_dir", None)
+            if output_dir is None:
+                self.logger.error(f"Task '{task_name}' does not have the mandatory attribute 'output_dir'. Aborting execute_c_compile().")
+                return False
+
+            # Prepare log file
+            log_file_path = output_dir / f"{task_name}.log"
+            log_file = self.setup_task_logger(log_file_path)
+
             # Promote task_configs attributes to env var such that they can be used in subprocess
             # Ensuer that all src_files exist
             # Promote internal_src_files, external_src_files and output_src_files to task env var "C_COMPILE_SRC_FILES"
@@ -618,10 +634,6 @@ class Bob:
             if executable_name:
                 self.update_task_env(task_name, "C_COMPILE_EXECUTABLE_NAME", executable_name)
 
-            output_dir = self.task_configs[task_name].get("output_dir", None)
-            if output_dir is None:
-                self.logger.error(f"Task '{task_name}' does not have the mandatory attribute 'output_dir'. Aborting execute_c_compile().")
-                return False
             if executable_name:
                 executable_path = output_dir / executable_name
                 self.update_task_env(task_name, "C_COMPILE_EXECUTABLE_PATH", executable_path)
@@ -642,6 +654,11 @@ class Bob:
             # Compile each .c file to .o file
             object_files = []
             for src in src_files:
+                # Only operate on .c files
+                if not src.endswith(".c"):
+                    self.logger.debug(f"Skipping compilation into .o for non .c source file: {src}")
+                    continue
+
                 obj_file = os.path.join(output_dir, os.path.basename(src).replace(".c", ".o"))
                 cmd_compile = ["gcc", "-c", src, "-o", obj_file]
                 if include_header_dirs:
@@ -649,12 +666,13 @@ class Bob:
                         cmd_compile.extend(["-I", inc_dir])
                 self.logger.info(f"Executing c_compile command: {cmd_compile}")
                 print(f"Executing c_compile command: {cmd_compile}")
-                process = subprocess.run(cmd_compile, env=task_env, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                success = self.run_subprocess(task_name, cmd_compile, task_env, log_file)
 
-                if process.returncode != 0:
-                    self.logger.error(f"GCC compilation failed for file '{src}': {process.stderr}")
-                    print(f"GCC compilation failed for file '{src}': {process.stderr}")
+                if not success:
+                    self.logger.error(f"GCC compilation failed for file '{src}'. Check log: {log_file_path}")
+                    print(f"GCC compilation failed for file '{src}'. Check log: {log_file_path}")
                     return False
+
                 object_files.append(obj_file)
 
             self.logger.info(f"GCC compilation succeeded for task '{task_name}'. Output: {object_files}")
@@ -666,11 +684,11 @@ class Bob:
                 cmd_link = ["gcc"] + object_files + external_objects + ["-o", executable_path]
                 self.logger.info(f"Executing c_link command: {cmd_link}")
                 print(f"Executing c_link command: {cmd_link}")
-                process = subprocess.run(cmd_link, env=task_env, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                success = self.run_subprocess(task_name, cmd_link, task_env, log_file)
 
-                if process.returncode != 0:
-                    self.logger.error(f"GCC compilation failed for task '{task_name}': {process.stderr}")
-                    print(f"GCC compilation failed for task '{task_name}': {process.stderr}")
+                if not success:
+                    self.logger.error(f"GCC compilation failed for task '{task_name}'. Check log: {log_file_path}")
+                    print(f"GCC compilation failed for task '{task_name}'. Check log: {log_file_path}")
                     return False
 
                 self.logger.info(f"GCC link succeeded for task '{task_name}'. Output: {executable_path}")
@@ -683,31 +701,6 @@ class Bob:
         except Exception as e:
             self.logger.critical(f"Unexpected error during resolve_task_configs_output_src_files(): {e}", exc_info=True)
             return False
-
-    # def filter_tasks_to_rebuild(self) -> DiGraph:
-    #     """Determines which tasks need to be rebuilt based on dependency_tracking and return a reduced dependency_graph"""
-    #     try:
-    #         # Track tasks that need to be rebuilt
-    #         needs_rebuild = {}
-    #
-    #         # Reverse topological order ensures dependencies are processed first
-    #         for task in reversed(list(topological_sort(self.dependency_graph))):
-    #             # A task must be rebuilt if:
-    #             # - It explicitly needs rebuilding (should_rebuild_task is True)
-    #             # - Any of its prerequisite tasks require rebuilding
-    #             prerequisite_tasks = list(self.dependency_graph.predecessors(task))
-    #
-    #             if self.should_rebuild_task(task) or any(needs_rebuild.get(dep, False) for dep in prerequisite_tasks):
-    #                 needs_rebuild[task] = True
-    #             else:
-    #                 needs_rebuild[task] = False
-    #
-    #         # Create a new dependency_graph containing only tasks that need rebuilding
-    #         rebuild_graph = self.dependency_graph.subgraph([task for task, rebuild in needs_rebuild.items() if rebuild]).copy()
-    #         return rebuild_graph
-    #
-    #     except Exception as e:
-    #         self.logger.critical(f"Unexpected error during filter_tasks_to_rebuild(): {e}", exc_info=True)
 
     def filter_tasks_to_rebuild(self) -> DiGraph:
         """Returns a filtered dependency graph with only tasks that need to be rebuilt."""
@@ -767,8 +760,9 @@ class Bob:
             self.logger.debug(f"Filtered tasks to rebuild. filtered_dependency_graph = {filtered_dependency_graph}")
             self.dependency_graph = filtered_dependency_graph
 
-            # Show visualisation of the filtered dependency graph
-            self.visualise_dependency_graph()
+            # Show visualisation of the filtered dependency graph if there are tasks to be built
+            if self.dependency_graph.number_of_nodes():
+                self.visualise_dependency_graph()
 
             # Track number of dependencies (indegree) for each task
             for task in self.dependency_graph.nodes:
@@ -803,7 +797,7 @@ class Bob:
             # Keep track of visited nodes
             visited_nodes = set()
 
-            # Helper function for DFS traversal and visualization
+            # Helper function for DFS traversal and visualisation
             def dfs(node, prefix="", branches=None):
                 if branches is None:
                     branches = []
@@ -848,6 +842,14 @@ class Bob:
             self.logger.critical(f"Unexpected error during visualise_dependency_graph(): {e}")
             return None
 
+    def setup_task_logger(self, log_file_path: Path) -> TextIOWrapper| None:
+        """Redirect stdout and stderr to a file for a subprocess (per-task logging)."""
+        log_file_path.parent.mkdir(parents=True, exist_ok=True)
+        log_file = open(log_file_path, "w", buffering=1)
+        sys.stdout = log_file
+        sys.stderr = log_file
+        return log_file
+
     def execute_tasks(self):
         """Executes tasks with dynamic scheduling and parallel execution"""
         try:
@@ -855,6 +857,8 @@ class Bob:
                 dependency_count = manager.dict()
                 ready_queue = manager.Queue()
                 lock = manager.Lock()
+                failure_event = manager.Event()
+                failure_info = manager.dict()
 
                 dependency_count, ready_queue = self.schedule_tasks(dependency_count, ready_queue)
                 self.logger.debug(f"dependency_count={dependency_count}")
@@ -875,12 +879,26 @@ class Bob:
                         except Empty:
                             break
 
-                        process = multiprocessing.Process(target=self.execute_task, args=(task, self.dependency_graph, dependency_count, ready_queue, lock))
+                        process = multiprocessing.Process(target=self.execute_task, args=(task, self.dependency_graph, dependency_count, ready_queue, lock, failure_event, failure_info))
                         process.start()
-                        process_pool.append(process)
+                        process_pool.append((task, process))
 
-                    # Remove completed tasks from process pool
-                    process_pool[:] = [p for p in process_pool if p.is_alive()]
+                    # Check for failure and terminate all tasks if there is a failure
+                    if failure_event.is_set():
+                        for _, proc in process_pool:
+                            if proc.is_alive():
+                                proc.terminate()
+                        break
+
+                    # Clean up completed processes from process_pool
+                    process_pool = [(t, p) for t, p in process_pool if p.is_alive()]
+
+                if failure_event.is_set():
+                    failed_task = failure_info.get("task_name", "Unknown Task")
+                    log_path = failure_info.get("log_file_path", "Unknown Log Path")
+                    self.logger.error(f"Build failed at task '{failed_task}'. Check log: {log_path}")
+                else:
+                    self.logger.info(f"Successfully built {self.dependency_graph.number_of_nodes()} tasks.")
 
                 self.logger.debug(f"At the end of execute_tasks(): dependency_count={dependency_count}")
                 self.logger.debug(f"At the end of execute_tasks(): ready_queue.qsize()={ready_queue.qsize()}")
@@ -888,7 +906,7 @@ class Bob:
         except Exception as e:
             self.logger.critical(f"Unexpected error during execute_task(): {e}", exc_info=True)
 
-    def execute_task(self, task_name:str, dependency_graph: DiGraph, dependency_count: dict[str, int], ready_queue: multiprocessing.Queue, lock: multiprocessing.Lock):
+    def execute_task(self, task_name:str, dependency_graph: DiGraph, dependency_count: dict[str, int], ready_queue: multiprocessing.Queue, lock: multiprocessing.Lock, failure_event: multiprocessing.Event, failure_info):
         """Executes a single task in a separate process"""
         try:
             task_config = self.task_configs.get(task_name, {})
@@ -913,9 +931,6 @@ class Bob:
                 self.logger.error(f"Undefined 'task_type' in task_configs[{task_name}]['task_config_dict'].")
                 success = False
 
-            # if process:
-            #     process.wait() # Ensure task completion before marking it as done
-
             self.logger.debug(f"execute_task() for task '{task_name}' completed with success={success}.")
 
             if success:
@@ -926,11 +941,21 @@ class Bob:
                         dependency_count[dependent] -= 1
                         if dependency_count[dependent] == 0:
                             ready_queue.put(dependent)
+            else:
+                failure_info["task_name"] = task_name
+                failure_info["log_file_path"] = str(task_config.get("output_dir") / f"{task_name}.log")
+                failure_event.set()
 
         except KeyError as ke:
             self.logger.error(f"KeyError: {ke}")
+            failure_info["task_name"] = task_name
+            failure_info["log_file_path"] = str(task_config.get("output_dir") / f"{task_name}.log")
+            failure_event.set()
         except Exception as e:
             self.logger.critical(f"Unexpected error during execute_task(): {e}", exc_info=True)
+            failure_info["task_name"] = task_name
+            failure_info["log_file_path"] = str(task_config.get("output_dir") / f"{task_name}.log")
+            failure_event.set()
 
 
     def set_bob_dir(self) -> None:
