@@ -2,6 +2,7 @@ from io import TextIOWrapper
 from pathlib import Path
 from typing import Any, Dict
 from networkx import DiGraph, topological_sort, is_directed_acyclic_graph
+from toolConfigParser.ToolConfigParser import ToolConfigParser
 import os
 import sys
 import yaml
@@ -19,6 +20,7 @@ class Bob:
         self.logger = logger
         # self.logger.debug("Bob instance initialised.")
         self.proj_root: str = os.environ.get("PROJ_ROOT", "Not Set")
+        self.tool_config_parser = ToolConfigParser(logger=self.logger, proj_root=self.proj_root)
         self.ip_config: Dict[str, Any] = {}
         self.task_configs: Dict[str, Any] = {}
         self.dotbob_dir: Path = Path(self.proj_root) / ".bob"
@@ -650,6 +652,10 @@ class Bob:
                 self.logger.debug(f"Task '{task_name}' has include_header_dirs='{include_header_dirs}'")
                 self.update_task_env(task_name, "C_COMPILE_INCLUDE_HEADER_DIRS", str(include_header_dirs))
 
+            # Extract the path of gcc
+            gcc_path = self.tool_config_parser.get_tool_path("gcc")
+            self.logger.debug(f"gcc_path={gcc_path}")
+
             # Execute gcc compile
             # Compile each .c file to .o file
             object_files = []
@@ -660,7 +666,7 @@ class Bob:
                     continue
 
                 obj_file = os.path.join(output_dir, os.path.basename(src).replace(".c", ".o"))
-                cmd_compile = ["gcc", "-c", src, "-o", obj_file]
+                cmd_compile = [gcc_path, "-c", src, "-o", obj_file]
                 if include_header_dirs:
                     for inc_dir in include_header_dirs:
                         cmd_compile.extend(["-I", inc_dir])
@@ -681,7 +687,7 @@ class Bob:
             # If 'executable_name' exists within task_config.yaml, then link object files into an executable
             # Link all .o files, including external ones) to create the final executable
             if executable_name:
-                cmd_link = ["gcc"] + object_files + external_objects + ["-o", executable_path]
+                cmd_link = [gcc_path] + object_files + external_objects + ["-o", executable_path]
                 self.logger.info(f"Executing c_link command: {cmd_link}")
                 print(f"Executing c_link command: {cmd_link}")
                 success = self.run_subprocess(task_name, cmd_link, task_env, log_file)
