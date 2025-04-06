@@ -20,7 +20,7 @@ class Bob:
         self.logger = logger
         # self.logger.debug("Bob instance initialised.")
         self.proj_root: str = os.environ.get("PROJ_ROOT", "Not Set")
-        self.tool_config_parser = ToolConfigParser(logger=self.logger, proj_root=self.proj_root)
+        # self.tool_config_parser = ToolConfigParser(logger=self.logger, proj_root=self.proj_root)
         self.ip_config: Dict[str, Any] = {}
         self.task_configs: Dict[str, Any] = {}
         self.dotbob_dir: Path = Path(self.proj_root) / ".bob"
