@@ -55,7 +55,7 @@ class ToolConfigParser:
             raise FileNotFoundError(f"Tool '{tool_name}' not specified in tool_config.yaml and not found in system PATH.")
 
         except FileNotFoundError as fnfe:
-            self.logger.error(f"FileNotFoundError: {fnfe}", exc_info=True)
+            self.logger.error(f"FileNotFoundError: {fnfe}")
 
         except Exception as e:
             self.logger.critical(f"Unexpected error during get_tool_path(): {e}", exc_info=True)
@@ -64,5 +64,6 @@ class ToolConfigParser:
         """Returns whether a tool exists and is available to be used."""
         try:
             return tool_name in self.validated_tools or shutil.which(tool_name) is not None
+
         except Exception as e:
             self.logger.critical(f"Unexpected error during has_tool(): {e}", exc_info=True)
