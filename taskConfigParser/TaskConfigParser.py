@@ -489,7 +489,119 @@ class TaskConfigParser:
         except KeyError as ke:
             self.logger.error(f"KeyError: {ke}")
             return None
+        except Exception as e:
+            self.logger.critical(f"Unexpected error during parse_c_compile() for task_name = '{task_name}' : {e}", exc_info=True)
+            return None
 
     def parse_cpp_compile(self, task_name: str):
         """Set up the task_env for a C++ compilation task"""
-        pass
+        try:
+            task_config_dict = self.task_configs[task_name].get("task_config_dict", None)
+            task_config_file_path = self.task_configs[task_name].get("task_config_file_path", None)
+
+            self.logger.debug(f"For task '{task_name}', parsing cpp_compile task type.")
+
+            # Fetch 'external_objects' if it exists. If it does, add that while linking
+            unresolved_external_objects = task_config_dict.get("external_objects", [])
+            if not unresolved_external_objects:
+                self.logger.debug(f"{task_config_file_path} which is a 'cpp_compile' build does not contain a 'external_objects' field. Will not link external objects.")
+            if isinstance(unresolved_external_objects, str):
+                unresolved_external_objects = [unresolved_external_objects]
+
+            self.task_configs[task_name].setdefault("external_objects", [])
+            external_objects = self.task_configs[task_name]["external_objects"]
+            for unresolved_external_object in unresolved_external_objects:
+                self.logger.debug(f"unresolved_external_object={unresolved_external_object}")
+                if ".o" not in unresolved_external_object:
+                    raise ValueError(f"'.o' must exists in the unresolved_external_object='{unresolved_external_object}'")
+                resolved_reference, resolved_type = self.resolve_reference(task_name, unresolved_external_object)
+                self.logger.debug(f"task_name='{task_name}', unresolved_external_object='{unresolved_external_object}', resolved_reference='{resolved_reference}', resolved_type='{resolved_type}'.")
+                if resolved_type != "output":
+                    raise ValueError(f"external object must have resolved_type=output.")
+                external_objects.append(resolved_reference)
+
+            # Fetch 'include_headers_from_tasks' if it exists. If it does, add them to the -I option during G++ compilation
+            include_headers_from_tasks = task_config_dict.get("include_headers_from_tasks", [])
+            if not include_headers_from_tasks:
+                self.logger.debug(f"{task_config_file_path} which is a 'cpp_compile' build does not contain a 'include_headers_from_tasks' field. Will not include header dirs during linking.")
+            if isinstance(include_headers_from_tasks, str):
+                include_headers_from_tasks = [include_headers_from_tasks]
+            self.task_configs[task_name].setdefault("include_header_dirs", [])
+            include_header_dirs = self.task_configs[task_name]["include_header_dirs"]
+            for task in include_headers_from_tasks:
+                # Grab the task dir of the corresponding task
+                task_dir = self.task_configs[task].get("task_dir", None)
+                if task_dir is None:
+                    raise KeyError(f"Task '{task}' does not have a 'task_dir' attribute within task_configs.")
+                include_header_dirs.append(task_dir)
+
+            # Fetch 'executable_name' if it exists. If it does, that means .exe should be generated
+            executable_name = task_config_dict.get("executable_name", None)
+            if executable_name is None:
+                self.logger.debug(f"{task_config_file_path} which is a 'cpp_compile' build does not contain a 'executable_name' field. Only .o will be generated.")
+            elif not isinstance(executable_name, str):
+                raise TypeError(f"{task_config_file_path} field 'executable_name' is not of type str. Currnt type = {type(executable_name)}. Please ensure it is a str.")
+            elif ".exe" not in executable_name:
+                raise ValueError(f"{task_config_file_path} field 'executable_name' does not contain '.exe'. Current executable_name='{executable_name}'. Please ensure that '.exe' exists in the str.")
+            else:
+                self.update_task_env(task_name, "bob_executable_name", executable_name, True)
+
+            # Fetch mandatory key 'src_files'
+            unresolved_src_files = task_config_dict.get("src_files", None)
+            if unresolved_src_files is None:
+                raise KeyError(f"{task_config_file_path} which is a 'cpp_compile' build does not contain a mandatory field 'src_files'. ")
+            elif not isinstance(unresolved_src_files, (str, list)):
+                raise TypeError(f"{task_config_file_path} mandatory field 'src_files' should be either a str or a list. Current type = {type(unresolved_src_files)}.")
+
+            # resolved_src_files : list[str] = []
+
+            # Modify it into a list if it is a str for ease of manipulation
+            unresolved_src_files = [unresolved_src_files] if isinstance(unresolved_src_files, str) else unresolved_src_files
+
+            # Set up task_configs to contain internal_src_files, external_src_files and output_src_files attributes
+            self.task_configs[task_name].setdefault("internal_src_files", [])
+            self.task_configs[task_name].setdefault("external_src_files", [])
+            self.task_configs[task_name].setdefault("output_src_files", [])
+
+            # Retrieve references
+            internal_src_files = self.task_configs[task_name]["internal_src_files"]
+            external_src_files = self.task_configs[task_name]["external_src_files"]
+            output_src_files = self.task_configs[task_name]["output_src_files"]
+
+            # Resolve every src file reference
+            for unresolved_src_file in unresolved_src_files:
+                resolved_reference, resolved_type = self.resolve_reference(task_name, unresolved_src_file)
+
+                self.logger.debug(f"task_name='{task_name}', unresolved_src_file='{unresolved_src_file}', resolved_reference='{resolved_reference}', resolved_type='{resolved_type}'.")
+
+                if isinstance(resolved_reference, str):
+                    if resolved_type == "direct":
+                        internal_src_files.append(resolved_reference)
+                    elif resolved_type == "input":
+                        external_src_files.append(resolved_reference)
+                    elif resolved_type == "output":
+                        output_src_files.append(resolved_reference)
+                elif isinstance(resolved_reference, list):
+                    if resolved_type == "direct":
+                        internal_src_files.extend(resolved_reference)
+                    elif resolved_type == "input":
+                        external_src_files.extend(resolved_reference)
+                    elif resolved_reference == "output":
+                        output_src_files.extend(resolved_reference)
+                else:
+                    self.logger.warning(f"Resolved reference='{resolved_reference}' is neither of type str or list. type({resolved_reference})={type(resolved_reference)}. Skip appending to resolved_src_files list.")
+
+            # input_src_files consists of internal_src_files and external_src_files
+            self.task_configs[task_name].setdefault("input_src_files", internal_src_files + external_src_files)
+        except TypeError as te:
+            self.logger.error(f"TypeError: {te}")
+            return None
+        except ValueError as ve:
+            self.logger.error(f"ValueError: {ve}")
+            return None
+        except KeyError as ke:
+            self.logger.error(f"KeyError: {ke}")
+            return None
+        except Exception as e:
+            self.logger.critical(f"Unexpected error during parse_cpp_compile() for task_name = '{task_name}' : {e}", exc_info=True)
+            return None
