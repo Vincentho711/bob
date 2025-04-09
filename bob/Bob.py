@@ -708,6 +708,119 @@ class Bob:
             self.logger.critical(f"Unexpected error during resolve_task_configs_output_src_files(): {e}", exc_info=True)
             return False
 
+    def execute_cpp_compile(self, task_name: str) -> bool:
+        """Execute a C++ compile with g++, using attributes within env var"""
+        try:
+            if task_name not in self.task_configs:
+                raise ValueError(f"Task '{task_name}' not found in task_configs.")
+            task_config_dict = self.task_configs[task_name].get("task_config_dict", None)
+            if task_config_dict is None:
+                raise KeyError(f"Task '{task_name}' does not have a 'task_config_dict' attribute.")
+            task_type = task_config_dict.get("task_type", None)
+            if task_type is None:
+                raise ValueError(f"Task '{task_name}' does not have a 'task_type' attribute.")
+            if task_type != "cpp_compile":
+                raise ValueError(f"Task '{task_name}' has task type '{task_type}' which is not 'cpp_compile'. Please exeute the correct function to execute build.")
+            # Resolve output_src_files list
+            self.resolve_task_configs_output_src_files(task_name)
+            task_env = self.task_configs[task_name].get("task_env", None)
+            if task_env is None:
+                raise KeyError(f"Task '{task_name}' does not have a 'task_env' attribute.")
+
+            output_dir = self.task_configs[task_name].get("output_dir", None)
+            if output_dir is None:
+                self.logger.error(f"Task '{task_name}' does not have the mandatory attribute 'output_dir'. Aborting execute_c_compile().")
+                return False
+
+            # Prepare log file
+            log_file_path = output_dir / f"{task_name}.log"
+            log_file = self.setup_task_logger(log_file_path)
+
+            # Promote task_configs attributes to env var such that they can be used in subprocess
+            # Ensuer that all src_files exist
+            # Promote internal_src_files, external_src_files and output_src_files to task env var "C_COMPILE_SRC_FILES"
+            if not self.ensure_src_files_existence(task_name):
+                self.logger.error(f"Aborting execute_c_compile as one or more source files are missing.")
+                return False
+            src_files = sum((self.task_configs[task_name].get(key, []) for key in ["internal_src_files", "external_src_files", "output_src_files"]), [])
+            self.logger.debug(f"Task '{task_name}' has src_files={src_files}")
+            self.update_task_env(task_name, "CPP_COMPILE_SRC_FILES", src_files)
+            executable_name = task_config_dict.get("executable_name", None)
+            if executable_name:
+                self.update_task_env(task_name, "CPP_COMPILE_EXECUTABLE_NAME", executable_name)
+
+            if executable_name:
+                executable_path = output_dir / executable_name
+                self.update_task_env(task_name, "CPP_COMPILE_EXECUTABLE_PATH", executable_path)
+
+            # Check if we have external objects
+            external_objects = self.task_configs[task_name].get("external_objects", [])
+            if external_objects:
+                self.logger.debug(f"Task '{task_name}' has external_objects={external_objects}")
+                self.update_task_env(task_name, "CPP_COMPILE_EXTERNAL_OBJECT_PATHS", external_objects)
+
+            # During compilation, header dirs containing the header files will have to be included
+            include_header_dirs = self.task_configs[task_name].get("include_header_dirs", [])
+            if include_header_dirs:
+                self.logger.debug(f"Task '{task_name}' has include_header_dirs='{include_header_dirs}'")
+                self.update_task_env(task_name, "CPP_COMPILE_INCLUDE_HEADER_DIRS", str(include_header_dirs))
+
+            # Extract the path of gcc
+            gpp_path = self.tool_config_parser.get_tool_path("g++")
+            self.logger.debug(f"gpp_path={gpp_path}")
+
+            # Execute g++ compile
+            # Compile each .cpp file to .o file
+            object_files = []
+            for src in src_files:
+                # Only operate on .cpp files
+                if not src.endswith(".cpp"):
+                    self.logger.debug(f"Skipping compilation into .o for non .cpp source file: {src}")
+                    continue
+
+                obj_file = os.path.join(output_dir, os.path.basename(src).replace(".cpp", ".o"))
+                cmd_compile = [gpp_path, "-c", src, "-o", obj_file]
+                if include_header_dirs:
+                    for inc_dir in include_header_dirs:
+                        cmd_compile.extend(["-I", inc_dir])
+                self.logger.info(f"Executing cpp_compile command: {cmd_compile}")
+                print(f"Executing cpp_compile command: {cmd_compile}")
+                success = self.run_subprocess(task_name, cmd_compile, task_env, log_file)
+
+                if not success:
+                    self.logger.error(f"G++ compilation failed for file '{src}'. Check log: {log_file_path}")
+                    print(f"G++ compilation failed for file '{src}'. Check log: {log_file_path}")
+                    return False
+
+                object_files.append(obj_file)
+
+            self.logger.info(f"G++ compilation succeeded for task '{task_name}'. Output: {object_files}")
+            print(f"G++ compilation succeeded for task '{task_name}'. Output: {object_files}")
+
+            # If 'executable_name' exists within task_config.yaml, then link object files into an executable
+            # Link all .o files, including external ones) to create the final executable
+            if executable_name:
+                cmd_link = [gpp_path] + object_files + external_objects + ["-o", executable_path]
+                self.logger.info(f"Executing cpp_link command: {cmd_link}")
+                print(f"Executing cpp_link command: {cmd_link}")
+                success = self.run_subprocess(task_name, cmd_link, task_env, log_file)
+
+                if not success:
+                    self.logger.error(f"G++ compilation failed for task '{task_name}'. Check log: {log_file_path}")
+                    print(f"G++ compilation failed for task '{task_name}'. Check log: {log_file_path}")
+                    return False
+
+                self.logger.info(f"G++ link succeeded for task '{task_name}'. Output: {executable_path}")
+                print(f"G++ link succeeded for task '{task_name}'. Output: {executable_path}")
+            return True
+
+        except ValueError as ve:
+            self.logger.error(f"ValueError: {ve}")
+            return False
+        except Exception as e:
+            self.logger.critical(f"Unexpected error during execute_cpp_compile(): {e}", exc_info=True)
+            return False
+
     def filter_tasks_to_rebuild(self) -> DiGraph:
         """Returns a filtered dependency graph with only tasks that need to be rebuilt."""
         # A task must be rebuilt if:
