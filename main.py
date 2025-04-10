@@ -7,6 +7,7 @@ import logging
 from ipConfigParser.IpConfigParser import IpConfigParser
 from pytests.test_ipConfigParser import ip_config_parser
 from taskConfigParser.TaskConfigParser import TaskConfigParser
+from toolConfigParser.ToolConfigParser import ToolConfigParser
 
 # Define ANSI color codes for terminal output
 class ColorFormatter(logging.Formatter):
@@ -148,7 +149,15 @@ def main() -> None:
         # Execute c compile + c link
         # assert(bob.execute_c_compile("hello_world_c_compile"))
         # print(f"task_config['hello_world_c_compile'] = {bob.task_configs['hello_world_c_compile']}")
+    hello_world_cpp_compile_config_file = task_config_parser.task_configs["hello_world_cpp_compile"].get("task_config_file_path", None)
+    if hello_world_cpp_compile_config_file:
+        task_config_parser._load_task_config_file(hello_world_cpp_compile_config_file)
+        task_config_parser.parse_task_config_dict("hello_world_cpp_compile")
+        # Pass the updated task_config back to bob
+        bob.task_configs["hello_world_cpp_compile"] = task_config_parser.task_configs["hello_world_cpp_compile"]
 
+    tool_config_parser = ToolConfigParser(bob.logger, str(bob.get_proj_root()))
+    bob.associate_tool_config_parser(tool_config_parser)
     bob.execute_tasks()
 
 if __name__ == "__main__":

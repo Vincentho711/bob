@@ -20,7 +20,7 @@ class Bob:
         self.logger = logger
         # self.logger.debug("Bob instance initialised.")
         self.proj_root: str = os.environ.get("PROJ_ROOT", "Not Set")
-        # self.tool_config_parser = ToolConfigParser(logger=self.logger, proj_root=self.proj_root)
+        self.tool_config_parser = None
         self.ip_config: Dict[str, Any] = {}
         self.task_configs: Dict[str, Any] = {}
         self.dotbob_dir: Path = Path(self.proj_root) / ".bob"
@@ -29,6 +29,20 @@ class Bob:
 
     def get_proj_root(self) -> Path:
         return Path(self.proj_root)
+
+    def associate_tool_config_parser(self, tool_config_parser: ToolConfigParser) -> None:
+        """Associate a ToolConfigParser object to its 'tool_config_parser' attribute"""
+        try:
+            if not isinstance(tool_config_parser, ToolConfigParser):
+                raise TypeError(f"tool_config_parser must be a ToolConfigParser object. type(tool_config_parser) = {type(tool_config_parser)}.")
+
+            self.tool_config_parser = tool_config_parser
+
+        except TypeError as te:
+            self.logger.error(f"TypeError: {te}")
+
+        except Exception as e:
+            self.logger.critical(f"Unexpected error during associate_tool_config_parser(): {e}", exc_info=True)
 
     def set_env_var_val(self, env_key: str, env_val: str) -> None:
         """Set an env var to a value"""
@@ -972,6 +986,9 @@ class Bob:
     def execute_tasks(self):
         """Executes tasks with dynamic scheduling and parallel execution"""
         try:
+            if self.tool_config_parser is None:
+                raise AttributeError(f"A ToolConfigParser object has not been associated to self.tool_config_parser.")
+
             with multiprocessing.Manager() as manager:
                 dependency_count = manager.dict()
                 ready_queue = manager.Queue()
@@ -1022,6 +1039,9 @@ class Bob:
                 self.logger.debug(f"At the end of execute_tasks(): dependency_count={dependency_count}")
                 self.logger.debug(f"At the end of execute_tasks(): ready_queue.qsize()={ready_queue.qsize()}")
 
+        except AttributeError as ae:
+            self.logger.error(f"AttributeError: {ae}")
+
         except Exception as e:
             self.logger.critical(f"Unexpected error during execute_task(): {e}", exc_info=True)
 
@@ -1046,6 +1066,9 @@ class Bob:
             if task_type == "c_compile":
                 self.logger.debug(f"Executing execute_c_compile()")
                 success = self.execute_c_compile(task_name)
+            elif task_type == "cpp_compile":
+                self.logger.debug(f"Executing execute_cpp_compile()")
+                success = self.execute_cpp_compile(task_name)
             else:
                 self.logger.error(f"Undefined 'task_type' in task_configs[{task_name}]['task_config_dict'].")
                 success = False

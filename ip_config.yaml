@@ -19,9 +19,13 @@ sources:
 tasks:
   arith_c_compile:
     depends_on: []
+
   hello_world_c_compile:
     depends_on:
       - arith_c_compile
+
+  hello_world_cpp_compile:
+    depends_on: []
   # hello_world:
   #   # script: build_scripts/fpga_build.tcl
   #   # output_dir: ${directories.build_dir}/fpga

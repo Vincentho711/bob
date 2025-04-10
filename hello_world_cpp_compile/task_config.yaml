@@ -1,0 +1,7 @@
+task_name : "hello_world_cpp_compile"
+task_type : "cpp_compile"
+executable_name: "hello_world_cpp.exe"
+src_files:
+  - "hello_world.cpp"
+  - "simple_utils.h"
+  - "simple_utils.cpp"
