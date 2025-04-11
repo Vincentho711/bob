@@ -3,6 +3,8 @@ from pathlib import Path
 from typing import Any, Dict
 from networkx import DiGraph, topological_sort, is_directed_acyclic_graph
 from toolConfigParser.ToolConfigParser import ToolConfigParser
+from ipConfigParser.IpConfigParser import IpConfigParser
+from taskConfigParser.TaskConfigParser import TaskConfigParser
 import os
 import sys
 import yaml
@@ -18,9 +20,10 @@ class Bob:
     def __init__(self, logger: logging.Logger) -> None:
         self.name = "bob"
         self.logger = logger
-        # self.logger.debug("Bob instance initialised.")
         self.proj_root: str = os.environ.get("PROJ_ROOT", "Not Set")
         self.tool_config_parser = None
+        self.ip_config_parser = None
+        self.task_config_parser = None
         self.ip_config: Dict[str, Any] = {}
         self.task_configs: Dict[str, Any] = {}
         self.dotbob_dir: Path = Path(self.proj_root) / ".bob"
@@ -43,6 +46,82 @@ class Bob:
 
         except Exception as e:
             self.logger.critical(f"Unexpected error during associate_tool_config_parser(): {e}", exc_info=True)
+
+    def instantiate_and_associate_tool_config_parser(self) -> None:
+        """Instantiate a ToolConfigParser and associate it to its 'tool_config_parser' attribute"""
+        try:
+            tool_config_parser = ToolConfigParser(self.logger, self.proj_root)
+            self.associate_tool_config_parser(tool_config_parser)
+
+        except Exception as e:
+            self.logger.critical(f"Unexpected error during instantiate_and_associate_tool_config_parser(): {e}", exc_info=True)
+
+    def associate_ip_config_parser(self, ip_config_parser: IpConfigParser) -> None:
+        """Associate a IpConfigParser object to its 'ip_config_parser' attribute"""
+        try:
+            if not isinstance(ip_config_parser, IpConfigParser):
+                raise TypeError(f"ip_config_parser must be a IpConfigParser object. type(ip_config_parser) = {type(ip_config_parser)}.")
+
+            self.ip_config_parser = ip_config_parser
+
+        except TypeError as te:
+            self.logger.error(f"TypeError: {te}")
+
+        except Exception as e:
+            self.logger.critical(f"Unexpected error during associate_ip_config_parser(): {e}", exc_info=True)
+
+    def instantiate_and_associate_ip_config_parser(self) -> None:
+        """Instantiate a IpConfigParser and associate it to its 'ip_config_parser' attribute"""
+        try:
+            ip_config_parser = IpConfigParser(self.logger, self.proj_root)
+            self.associate_ip_config_parser(ip_config_parser)
+
+        except Exception as e:
+            self.logger.critical(f"Unexpected error during instantiate_and_associate_ip_config_parser(): {e}", exc_info=True)
+
+    def associate_task_config_parser(self, task_config_parser: TaskConfigParser) -> None:
+        """Associate a TaskConfigParser object to its 'task_config_parser' attribute"""
+        try:
+            if not isinstance(task_config_parser, TaskConfigParser):
+                raise TypeError(f"task_config_parser must be a TaskConfigParser object. type(task_config_parser) = {type(task_config_parser)}.")
+
+            self.task_config_parser = task_config_parser
+
+        except TypeError as te:
+            self.logger.error(f"TypeError: {te}")
+
+        except Exception as e:
+            self.logger.critical(f"Unexpected error during associate_task_config_parser(): {e}", exc_info=True)
+
+    def instantiate_and_associate_task_config_parser(self) -> None:
+        """Instantiate a TaskConfigParser and associate it to its 'task_config_parser' attribute"""
+        try:
+            task_config_parser = TaskConfigParser(self.logger, self.proj_root)
+            self.associate_task_config_parser(task_config_parser)
+
+        except Exception as e:
+            self.logger.critical(f"Unexpected error during instantiate_and_associate_task_config_parser(): {e}", exc_info=True)
+
+    def setup_with_ip_config_parser(self) -> None:
+        """Execute functions within ip_config_parser and asscoaite unfiltered dependency graph from ip_config_parser with self.ip_config_parser"""
+        try:
+            if self.ip_config_parser is None:
+                raise AttributeError(f"self.ip_config_parser is None. Please ensure that associate_ip_config_parser() has been run.")
+
+            # Load ip_config.yaml from proj_root
+            self.ip_config_parser.load_ip_cfg()
+
+            # Parse the loaded ip_config.yaml
+            self.ip_config_parser.parse_ip_cfg()
+
+            # Build unfiltered dependency graph and associate it to self.dependency_graph
+            self.dependency_graph = self.ip_config_parser.build_task_dependency_graph()
+
+        except AttributeError as ae:
+            self.logger.error(f"AttributeError: {ae}")
+
+        except Exception as e:
+            self.logger.critical(f"Unexpected error during setup_with_ip_config_parser(): {e}", exc_info=True)
 
     def set_env_var_val(self, env_key: str, env_val: str) -> None:
         """Set an env var to a value"""

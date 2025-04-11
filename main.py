@@ -5,7 +5,6 @@ import sys
 import logging
 
 from ipConfigParser.IpConfigParser import IpConfigParser
-from pytests.test_ipConfigParser import ip_config_parser
 from taskConfigParser.TaskConfigParser import TaskConfigParser
 from toolConfigParser.ToolConfigParser import ToolConfigParser
 

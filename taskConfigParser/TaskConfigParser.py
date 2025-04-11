@@ -605,3 +605,29 @@ class TaskConfigParser:
         except Exception as e:
             self.logger.critical(f"Unexpected error during parse_cpp_compile() for task_name = '{task_name}' : {e}", exc_info=True)
             return None
+
+    def parse_all_tasks_in_task_configs(self):
+        """Iterate through all the tasks defined within self.task_configs, and parse each of them according to their 'task_type'"""
+        try:
+            if not self.task_configs:
+                raise ValueError(f"self.task_configs is empty. Please ensure that inherit_task_configs() has been run.")
+            for task in self.task_configs:
+                self.logger.debug(f"Within parse_all_task_configs_tasks(): parsing {task} ...")
+                task_config = self.task_configs.get(task)
+                task_config_file_path = task_config.get("task_config_file_path", None)
+                if task_config_file_path is None:
+                    raise KeyError(f"Missing 'task_config_file_path' for task '{task}'.")
+                # Load the task_config.yaml file into self.task_configs[task]['task_config_dict']
+                self._load_task_config_file(task_config_file_path)
+                # Parse a task from its self.task_configs[task]['task_config_dict'] and populate self.task_configs[task]
+                self.parse_task_config_dict(task)
+
+
+        except KeyError as ke:
+            self.logger.error(f"KeyError: {ke}")
+
+        except ValueError as ve:
+            self.logger.error(f"ValueError: {ve}")
+
+        except Exception as e:
+            self.logger.critical(f"Unexpected error during parse_all_tasks_in_task_configs(): {e}", exc_info=True)
