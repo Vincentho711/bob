@@ -1036,3 +1036,38 @@ def test_parse_task_config_dict_invalid_task_type(tmp_path: Path):
     with patch.object(task_config_parser, "validate_initial_task_config_dict", return_value=True): # Mock the return of internal function call
         task_config_parser.parse_task_config_dict(task_name)
     task_config_parser.logger.error.assert_called_once_with(f"ValueError: For task_name = '{task_name}', the task_type = '{task_type}' is not a support task type.")
+
+def test_parse_all_tasks_in_task_configs_empty_task_configs(tmp_path: Path):
+    """Test iterating task configs which is empty"""
+    mock_logger = MagicMock()
+    task_config_parser =  TaskConfigParser(mock_logger, str(tmp_path))
+    task_config_parser.task_configs = {}
+
+    task_config_parser.parse_all_tasks_in_task_configs()
+    task_config_parser.logger.error.assert_called_once_with("ValueError: self.task_configs is empty. Please ensure that inherit_task_configs() has been run.")
+
+def test_parse_all_tasks_in_task_configs_missing_task_config_file_path(tmp_path: Path):
+    """Test iterating task configs, with one task having a missing 'task_config_file_path' attribute"""
+    mock_logger = MagicMock()
+    task_config_parser =  TaskConfigParser(mock_logger, str(tmp_path))
+    task_config_parser.task_configs = {
+        "task_a": {}
+    }
+
+    task_config_parser.parse_all_tasks_in_task_configs()
+    task_config_parser.logger.error.call_args[0][0].startswith("KeyError: Missing 'task_config_file_path'")
+
+def test_parse_all_tasks_in_task_configs_valid(tmp_path: Path):
+    """Testing parsing a valid task_config"""
+    mock_logger = MagicMock()
+    task_config_parser =  TaskConfigParser(mock_logger, str(tmp_path))
+    task_config_parser.task_configs = {
+        "task_b": {"task_config_file_path": "/path/to/task_b/task_config.yaml"}
+    }
+    task_config_parser._load_task_config_file = MagicMock()
+    task_config_parser.parse_task_config_dict = MagicMock()
+
+    task_config_parser.parse_all_tasks_in_task_configs()
+
+    task_config_parser._load_task_config_file.assert_called_once_with("/path/to/task_b/task_config.yaml")
+    task_config_parser.parse_task_config_dict.assert_called_once_with("task_b")
