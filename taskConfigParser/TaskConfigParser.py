@@ -312,6 +312,8 @@ class TaskConfigParser:
                     self.parse_c_compile(task_name)
                 case "cpp_compile":
                     self.parse_cpp_compile(task_name)
+                case "verilator_verilate":
+                    self.parse_verilator_verilate(task_name)
                 case _:
                     raise ValueError(f"For task_name = '{task_name}', the task_type = '{task_type}' is not a support task type.")
 
@@ -604,6 +606,75 @@ class TaskConfigParser:
             return None
         except Exception as e:
             self.logger.critical(f"Unexpected error during parse_cpp_compile() for task_name = '{task_name}' : {e}", exc_info=True)
+            return None
+
+    def parse_verilator_verilate(self, task_name: str):
+        """Set up the task env for verilating SystemVerilog source files with verilator"""
+        try:
+            task_config_dict = self.task_configs[task_name].get("task_config_dict", None)
+            task_config_file_path = self.task_configs[task_name].get("task_config_file_path", None)
+
+            self.logger.debug(f"For task '{task_name}', parsing verilator_verilate task type.")
+
+            # Fetch mandatory key 'src_files'
+            unresolved_src_files = task_config_dict.get("src_files", None)
+            if unresolved_src_files is None:
+                raise KeyError(f"{task_config_file_path} which is a 'verilator_verilate' build does not contain a mandatory field 'src_files'. ")
+            elif not isinstance(unresolved_src_files, (str, list)):
+                raise TypeError(f"{task_config_file_path} mandatory field 'src_files' should be either a str or a list. Current type = {type(unresolved_src_files)}.")
+
+            # resolved_src_files : list[str] = []
+
+            # Modify it into a list if it is a str for ease of manipulation
+            unresolved_src_files = [unresolved_src_files] if isinstance(unresolved_src_files, str) else unresolved_src_files
+
+            # Set up task_configs to contain internal_src_files, external_src_files and output_src_files attributes
+            self.task_configs[task_name].setdefault("internal_src_files", [])
+            self.task_configs[task_name].setdefault("external_src_files", [])
+            self.task_configs[task_name].setdefault("output_src_files", [])
+
+            # Retrieve references
+            internal_src_files = self.task_configs[task_name]["internal_src_files"]
+            external_src_files = self.task_configs[task_name]["external_src_files"]
+            output_src_files = self.task_configs[task_name]["output_src_files"]
+
+            # Resolve every src file reference
+            for unresolved_src_file in unresolved_src_files:
+                resolved_reference, resolved_type = self.resolve_reference(task_name, unresolved_src_file)
+
+                self.logger.debug(f"task_name='{task_name}', unresolved_src_file='{unresolved_src_file}', resolved_reference='{resolved_reference}', resolved_type='{resolved_type}'.")
+
+                if isinstance(resolved_reference, str):
+                    if resolved_type == "direct":
+                        internal_src_files.append(resolved_reference)
+                    elif resolved_type == "input":
+                        external_src_files.append(resolved_reference)
+                    elif resolved_type == "output":
+                        output_src_files.append(resolved_reference)
+                elif isinstance(resolved_reference, list):
+                    if resolved_type == "direct":
+                        internal_src_files.extend(resolved_reference)
+                    elif resolved_type == "input":
+                        external_src_files.extend(resolved_reference)
+                    elif resolved_reference == "output":
+                        output_src_files.extend(resolved_reference)
+                else:
+                    self.logger.warning(f"Resolved reference='{resolved_reference}' is neither of type str or list. type({resolved_reference})={type(resolved_reference)}. Skip appending to resolved_src_files list.")
+
+            # input_src_files consists of internal_src_files and external_src_files
+            self.task_configs[task_name].setdefault("input_src_files", internal_src_files + external_src_files)
+
+        except TypeError as te:
+            self.logger.error(f"TypeError: {te}")
+            return None
+        except ValueError as ve:
+            self.logger.error(f"ValueError: {ve}")
+            return None
+        except KeyError as ke:
+            self.logger.error(f"KeyError: {ke}")
+            return None
+        except Exception as e:
+            self.logger.critical(f"Unexpected error during parse_verilator_verilate() for task_name = '{task_name}' : {e}", exc_info=True)
             return None
 
     def parse_all_tasks_in_task_configs(self):

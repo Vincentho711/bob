@@ -999,6 +999,7 @@ def test_parse_task_config_dict_valid_task_type(tmp_path: Path):
     """Test parsing a valid task_type"""
     task_type_1 = "c_compile"
     task_type_2 = "cpp_compile"
+    task_type_3 = "verilator_verilate"
 
     mock_logger = MagicMock()
     task_config_parser = TaskConfigParser(mock_logger, str(tmp_path))
@@ -1010,8 +1011,13 @@ def test_parse_task_config_dict_valid_task_type(tmp_path: Path):
         "task_env" : {'env_key' : "/opt/homebrew/sbin:/path/to/c:/path/to/d"},
         "task_config_dict" : {"task_type" : task_type_2}
     }
+    task_config_parser.task_configs["valid_task_3"] = {
+        "task_env" : {'env_key' : "/opt/homebrew/sbin:/path/to/c:/path/to/e"},
+        "task_config_dict" : {"task_type" : task_type_3}
+    }
     task_config_parser.parse_c_compile = MagicMock()
     task_config_parser.parse_cpp_compile = MagicMock()
+    task_config_parser.parse_verilator_verilate = MagicMock()
 
     with patch.object(task_config_parser, "validate_initial_task_config_dict", return_value=True): # Mock the return of internal function call
         task_config_parser.parse_task_config_dict("valid_task_1")
@@ -1021,6 +1027,28 @@ def test_parse_task_config_dict_valid_task_type(tmp_path: Path):
     with patch.object(task_config_parser, "validate_initial_task_config_dict", return_value=True): # Mock the return of internal function call
         task_config_parser.parse_task_config_dict("valid_task_2")
     task_config_parser.parse_cpp_compile.assert_called_once_with("valid_task_2")
+
+@pytest.mark.parametrize("task_type", ["c_compile", "cpp_compile", "verilator_verilate"])
+def test_parse_task_config_dict_dispatch_valid_task_types(tmp_path: Path, task_type):
+    """Test that the correct parse_{task_type} method is called based on the task_type."""
+    task_name = f"{task_type}_task"
+    mock_logger = MagicMock()
+    task_config_parser = TaskConfigParser(mock_logger, str(tmp_path))
+
+    # Assign a dummy config for the task
+    task_config_parser.task_configs[task_name] = {
+        "task_env": {'env_key': "/opt/homebrew/sbin:/path/to/a:/path/to/b"},
+        "task_config_dict": {"task_type": task_type}
+    }
+
+    # Dynamically patch the correct parse_* method
+    parse_method_name = f"parse_{task_type}"
+    setattr(task_config_parser, parse_method_name, MagicMock())
+
+    with patch.object(task_config_parser, "validate_initial_task_config_dict", return_value=True):
+        task_config_parser.parse_task_config_dict(task_name)
+
+    getattr(task_config_parser, parse_method_name).assert_called_once_with(task_name)
 
 def test_parse_task_config_dict_invalid_task_type(tmp_path: Path):
     """Test parsing a invalid task_type that isn't supported"""

@@ -1,0 +1,6 @@
+task_name: hello_world_top_verilate
+task_type: verilator_verilate
+src_files:
+  - "hello_world_top.sv"
+  - "adder.sv"
+top_module: hello_world_top

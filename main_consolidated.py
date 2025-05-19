@@ -78,6 +78,8 @@ def main() -> None:
     # Parse all tasks with task_config_parser's parse_all_tasks_in_task_configs()
     bob.task_config_parser.parse_all_tasks_in_task_configs()
 
+    # Execute all tasks
+    bob.execute_tasks()
 
 if __name__ == "__main__":
     main()

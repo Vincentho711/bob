@@ -26,6 +26,10 @@ tasks:
 
   hello_world_cpp_compile:
     depends_on: []
+
+  hello_world_top_verilate:
+    depends_on: []
+
   # hello_world:
   #   # script: build_scripts/fpga_build.tcl
   #   # output_dir: ${directories.build_dir}/fpga

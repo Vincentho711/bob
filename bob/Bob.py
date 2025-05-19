@@ -841,8 +841,6 @@ class Bob:
             executable_name = task_config_dict.get("executable_name", None)
             if executable_name:
                 self.update_task_env(task_name, "CPP_COMPILE_EXECUTABLE_NAME", executable_name)
-
-            if executable_name:
                 executable_path = output_dir / executable_name
                 self.update_task_env(task_name, "CPP_COMPILE_EXECUTABLE_PATH", executable_path)
 
@@ -910,9 +908,83 @@ class Bob:
         except ValueError as ve:
             self.logger.error(f"ValueError: {ve}")
             return False
+
         except Exception as e:
             self.logger.critical(f"Unexpected error during execute_cpp_compile(): {e}", exc_info=True)
             return False
+
+    def execute_verilator_verilate(self, task_name:str) -> bool:
+        """Execute verilation into C++ model with verilator"""
+        try:
+            if task_name not in self.task_configs:
+                raise ValueError(f"Task '{task_name}' not found in task_configs.")
+            task_config_dict = self.task_configs[task_name].get("task_config_dict", None)
+            if task_config_dict is None:
+                raise KeyError(f"Task '{task_name}' does not have a 'task_config_dict' attribute.")
+            task_type = task_config_dict.get("task_type", None)
+            if task_type is None:
+                raise ValueError(f"Task '{task_name}' does not have a 'task_type' attribute.")
+            if task_type != "verilator_verilate":
+                raise ValueError(f"Task '{task_name}' has task type '{task_type}' which is not 'verilator_verilate'. Please execute the correct function to execute build.")
+            # Resolve output_src_files list
+            self.resolve_task_configs_output_src_files(task_name)
+            task_env = self.task_configs[task_name].get("task_env", None)
+            if task_env is None:
+                raise KeyError(f"Task '{task_name}' does not have a 'task_env' attribute.")
+
+            output_dir = self.task_configs[task_name].get("output_dir", None)
+            if output_dir is None:
+                self.logger.error(f"Task '{task_name}' does not have the mandatory attribute 'output_dir'. Aborting execute_verilator_verilate().")
+                return False
+
+            # Prepare log file
+            log_file_path = output_dir / f"{task_name}.log"
+            log_file = self.setup_task_logger(log_file_path)
+
+            # Ensuer that all src_files exist
+            if not self.ensure_src_files_existence(task_name):
+                self.logger.error(f"Aborting execute_verilator_verilate as one or more source files are missing.")
+                return False
+
+            # Promote task_configs attributes to env var such that they can be used in subprocess
+            src_files = sum((self.task_configs[task_name].get(key, []) for key in ["internal_src_files", "external_src_files", "output_src_files"]), [])
+            self.logger.debug(f"Task '{task_name}' has src_files={src_files}")
+            self.update_task_env(task_name, "VERILATOR_VERILATE_SRC_FILES", src_files)
+            top_module = task_config_dict.get("top_module", None)
+            if top_module:
+                self.logger.debug(f"Using top_module = '{top_module}' for task '{task_name}'.")
+                self.update_task_env(task_name, "VERILATOR_VERILATE_TOP_MODULE", top_module)
+
+            # Extract the path of verilator
+            verilator_path = self.tool_config_parser.get_tool_path("verilator")
+            self.logger.debug(f"gpp_path={verilator_path}")
+
+            # Execute 'verilator -cc {VERILATOR_VERILATE_SRC_FILES} --Mdir {output_dir} [--top-module {VERILATOR_VERILATE_TOP_MODULE}]'
+            cmd_verilate = [verilator_path, "--cc", *src_files, "--Mdir", output_dir]
+            if top_module:
+                cmd_verilate.extend(["--top-module", top_module])
+
+            self.logger.info(f"Executing verilator_verilate command: {cmd_verilate}")
+            print(f"Executing verilator_verilate command: {cmd_verilate}")
+            success = self.run_subprocess(task_name, cmd_verilate, task_env, log_file)
+
+            if not success:
+                self.logger.error(f"Verilator verilation failed for task '{task_name}'. Check log: {log_file_path}")
+                print(f"Verilator verilation failed for task '{task_name}'. Check log: {log_file_path}")
+                return False
+
+            self.logger.info(f"Verilator verilation succeeded for task '{task_name}'. Output_dir: {output_dir}")
+            print(f"Verilator verilation succeeded for task '{task_name}'. Output_dir: {output_dir}")
+            return True
+
+        except ValueError as ve:
+            self.logger.error(f"ValueError: {ve}")
+            return False
+
+        except Exception as e:
+            self.logger.critical(f"Unexpected error during execute_verilator_verilate() : {e}", exc_info=True)
+            return False
+
 
     def filter_tasks_to_rebuild(self) -> DiGraph:
         """Returns a filtered dependency graph with only tasks that need to be rebuilt."""
@@ -1148,6 +1220,9 @@ class Bob:
             elif task_type == "cpp_compile":
                 self.logger.debug(f"Executing execute_cpp_compile()")
                 success = self.execute_cpp_compile(task_name)
+            elif task_type == "verilator_verilate":
+                self.logger.debug(f"Executing execute_verilator_verilate()")
+                success = self.execute_verilator_verilate(task_name)
             else:
                 self.logger.error(f"Undefined 'task_type' in task_configs[{task_name}]['task_config_dict'].")
                 success = False
