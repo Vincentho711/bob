@@ -381,6 +381,43 @@ class TaskConfigParser:
             self.logger.critical(f"Unexpected error during validate_initial_task_config_dict() for task_name = '{task_name}' : {e}", exc_info=True)
             return False
 
+    def resolve_src_files(self, task_name: str, unresolved_src_files: list) -> dict[str, list] | None:
+        """Given a list of unresolved src files, resolve them into 'internal_src_files', 'external_src_files' or 'output_src_files'"""
+        try:
+            resolved_src_files ={
+                "internal_src_files": [],
+                "external_src_files": [],
+                "output_src_files":   []
+            }
+            # Resolve every src file reference
+            for unresolved_src_file in unresolved_src_files:
+                resolved_reference, resolved_type = self.resolve_reference(task_name, unresolved_src_file)
+
+                self.logger.debug(f"task_name='{task_name}', unresolved_src_file='{unresolved_src_file}', resolved_reference='{resolved_reference}', resolved_type='{resolved_type}'.")
+
+                if isinstance(resolved_reference, str):
+                    if resolved_type == "direct":
+                        resolved_src_files["internal_src_files"].append(resolved_reference)
+                    elif resolved_type == "input":
+                        resolved_src_files["external_src_files"].append(resolved_reference)
+                    elif resolved_type == "output":
+                        resolved_src_files["output_src_files"].append(resolved_reference)
+                elif isinstance(resolved_reference, list):
+                    if resolved_type == "direct":
+                        resolved_src_files["internal_src_files"].extend(resolved_reference)
+                    elif resolved_type == "input":
+                        resolved_src_files["external_src_files"].extend(resolved_reference)
+                    elif resolved_reference == "output":
+                        resolved_src_files["output_src_files"].extend(resolved_reference)
+                else:
+                    self.logger.warning(f"Resolved reference='{resolved_reference}' is neither of type str or list. type({resolved_reference})={type(resolved_reference)}. Skip appending to resolved_src_files dict.")
+
+            return resolved_src_files
+
+        except Exception as e:
+            self.logger.critical(f"Unexpected error during resolve_src_files() for task_name = '{task_name}' : {e}", exc_info=True)
+            return None
+
     def parse_c_compile(self, task_name: str):
         """Set up the task_env for a C compilation task"""
         try:
@@ -457,27 +494,10 @@ class TaskConfigParser:
             output_src_files = self.task_configs[task_name]["output_src_files"]
 
             # Resolve every src file reference
-            for unresolved_src_file in unresolved_src_files:
-                resolved_reference, resolved_type = self.resolve_reference(task_name, unresolved_src_file)
-
-                self.logger.debug(f"task_name='{task_name}', unresolved_src_file='{unresolved_src_file}', resolved_reference='{resolved_reference}', resolved_type='{resolved_type}'.")
-
-                if isinstance(resolved_reference, str):
-                    if resolved_type == "direct":
-                        internal_src_files.append(resolved_reference)
-                    elif resolved_type == "input":
-                        external_src_files.append(resolved_reference)
-                    elif resolved_type == "output":
-                        output_src_files.append(resolved_reference)
-                elif isinstance(resolved_reference, list):
-                    if resolved_type == "direct":
-                        internal_src_files.extend(resolved_reference)
-                    elif resolved_type == "input":
-                        external_src_files.extend(resolved_reference)
-                    elif resolved_reference == "output":
-                        output_src_files.extend(resolved_reference)
-                else:
-                    self.logger.warning(f"Resolved reference='{resolved_reference}' is neither of type str or list. type({resolved_reference})={type(resolved_reference)}. Skip appending to resolved_src_files list.")
+            resolved_src_files = self.resolve_src_files(task_name, unresolved_src_files)
+            internal_src_files.extend(resolved_src_files["internal_src_files"])
+            external_src_files.extend(resolved_src_files["external_src_files"])
+            output_src_files.extend(resolved_src_files["external_src_files"])
 
             # input_src_files consists of internal_src_files and external_src_files
             self.task_configs[task_name].setdefault("input_src_files", internal_src_files + external_src_files)
@@ -571,30 +591,14 @@ class TaskConfigParser:
             output_src_files = self.task_configs[task_name]["output_src_files"]
 
             # Resolve every src file reference
-            for unresolved_src_file in unresolved_src_files:
-                resolved_reference, resolved_type = self.resolve_reference(task_name, unresolved_src_file)
-
-                self.logger.debug(f"task_name='{task_name}', unresolved_src_file='{unresolved_src_file}', resolved_reference='{resolved_reference}', resolved_type='{resolved_type}'.")
-
-                if isinstance(resolved_reference, str):
-                    if resolved_type == "direct":
-                        internal_src_files.append(resolved_reference)
-                    elif resolved_type == "input":
-                        external_src_files.append(resolved_reference)
-                    elif resolved_type == "output":
-                        output_src_files.append(resolved_reference)
-                elif isinstance(resolved_reference, list):
-                    if resolved_type == "direct":
-                        internal_src_files.extend(resolved_reference)
-                    elif resolved_type == "input":
-                        external_src_files.extend(resolved_reference)
-                    elif resolved_reference == "output":
-                        output_src_files.extend(resolved_reference)
-                else:
-                    self.logger.warning(f"Resolved reference='{resolved_reference}' is neither of type str or list. type({resolved_reference})={type(resolved_reference)}. Skip appending to resolved_src_files list.")
+            resolved_src_files = self.resolve_src_files(task_name, unresolved_src_files)
+            internal_src_files.extend(resolved_src_files["internal_src_files"])
+            external_src_files.extend(resolved_src_files["external_src_files"])
+            output_src_files.extend(resolved_src_files["external_src_files"])
 
             # input_src_files consists of internal_src_files and external_src_files
             self.task_configs[task_name].setdefault("input_src_files", internal_src_files + external_src_files)
+
         except TypeError as te:
             self.logger.error(f"TypeError: {te}")
             return None
@@ -639,27 +643,10 @@ class TaskConfigParser:
             output_src_files = self.task_configs[task_name]["output_src_files"]
 
             # Resolve every src file reference
-            for unresolved_src_file in unresolved_src_files:
-                resolved_reference, resolved_type = self.resolve_reference(task_name, unresolved_src_file)
-
-                self.logger.debug(f"task_name='{task_name}', unresolved_src_file='{unresolved_src_file}', resolved_reference='{resolved_reference}', resolved_type='{resolved_type}'.")
-
-                if isinstance(resolved_reference, str):
-                    if resolved_type == "direct":
-                        internal_src_files.append(resolved_reference)
-                    elif resolved_type == "input":
-                        external_src_files.append(resolved_reference)
-                    elif resolved_type == "output":
-                        output_src_files.append(resolved_reference)
-                elif isinstance(resolved_reference, list):
-                    if resolved_type == "direct":
-                        internal_src_files.extend(resolved_reference)
-                    elif resolved_type == "input":
-                        external_src_files.extend(resolved_reference)
-                    elif resolved_reference == "output":
-                        output_src_files.extend(resolved_reference)
-                else:
-                    self.logger.warning(f"Resolved reference='{resolved_reference}' is neither of type str or list. type({resolved_reference})={type(resolved_reference)}. Skip appending to resolved_src_files list.")
+            resolved_src_files = self.resolve_src_files(task_name, unresolved_src_files)
+            internal_src_files.extend(resolved_src_files["internal_src_files"])
+            external_src_files.extend(resolved_src_files["external_src_files"])
+            output_src_files.extend(resolved_src_files["external_src_files"])
 
             # input_src_files consists of internal_src_files and external_src_files
             self.task_configs[task_name].setdefault("input_src_files", internal_src_files + external_src_files)
@@ -675,6 +662,84 @@ class TaskConfigParser:
             return None
         except Exception as e:
             self.logger.critical(f"Unexpected error during parse_verilator_verilate() for task_name = '{task_name}' : {e}", exc_info=True)
+            return None
+
+    def parse_verilator_tb_compile(self, task_name: str):
+        """Set up the task env for executing a tb compilation with verilator"""
+        try:
+            task_config_dict = self.task_configs[task_name].get("task_config_dict", None)
+            task_config_file_path = self.task_configs[task_name].get("task_config_file_path", None)
+
+            self.logger.debug(f"For task '{task_name}', parsing verilator_tb_compile task type.")
+
+            # Set up task_configs to contain internal_src_files, external_src_files and output_src_files attributes
+            self.task_configs[task_name].setdefault("internal_src_files", [])
+            self.task_configs[task_name].setdefault("external_src_files", [])
+            self.task_configs[task_name].setdefault("output_src_files", [])
+
+            # Retrieve references
+            internal_src_files = self.task_configs[task_name]["internal_src_files"]
+            external_src_files = self.task_configs[task_name]["external_src_files"]
+            output_src_files = self.task_configs[task_name]["output_src_files"]
+
+
+            # A list to store all the unresolved src files that need to be resolved
+            unresolved_src_files = []
+
+            # Fetch mandatory key 'rtl_src_files'
+            unresolved_rtl_src_files = task_config_dict.get("rtl_src_files", None)
+
+            if unresolved_rtl_src_files is None:
+                raise KeyError(f"{task_config_file_path} which is a 'verilator_tb_compile' build does not contain a mandatory field 'rtl_src_files'. ")
+            elif not isinstance(unresolved_rtl_src_files, (str, list)):
+                raise TypeError(f"{task_config_file_path} mandatory field 'rtl_src_files' should be either a str or a list. Current type = {type(unresolved_rtl_src_files)}.")
+
+            # Modify it into a list if it is a str for ease of manipulation
+            unresolved_rtl_src_files = [unresolved_rtl_src_files] if isinstance(unresolved_rtl_src_files, str) else unresolved_rtl_src_files
+
+            # Resolve every rtl src file reference
+            resolved_src_files = self.resolve_src_files(task_name, unresolved_rtl_src_files)
+            internal_src_files.extend(resolved_src_files["internal_src_files"])
+            external_src_files.extend(resolved_src_files["external_src_files"])
+            output_src_files.extend(resolved_src_files["external_src_files"])
+
+            # Update the task env var such that all the rtl src files can be referred to in Make script
+            # TODO : Add logic to add src files to env var
+
+            # Fetch Mandatory key 'cpp_src_files'
+            unresolved_cpp_src_files = task_config_dict.get("cpp_src_files", None)
+
+            if unresolved_cpp_src_files is None:
+                raise KeyError(f"{task_config_file_path} which is a 'verilator_tb_compile' build does not contain a mandatory field 'cpp_src_files'. ")
+            elif not isinstance(unresolved_rtl_src_files, (str, list)):
+                raise TypeError(f"{task_config_file_path} mandatory field 'cpp_src_files' should be either a str or a list. Current type = {type(unresolved_rtl_src_files)}.")
+
+            unresolved_cpp_src_files = [unresolved_cpp_src_files] if isinstance(unresolved_cpp_src_files, str) else unresolved_cpp_src_files
+
+            # Resolve every cpp src file reference
+            resolved_src_files = self.resolve_src_files(task_name, unresolved_cpp_src_files)
+            internal_src_files.extend(resolved_src_files["internal_src_files"])
+            external_src_files.extend(resolved_src_files["external_src_files"])
+            output_src_files.extend(resolved_src_files["external_src_files"])
+
+            # Update the task env var such that all the cpp src files can be referred to in Make script
+            # TODO : Add logic to add src files to env var
+
+
+            # input_src_files consists of internal_src_files and external_src_files
+            self.task_configs[task_name].setdefault("input_src_files", internal_src_files + external_src_files)
+
+        except TypeError as te:
+            self.logger.error(f"TypeError: {te}")
+            return None
+        except ValueError as ve:
+            self.logger.error(f"ValueError: {ve}")
+            return None
+        except KeyError as ke:
+            self.logger.error(f"KeyError: {ke}")
+            return None
+        except Exception as e:
+            self.logger.critical(f"Unexpected error during parse_verilator_tb_compile() for task_name = '{task_name}' : {e}", exc_info=True)
             return None
 
     def parse_all_tasks_in_task_configs(self):

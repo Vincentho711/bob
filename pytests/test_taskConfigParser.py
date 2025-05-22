@@ -995,6 +995,63 @@ def test_validate_initial_task_config_dict_invalid_task_type(tmp_path: Path):
     task_config_parser.validate_initial_task_config_dict(task_name)
     task_config_parser.logger.error.assert_called_once_with(f"TypeError: {task_config_file_path} has the mandatory field 'task_type' defined as a non string. task_type = {task_type}")
 
+def test_resolve_src_files_all_reference_types(tmp_path: Path):
+    """Test parsing a list of unresolved src files which contains all 3 resolved types"""
+    mock_logger = MagicMock()
+    task_config_parser = TaskConfigParser(mock_logger, str(tmp_path))
+
+    task_config_parser.resolve_reference = MagicMock(side_effect=[
+        ("/abs/path/to/file1.v", "direct"),
+        ("/abs/path/to/external/file2.v", "input"),
+        ("/abs/path/to/output/file3.v", "output"),
+    ])
+    unresolved_src_files = ["file1.v", "{@input:taskB:file2.v}", "{@output:taskC:file3.v}"]
+    resolved_src_files = task_config_parser.resolve_src_files("task_0", unresolved_src_files)
+
+    assert resolved_src_files == {
+        "internal_src_files": ["/abs/path/to/file1.v"],
+        "external_src_files": ["/abs/path/to/external/file2.v"],
+        "output_src_files":   ["/abs/path/to/output/file3.v"]
+    }
+
+def test_resolve_src_files_list_returned_by_reference(tmp_path: Path):
+    """Test parsing a list of unresolved src files and see if it can return a list of references"""
+    mock_logger = MagicMock()
+    task_config_parser = TaskConfigParser(mock_logger, str(tmp_path))
+
+    task_config_parser.resolve_reference = MagicMock(side_effect=[
+        (["/abs/internal1.v", "/abs/internal2.v"], "direct"),
+        (["/abs/input1.v", "/abs/input2.v"], "input"),
+    ])
+    unresolved_src_files = ["file_list_direct", "{@input:taskX:[input1.v,input2.v]}"]
+    resolved_src_files = task_config_parser.resolve_src_files("task_0", unresolved_src_files)
+
+    assert resolved_src_files == {
+        "internal_src_files": ["/abs/internal1.v", "/abs/internal2.v"],
+        "external_src_files": ["/abs/input1.v", "/abs/input2.v"],
+        "output_src_files":   []
+    }
+
+def test_resolve_src_files_invalid_type_ignored(tmp_path: Path):
+    """Test parsing a list of unresolved_src_files but contains an invalid return from self.resolve_reference()"""
+    mock_logger = MagicMock()
+    task_config_parser = TaskConfigParser(mock_logger, str(tmp_path))
+
+    task_config_parser.resolve_reference = MagicMock(side_effect=[
+        (123, "direct"),
+    ])
+    unresolved_src_files = ["invalid_src_file"]
+    resolved_src_files = task_config_parser.resolve_src_files("task_0", unresolved_src_files)
+
+    assert resolved_src_files == {
+        "internal_src_files": [],
+        "external_src_files": [],
+        "output_src_files": []
+    }
+
+    task_config_parser.logger.warning.assert_called_once_with("Resolved reference='123' is neither of type str or list. type(123)=<class 'int'>. Skip appending to resolved_src_files dict.")
+
+
 def test_parse_task_config_dict_valid_task_type(tmp_path: Path):
     """Test parsing a valid task_type"""
     task_type_1 = "c_compile"
