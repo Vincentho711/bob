@@ -9,6 +9,7 @@ class TaskConfigParser:
         self.task_configs = {}
         self.logger = logger
         self.proj_root = proj_root
+        self.build_scripts_dir = Path(self.proj_root) / "build_scripts"
 
     def inherit_task_configs(self, task_configs: dict):
         """Inherit task_configs from bob, and store it as a local attribute"""
@@ -314,6 +315,8 @@ class TaskConfigParser:
                     self.parse_cpp_compile(task_name)
                 case "verilator_verilate":
                     self.parse_verilator_verilate(task_name)
+                case "verilator_tb_compile":
+                    self.parse_verilator_tb_compile(task_name)
                 case _:
                     raise ValueError(f"For task_name = '{task_name}', the task_type = '{task_type}' is not a support task type.")
 
@@ -646,7 +649,7 @@ class TaskConfigParser:
             resolved_src_files = self.resolve_src_files(task_name, unresolved_src_files)
             internal_src_files.extend(resolved_src_files["internal_src_files"])
             external_src_files.extend(resolved_src_files["external_src_files"])
-            output_src_files.extend(resolved_src_files["external_src_files"])
+            output_src_files.extend(resolved_src_files["output_src_files"])
 
             # input_src_files consists of internal_src_files and external_src_files
             self.task_configs[task_name].setdefault("input_src_files", internal_src_files + external_src_files)
@@ -671,6 +674,11 @@ class TaskConfigParser:
             task_config_file_path = self.task_configs[task_name].get("task_config_file_path", None)
 
             self.logger.debug(f"For task '{task_name}', parsing verilator_tb_compile task type.")
+
+            # Check if mandatory "verilator.mk" exists within proj_root/build_scripts dir
+            verilator_mk_path = self.build_scripts_dir / "verilator.mk"
+            if not verilator_mk_path.is_file():
+                raise FileNotFoundError(f"Task '{task_name}' expects '{verilator_mk_path}' to exist.")
 
             # Set up task_configs to contain internal_src_files, external_src_files and output_src_files attributes
             self.task_configs[task_name].setdefault("internal_src_files", [])
@@ -698,13 +706,14 @@ class TaskConfigParser:
             unresolved_rtl_src_files = [unresolved_rtl_src_files] if isinstance(unresolved_rtl_src_files, str) else unresolved_rtl_src_files
 
             # Resolve every rtl src file reference
-            resolved_src_files = self.resolve_src_files(task_name, unresolved_rtl_src_files)
-            internal_src_files.extend(resolved_src_files["internal_src_files"])
-            external_src_files.extend(resolved_src_files["external_src_files"])
-            output_src_files.extend(resolved_src_files["external_src_files"])
+            resolved_rtl_src_files = self.resolve_src_files(task_name, unresolved_rtl_src_files)
+            internal_src_files.extend(resolved_rtl_src_files["internal_src_files"])
+            external_src_files.extend(resolved_rtl_src_files["external_src_files"])
+            output_src_files.extend(resolved_rtl_src_files["output_src_files"])
 
             # Update the task env var such that all the rtl src files can be referred to in Make script
-            # TODO : Add logic to add src files to env var
+            resolved_rtl_src_files_list = [file for files in resolved_rtl_src_files.values() for file in files]
+            self.update_task_env(task_name, "RTL_SRC_FILES", resolved_rtl_src_files_list)
 
             # Fetch Mandatory key 'cpp_src_files'
             unresolved_cpp_src_files = task_config_dict.get("cpp_src_files", None)
@@ -717,17 +726,20 @@ class TaskConfigParser:
             unresolved_cpp_src_files = [unresolved_cpp_src_files] if isinstance(unresolved_cpp_src_files, str) else unresolved_cpp_src_files
 
             # Resolve every cpp src file reference
-            resolved_src_files = self.resolve_src_files(task_name, unresolved_cpp_src_files)
-            internal_src_files.extend(resolved_src_files["internal_src_files"])
-            external_src_files.extend(resolved_src_files["external_src_files"])
-            output_src_files.extend(resolved_src_files["external_src_files"])
+            resolved_cpp_src_files = self.resolve_src_files(task_name, unresolved_cpp_src_files)
+            internal_src_files.extend(resolved_cpp_src_files["internal_src_files"])
+            external_src_files.extend(resolved_cpp_src_files["external_src_files"])
+            output_src_files.extend(resolved_cpp_src_files["output_src_files"])
 
             # Update the task env var such that all the cpp src files can be referred to in Make script
-            # TODO : Add logic to add src files to env var
+            resolved_cpp_src_files_list = [file for files in resolved_cpp_src_files.values() for file in files]
+            self.update_task_env(task_name, "CPP_SRC_FILES", resolved_cpp_src_files_list)
 
 
             # input_src_files consists of internal_src_files and external_src_files
             self.task_configs[task_name].setdefault("input_src_files", internal_src_files + external_src_files)
+            # Add verilator.mk as an input src files such that when it changes, this task will be rebuilt
+            self.task_configs[task_name]["input_src_files"].append(verilator_mk_path.as_posix())
 
         except TypeError as te:
             self.logger.error(f"TypeError: {te}")
@@ -737,6 +749,9 @@ class TaskConfigParser:
             return None
         except KeyError as ke:
             self.logger.error(f"KeyError: {ke}")
+            return None
+        except FileNotFoundError as fnfe:
+            self.logger.error(f"FileNotFoundError: {fnfe}")
             return None
         except Exception as e:
             self.logger.critical(f"Unexpected error during parse_verilator_tb_compile() for task_name = '{task_name}' : {e}", exc_info=True)

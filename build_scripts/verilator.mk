@@ -6,18 +6,19 @@ all : $(TASK_OUTDIR)/${OUTPUT_EXECUTABLE}
 VERILATOR ?= verilator
 CXX ?= g++
 CXXFLAGS ?= -O2 -Wall
-RTL_SOURCES ?=
-CPP_SOURCES ?= 
+
+$(info $$RTL_SRC_FILES is [${RTL_SRC_FILES}])
+$(info $$CPP_SRC_FILES is [${CPP_SRC_FILES}])
 
 # Make sure task_outdir directory exists
 $(TASK_OUTDIR):
 	mkdir -p $(TASK_OUTDIR)
 
 # Verilate the RTL
-$(TASK_OUTDIR)/V$(TOP_MODULE)__ALL.cpp: $(RTL_SOURCES) | $(TASK_OUTDIR)
-	$(VERILATOR) --cc $(RTL_SOURCES) \
+$(TASK_OUTDIR)/V$(TOP_MODULE)__ALL.cpp: $(RTL_SRC_FILES) | $(TASK_OUTDIR)
+	$(VERILATOR) --cc $(RTL_SRC_FILES) \
 		--top-module $(TOP_MODULE) \
-		--exe $(CPP_SOURCES) \
+		--exe $(CPP_SRC_FILES) \
 		--build \
 		--Mdir $(TASK_OUTDIR) \
 		-CFLAGS "$(CXXFLAGS)" \
