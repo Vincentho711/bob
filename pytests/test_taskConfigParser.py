@@ -761,13 +761,43 @@ def test_update_task_env_existing_val_is_list_and_env_val_is_list(tmp_path: Path
     task_config_parser.task_configs["valid_task"] = {
         "task_env" : {'env_key' : "/opt/homebrew/sbin:/usr/local/bin:/usr/sbin"}
     }
-    task_config_parser.update_task_env(task_name, env_key, env_val, False)
+    task_config_parser.update_task_env(task_name, env_key, env_val, False, ":")
     task_config_parser.logger.debug.assert_any_call(f"Task '{task_name}', extending a list of env_val = '{env_val}' to env_key = '{env_key}'")
     expected_env_dict = {
         "task_env" : {'env_key' : "/opt/homebrew/sbin:/usr/local/bin:/usr/sbin:/path/to/a:/path/to/b"}
     }
     assert task_config_parser.task_configs["valid_task"] == expected_env_dict
     task_config_parser.logger.debug.assert_any_call(f"Task '{task_name}', updated env_key = '{env_key}' with env_val = '{expected_env_dict["task_env"]["env_key"]}'")
+
+@pytest.mark.parametrize(
+    "initial, new_val, delimiter, expected",
+    [
+        (None, ["a.cpp", "b.cpp"], " ", "a.cpp b.cpp"),
+        ("a.cpp", "b.cpp", " ", "a.cpp b.cpp"),
+        ("a.cpp:b.cpp", "c.cpp", ":", "a.cpp:b.cpp:c.cpp"),
+        (None, ["/lib/one", "/lib/two"], ":", "/lib/one:/lib/two"),
+        ("x y", ["z"], " ", "x y z"),
+    ]
+)
+def test_update_task_env_delimiters(initial, new_val, delimiter, expected, tmp_path: Path):
+    task = "dummy_task"
+    key = "TEST_VAR"
+
+    mock_logger = MagicMock()
+    task_config_parser = TaskConfigParser(mock_logger, str(tmp_path))
+
+    task_config_parser.task_configs[task] = {
+        "task_env" : {}
+    }
+
+    # Pre-set the env var if needed
+    if initial is not None:
+        task_config_parser.task_configs[task]["task_env"] = {key: initial}
+
+    task_config_parser.update_task_env(task, key, new_val, delimiter=delimiter)
+
+    result = task_config_parser.task_configs[task]["task_env"][key]
+    assert result == expected
 
 def test_update_task_env_existing_val_is_list_and_env_val_is_str(tmp_path: Path):
     """Test with an existing value of a list but env_val is only a str"""
@@ -780,7 +810,7 @@ def test_update_task_env_existing_val_is_list_and_env_val_is_str(tmp_path: Path)
     task_config_parser.task_configs["valid_task"] = {
         "task_env" : {'env_key' : "/opt/homebrew/sbin:/path/to/a:/path/to/b"}
     }
-    task_config_parser.update_task_env(task_name, env_key, env_val, False)
+    task_config_parser.update_task_env(task_name, env_key, env_val, False, ":")
     task_config_parser.logger.debug.assert_any_call(f"Task '{task_name}', appending a single str/filepath env_val = '{env_val}' to env_key = '{env_key}'")
     expected_env_dict = {
         "task_env" : {'env_key' : "/opt/homebrew/sbin:/path/to/a:/path/to/b:/path/to/a"}
@@ -799,7 +829,7 @@ def test_update_task_env_existing_val_is_str_and_env_val_is_list(tmp_path: Path)
     task_config_parser.task_configs["valid_task"] = {
         "task_env" : {'env_key' : "/opt/homebrew/sbin"}
     }
-    task_config_parser.update_task_env(task_name, env_key, env_val, False)
+    task_config_parser.update_task_env(task_name, env_key, env_val, False, ":")
     task_config_parser.logger.debug.assert_any_call(f"Task '{task_name}', extending a list of env_val = '{env_val}' to env_key = '{env_key}'")
     expected_env_dict = {
         "task_env" : {'env_key' : "/opt/homebrew/sbin:/path/to/a:/path/to/b"}
@@ -818,7 +848,7 @@ def test_update_task_env_existing_val_is_str_and_env_val_is_str(tmp_path: Path):
     task_config_parser.task_configs["valid_task"] = {
         "task_env" : {'env_key' : "/opt/homebrew/sbin"}
     }
-    task_config_parser.update_task_env(task_name, env_key, env_val, False)
+    task_config_parser.update_task_env(task_name, env_key, env_val, False, ":")
     task_config_parser.logger.debug.assert_any_call(f"Task '{task_name}', appending a single str/filepath env_val = '{env_val}' to env_key = '{env_key}'")
     expected_env_dict = {
         "task_env" : {'env_key' : "/opt/homebrew/sbin:/path/to/a"}

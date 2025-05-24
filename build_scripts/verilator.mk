@@ -14,8 +14,8 @@ $(info $$CPP_SRC_FILES is [${CPP_SRC_FILES}])
 $(TASK_OUTDIR):
 	mkdir -p $(TASK_OUTDIR)
 
-# Verilate the RTL
-$(TASK_OUTDIR)/V$(TOP_MODULE)__ALL.cpp: $(RTL_SRC_FILES) | $(TASK_OUTDIR)
+# Run Verilator and build simulation executable
+$(TASK_OUTDIR)/V$(TOP_MODULE): $(RTL_SRC_FILES) $(CPP_SRC_FILES) | $(TASK_OUTDIR)
 	$(VERILATOR) --cc $(RTL_SRC_FILES) \
 		--top-module $(TOP_MODULE) \
 		--exe $(CPP_SRC_FILES) \
@@ -24,10 +24,11 @@ $(TASK_OUTDIR)/V$(TOP_MODULE)__ALL.cpp: $(RTL_SRC_FILES) | $(TASK_OUTDIR)
 		-CFLAGS "$(CXXFLAGS)" \
 		--output-dir $(TASK_OUTDIR)
 
-# Alias for executable output
-$(TASK_OUTDIR)/$(OUTPUT_EXECUTABLE): $(TASK_OUTDIR)/V$(TOP_MODULE)__ALL.cpp
-	cp $(TASK_OUTDIR)/V$(TOP_MODULE) $(TASK_OUTDIR)/$(OUTPUT_EXECUTABLE)
+# Optional renaming of executable
+$(TASK_OUTDIR)/$(OUTPUT_EXECUTABLE): $(TASK_OUTDIR)/V$(TOP_MODULE)
+	cp $< $@
 
+# Clean rule
 clean:
 	rm -rf $(TASK_OUTDIR)
 

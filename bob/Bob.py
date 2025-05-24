@@ -26,6 +26,7 @@ class Bob:
         self.task_config_parser = None
         self.ip_config: Dict[str, Any] = {}
         self.task_configs: Dict[str, Any] = {}
+        self.build_scripts_dir: Path = Path(self.proj_root) / "build_scripts"
         self.dotbob_dir: Path = Path(self.proj_root) / ".bob"
         self.dotbob_checksum_file: Path = self.dotbob_dir / "checksum.json"
         self.dependency_graph = None
@@ -985,6 +986,81 @@ class Bob:
             self.logger.critical(f"Unexpected error during execute_verilator_verilate() : {e}", exc_info=True)
             return False
 
+    def execute_verilator_tb_compile(self, task_name: str) -> bool:
+        """Execute a tb compilation with verilator, using attributes within env var"""
+        try:
+            if task_name not in self.task_configs:
+                raise ValueError(f"Task '{task_name}' not found in task_configs.")
+            task_config_dict = self.task_configs[task_name].get("task_config_dict", None)
+            if task_config_dict is None:
+                raise KeyError(f"Task '{task_name}' does not have a 'task_config_dict' attribute.")
+            task_type = task_config_dict.get("task_type", None)
+            if task_type is None:
+                raise ValueError(f"Task '{task_name}' does not have a 'task_type' attribute.")
+            if task_type != "verilator_tb_compile":
+                raise ValueError(f"Task '{task_name}' has task type '{task_type}' which is not 'verilator_tb_compile'. Please exeute the correct function to execute build.")
+            # Resolve output_src_files list
+            self.resolve_task_configs_output_src_files(task_name)
+            task_env = self.task_configs[task_name].get("task_env", None)
+            if task_env is None:
+                raise KeyError(f"Task '{task_name}' does not have a 'task_env' attribute.")
+
+            output_dir = self.task_configs[task_name].get("output_dir", None)
+            if output_dir is None:
+                raise KeyError(f"Task '{task_name}' does not have the mandatory attribute 'output_dir'. Aborting execute_verilator_tb_compile().")
+
+            # Prepare log file
+            log_file_path = output_dir / f"{task_name}.log"
+            log_file = self.setup_task_logger(log_file_path)
+
+            # Ensuer that all src_files exist
+            if not self.ensure_src_files_existence(task_name):
+                raise FileNotFoundError(f"Aborting execute_verilator_verilate as one or more source files are missing.")
+
+            # Extract the path of verilator
+            verilator_path = self.tool_config_parser.get_tool_path("verilator")
+            self.logger.debug(f"verilator_path={verilator_path}")
+
+            # Ensure that build_scripts/verilator.mk exists
+            verilator_mk_path = self.build_scripts_dir / "verilator.mk"
+            if not verilator_mk_path.is_file():
+                raise FileNotFoundError(f"Task '{task_name}' is a 'verilator_tb_compile' task type, hence it requires '{verilator_mk_path}' to exist.")
+
+            cmd_verilate_tb_compile_make = [
+                "make",
+                "-C", str(output_dir),
+                "-f", str(verilator_mk_path)
+            ]
+
+            self.logger.info(f"Executing verilator_tb_compile command: {cmd_verilate_tb_compile_make}")
+            print(f"Executing verilator_tb_compile command: {cmd_verilate_tb_compile_make}")
+
+            success = self.run_subprocess(task_name, cmd_verilate_tb_compile_make, task_env, log_file)
+
+            if not success:
+                self.logger.error(f"Verilator tb compilation failed for task '{task_name}'. Check log: {log_file_path}")
+                print(f"Verilator tb compilation failed for task '{task_name}'. Check log: {log_file_path}")
+                return False
+
+            self.logger.info(f"Verilator tb compilation succeeded for task '{task_name}'. Output_dir: {output_dir}")
+            print(f"Verilator tb compilation succeeded for task '{task_name}'. Output_dir: {output_dir}")
+            return True
+
+        except KeyError as ke:
+            self.logger.error(f"KeyError: {ke}")
+            return False
+
+        except FileNotFoundError as fnfe:
+            self.logger.error(f"FileNotFoundError: {fnfe}")
+            return False
+
+        except ValueError as ve:
+            self.logger.error(f"ValueError: {ve}")
+            return False
+
+        except Exception as e:
+            self.logger.critical(f"Unexpected error during execute_verilator_tb_compile() : {e}", exc_info=True)
+            return False
 
     def filter_tasks_to_rebuild(self) -> DiGraph:
         """Returns a filtered dependency graph with only tasks that need to be rebuilt."""

@@ -257,7 +257,7 @@ class TaskConfigParser:
         except Exception as e:
             self.logger.critical(f"Unexpected error during resolve_reference() for task_name='{task_name}', value='{value}' : {e}", exc_info=True)
 
-    def update_task_env(self, task_name: str, env_key: str, env_val: str | list[str], override_env_val: bool = False) -> None:
+    def update_task_env(self, task_name: str, env_key: str, env_val: str | list[str], override_env_val: bool = False, delimiter: str = " ") -> None:
         """Updates the environment variables for a given task in self.task_configs."""
         try:
             if task_name not in self.task_configs:
@@ -271,13 +271,13 @@ class TaskConfigParser:
             existing_val = task_env.get(env_key, None)
 
             if override_env_val or existing_val is None:
-                task_env[env_key] = os.pathsep.join(env_val) if isinstance(env_val, list) else env_val
+                task_env[env_key] = delimiter.join(env_val) if isinstance(env_val, list) else env_val
                 self.logger.debug(f"Task '{task_name}', overriding existing or creating env_key='{env_key}' with env_val='{task_env[env_key]}'")
                 return;
 
             # An existing_val already exists
-            # Attempt to separate str with os.pathsep to see if existing_val is already a list of filepaths
-            existing_val = existing_val.split(os.pathsep)
+            # Attempt to separate str with delimiter to see if existing_val is already a list of filepaths
+            existing_val = existing_val.split(delimiter)
 
             # Extend if env_val is a list, else just append the str
             if isinstance(env_val, list):
@@ -287,8 +287,8 @@ class TaskConfigParser:
                 self.logger.debug(f"Task '{task_name}', appending a single str/filepath env_val = '{env_val}' to env_key = '{env_key}'")
                 existing_val.append(env_val)
 
-            # Add os.pathsep as separators
-            task_env[env_key] = os.pathsep.join(existing_val) if existing_val else ""
+            # Add delimiter as separators
+            task_env[env_key] = delimiter.join(existing_val) if existing_val else ""
             self.logger.debug(f"Task '{task_name}', updated env_key = '{env_key}' with env_val = '{task_env[env_key]}'")
 
         except KeyError as ke:
@@ -735,6 +735,26 @@ class TaskConfigParser:
             resolved_cpp_src_files_list = [file for files in resolved_cpp_src_files.values() for file in files]
             self.update_task_env(task_name, "CPP_SRC_FILES", resolved_cpp_src_files_list)
 
+            # Fetch the 'top_module' from task_config.yaml and set it to task env var 'TOP_MODULE'
+            top_module = task_config_dict.get("top_module", None)
+            if top_module is None:
+                raise KeyError(f"{task_config_file_path} which is a 'verilator_tb_compile' build does not contain a mandatory field 'top_module'.")
+            else:
+                self.update_task_env(task_name, "TOP_MODULE", str(top_module), True)
+
+            # Fetch the 'output_executable' from task_config.yaml and set it to task env var 'TOP_MODULE'
+            output_executable = task_config_dict.get("output_executable", None)
+            if output_executable is None:
+                raise KeyError(f"{task_config_file_path} which is a 'verilator_tb_compile' build does not contain a mandatory field 'output_executable'.")
+            else:
+                self.update_task_env(task_name, "OUTPUT_EXECUTABLE", str(output_executable), True)
+
+            # Assign output_dir to task env var 'TASK_OUTDIR'
+            output_dir = self.task_configs[task_name].get("output_dir", None)
+            if output_dir is None:
+                raise KeyError(f"Task '{task_name}' does not have the mandatory attribute 'output_dir'. Aborting parse_verilator_tb_compile().")
+            else:
+                self.update_task_env(task_name, "TASK_OUTDIR", str(output_dir), True)
 
             # input_src_files consists of internal_src_files and external_src_files
             self.task_configs[task_name].setdefault("input_src_files", internal_src_files + external_src_files)
