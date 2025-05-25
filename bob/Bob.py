@@ -26,7 +26,8 @@ class Bob:
         self.task_config_parser = None
         self.ip_config: Dict[str, Any] = {}
         self.task_configs: Dict[str, Any] = {}
-        self.build_scripts_dir: Path = Path(self.proj_root) / "build_scripts"
+        self.bob_root: Path = Path(__file__).resolve().parent.parent # Specifies the root which contains Bob implementation and its helper classes
+        self.build_scripts_dir: Path = self.bob_root / "build_scripts"
         self.dotbob_dir: Path = Path(self.proj_root) / ".bob"
         self.dotbob_checksum_file: Path = self.dotbob_dir / "checksum.json"
         self.dependency_graph = None
@@ -1299,6 +1300,9 @@ class Bob:
             elif task_type == "verilator_verilate":
                 self.logger.debug(f"Executing execute_verilator_verilate()")
                 success = self.execute_verilator_verilate(task_name)
+            elif task_type == "verilator_tb_compile":
+                self.logger.debug(f"Executing execute_verilator_tb_compile()")
+                success = self.execute_verilator_tb_compile(task_name)
             else:
                 self.logger.error(f"Undefined 'task_type' in task_configs[{task_name}]['task_config_dict'].")
                 success = False

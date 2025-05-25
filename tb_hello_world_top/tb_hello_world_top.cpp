@@ -1,7 +1,7 @@
 #include <iostream>
 #include <memory>
-#include <csdint>
-#include <chrono>
+#include <random>
+#include <cstdint>
 
 #include <verilated.h>
 #include <verilated_vcd_c.h>
@@ -13,8 +13,15 @@ constexpr int TRACE_DEPTH = 5;
 
 class VerilatorSim{
 public:
-    VerilatorSim()
-        : dut(std::make_unique<Vhello_world_top>()), trace(std::make_unique<VerilatedVcdC>()), sim_time(0) {
+    VerilatorSim(int argc, char** argv)
+        : seed(parse_verilator_seed(argc, argv)),
+          rng(seed),
+          dist(0, 255),
+          dut(std::make_unique<Vhello_world_top>()),
+          trace(std::make_unique<VerilatedVcdC>()),
+          sim_time(0) {
+
+        std::cout << "Using simulation seed: " << seed << std::endl;
         Verilated::traceEverOn(true);
         dut->trace(trace.get(), TRACE_DEPTH);
         trace->open("tb_hello_world_top.vcd");
@@ -51,7 +58,11 @@ public:
     }
 
 private:
-    std::unique_ptr<Valu> dut;
+    const uint32_t seed;
+    std::mt19937 rng;  // Mersenne Twister engine
+    std::uniform_int_distribution<uint8_t> dist;  // 0-255 for 8-bit inputs
+
+    std::unique_ptr<Vhello_world_top> dut;
     std::unique_ptr<VerilatedVcdC> trace;
     uint64_t sim_time;
 
@@ -61,11 +72,9 @@ private:
 
     void apply_inputs() {
         // Simple test stimulus
-        // Apply new inputs every few cycles
-        if ((sim_time >> 1) < 5) {
-            dut->a_i = sim_time;
-            dut->b_i = sim_time * 2;
-        }
+        // Apply random values every rising clock edge
+        dut->a_i = dist(rng);
+        dut->b_i = dist(rng);
     }
     void log_outputs() {
           std::cout << "Cycle: " << (sim_time >> 1)
@@ -73,12 +82,38 @@ private:
                     << " | b: " << +dut->b_i
                     << " | c_o: " << +dut->c_o << '\n';
     }
-};
-}
-int main(int argc, char** argv) {
-    Verilated::commandArgs(argc, argv);  // Initialize Verilator CLI args
 
-    VerilatorSim sim;
+    static uint32_t parse_verilator_seed(int argc, char** argv) {
+        constexpr uint32_t MAX_VERILATOR_SEED = 2147483647u; // 2^31 - 1
+        for (int i = 0; i < argc; ++i) {
+            std::string arg(argv[i]);
+            std::string prefix = "+verilator+seed+";
+            if (arg.find(prefix) == 0) {
+                try {
+                    uint64_t val = std::stoull(arg.substr(prefix.length()));
+                    if (val > 0 && val <= MAX_VERILATOR_SEED) {
+                        return static_cast<uint32_t>(val);
+                    } else {
+                        std::cerr << "Warning: Verilator seed out of range (1 to "
+                                  << MAX_VERILATOR_SEED << "): " << val << "\n";
+                    }
+                } catch (...) {
+                    std::cerr << "Warning: Invalid seed format in " << arg << std::endl;
+                }
+            }
+        }
+        // Fallback: generate random seed in valid range
+        std::random_device rd;
+        std::mt19937 gen(rd());
+        std::uniform_int_distribution<uint32_t> dist(1, MAX_VERILATOR_SEED);
+        return dist(gen);
+    }
+};
+
+int main(int argc, char** argv) {
+    Verilated::commandArgs(argc, argv);  // Initialise Verilator CLI args
+
+    VerilatorSim sim(argc, argv);
     sim.run();
 
     return 0;
