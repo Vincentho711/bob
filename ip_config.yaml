@@ -30,8 +30,12 @@ tasks:
   hello_world_top_verilate:
     depends_on: []
 
-  tb_hello_world_top:
+  tb_command_line_parser:
     depends_on: []
+
+  tb_hello_world_top:
+    depends_on:
+      - tb_command_line_parser
 
   # hello_world:
   #   # script: build_scripts/fpga_build.tcl

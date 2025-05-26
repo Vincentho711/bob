@@ -268,6 +268,12 @@ class TaskConfigParser:
 
             task_env = self.task_configs[task_name].setdefault("task_env", os.environ.copy())
 
+            # Normalize env_val to str or list[str]
+            if isinstance(env_val, list):
+                env_val = [str(p) for p in env_val]
+            else:
+                env_val = str(env_val)
+
             existing_val = task_env.get(env_key, None)
 
             if override_env_val or existing_val is None:
@@ -566,10 +572,35 @@ class TaskConfigParser:
                 self.logger.debug(f"{task_config_file_path} which is a 'cpp_compile' build does not contain a 'executable_name' field. Only .o will be generated.")
             elif not isinstance(executable_name, str):
                 raise TypeError(f"{task_config_file_path} field 'executable_name' is not of type str. Currnt type = {type(executable_name)}. Please ensure it is a str.")
-            elif ".exe" not in executable_name:
-                raise ValueError(f"{task_config_file_path} field 'executable_name' does not contain '.exe'. Current executable_name='{executable_name}'. Please ensure that '.exe' exists in the str.")
+            elif  not executable_name.endswith(".exe"):
+                raise ValueError(f"{task_config_file_path} field 'executable_name' does not end with '.exe'. Current executable_name='{executable_name}'. Please ensure that it ends with '.exe'.")
             else:
                 self.update_task_env(task_name, "bob_executable_name", executable_name, True)
+
+            # Fetch 'lib_type' if it exists. If it does, a library of either 'static' or 'dynamic' type will be generated
+            lib_type = task_config_dict.get("lib_type", None)
+            if lib_type is None:
+                self.logger.debug(f"{task_config_file_path} which is a 'cpp_compile' build does not contain a 'lib_type' field. Only .o will be generated.")
+            # Check that executable_name is not defined. If it is, generate executable instead.
+            elif lib_type and executable_name:
+                self.logger.warning(f"Task '{task_name}' which is a 'cpp_compile' build has both 'executable_name' and 'lib_type' defined in '{task_config_file_path}'. Generating executable instead.")
+            elif not isinstance(lib_type, str):
+                raise TypeError(f"{task_config_file_path} field 'lib_type' is not of type str. Current type = {type(lib_type)}. Please ensure that it is a str.")
+            elif lib_type not in ("static", "dynamic"):
+                raise ValueError(f"{task_config_file_path} field 'lib_type' can only be 'static' or 'dynamic'. Currently, lib_type={lib_type}.")
+            else:
+                # Check that the field 'lib_name' also exists
+                lib_name = task_config_dict.get("lib_name", None)
+                if lib_name is None:
+                    raise KeyError(f"Task '{task_name}' which is a 'cpp_comile' build has field 'lib_type' defined but the mandatory field 'lib_name' is missing in {task_config_file_path}.")
+                elif not isinstance(lib_name, str):
+                    raise TypeError(f"{task_config_file_path} field 'lib_name' is not of tpe str. Current type = {type(lib_name)}. Please ensure that it is a str.")
+                elif not lib_name.startswith("lib"):
+                    raise ValueError(f"{task_config_file_path} field 'lib_name' does not start with 'lib'. Current lib_name={lib_name}. Please ensure that it starts with 'lib'.")
+                elif not lib_name.endswith(".a"):
+                    raise ValueError(f"{task_config_file_path} field 'lib_name' does not end with '.a'. Current lib_name={lib_name}. Please ensure that it ends with '.a'.")
+                else:
+                    self.logger.debug(f"Task '{task_name}' will generate a static library called '{lib_name}'.")
 
             # Fetch mandatory key 'src_files'
             unresolved_src_files = task_config_dict.get("src_files", None)
@@ -748,6 +779,44 @@ class TaskConfigParser:
                 raise KeyError(f"{task_config_file_path} which is a 'verilator_tb_compile' build does not contain a mandatory field 'output_executable'.")
             else:
                 self.update_task_env(task_name, "OUTPUT_EXECUTABLE", str(output_executable), True)
+
+            # Fetch 'include_headers_from_tasks' from task_config.yaml if it exists. If it does, add them to the -I option during verilator compilation with task env var 'INCLUDE_DIRS'
+            include_headers_from_tasks = task_config_dict.get("include_headers_from_tasks", [])
+            if not include_headers_from_tasks:
+                self.logger.debug(f"{task_config_file_path} which is a 'verilator_tb_compile' build does not contain a 'include_headers_from_tasks' field. Will not include header dirs during linking.")
+            if isinstance(include_headers_from_tasks, str):
+                include_headers_from_tasks = [include_headers_from_tasks]
+            self.task_configs[task_name].setdefault("include_header_dirs", [])
+            include_header_dirs = self.task_configs[task_name]["include_header_dirs"]
+            for task in include_headers_from_tasks:
+                # Grab the task dir of the corresponding task
+                task_dir = self.task_configs[task].get("task_dir", None)
+                if task_dir is None:
+                    raise KeyError(f"Task '{task}' does not have a 'task_dir' attribute within task_configs.")
+                self.logger.debug(f"Adding '{task_dir}' to include_header_dirs.")
+                include_header_dirs.append(task_dir)
+            self.logger.debug(f"include_header_dirs = {include_header_dirs}. type(include_header_dirs) = {type(include_header_dirs)}")
+            self.update_task_env(task_name, "INCLUDE_DIRS", include_header_dirs, True, " ")
+
+            # Fetch 'external_objects' field from task_config.yaml if it exists and set them to task env var 'EXTERNAL_OBJECTS'
+            unresolved_external_objects = task_config_dict.get("external_objects", [])
+            if not unresolved_external_objects:
+                self.logger.debug(f"{task_config_file_path} which is a 'verilator_tb_compile' build does not contain a 'external_objects' field. Will not link external objects.")
+            if isinstance(unresolved_external_objects, str):
+                unresolved_external_objects = [unresolved_external_objects]
+
+            self.task_configs[task_name].setdefault("external_objects", [])
+            external_objects = self.task_configs[task_name]["external_objects"]
+            for unresolved_external_object in unresolved_external_objects:
+                self.logger.debug(f"unresolved_external_object={unresolved_external_object}")
+                if '.o' not in unresolved_external_object and '.a' not in unresolved_external_object:
+                    raise ValueError(f"Invalid file extension for: {unresolved_external_object}. Must end with '.o' or '.a'")
+                resolved_reference, resolved_type = self.resolve_reference(task_name, unresolved_external_object)
+                self.logger.debug(f"task_name='{task_name}', unresolved_external_object='{unresolved_external_object}', resolved_reference='{resolved_reference}', resolved_type='{resolved_type}'.")
+                if resolved_type != "output":
+                    raise ValueError(f"external object must have resolved_type=output.")
+                external_objects.append(resolved_reference)
+            self.update_task_env(task_name, "EXTERNAL_OBJECTS", external_objects, True, " ")
 
             # Assign output_dir to task env var 'TASK_OUTDIR'
             output_dir = self.task_configs[task_name].get("output_dir", None)

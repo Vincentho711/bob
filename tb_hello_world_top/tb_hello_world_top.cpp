@@ -8,21 +8,24 @@
 
 #include <Vhello_world_top.h>
 
-constexpr uint64_t MAX_SIM_TIME = 20;
+#include "tb_command_line_parser.h"
+
 constexpr int TRACE_DEPTH = 5;
 
 class VerilatorSim{
 public:
-    VerilatorSim(int argc, char** argv)
-        : seed(parse_verilator_seed(argc, argv)),
+    VerilatorSim(uint32_t seed, uint64_t max_sim_time)
+        : seed(seed),
+          max_sim_time(max_sim_time),
           rng(seed),
           dist(0, 255),
-          dut(std::make_unique<Vhello_world_top>()),
-          trace(std::make_unique<VerilatedVcdC>()),
           sim_time(0) {
 
-        std::cout << "Using simulation seed: " << seed << std::endl;
         Verilated::traceEverOn(true);
+        Verilated::randSeed(seed);
+
+        dut = std::make_unique<Vhello_world_top>();  // create DUT after seed is set
+
         dut->trace(trace.get(), TRACE_DEPTH);
         trace->open("tb_hello_world_top.vcd");
 
@@ -33,7 +36,7 @@ public:
     }
 
     void run() {
-        while (sim_time < MAX_SIM_TIME && !Verilated::gotFinish()) {
+        while (sim_time < max_sim_time && !Verilated::gotFinish()) {
             toggle_clock();
 
             if (dut->clk_i == 1) {
@@ -59,11 +62,12 @@ public:
 
 private:
     const uint32_t seed;
+    const uint64_t max_sim_time;
     std::mt19937 rng;  // Mersenne Twister engine
     std::uniform_int_distribution<uint8_t> dist;  // 0-255 for 8-bit inputs
 
     std::unique_ptr<Vhello_world_top> dut;
-    std::unique_ptr<VerilatedVcdC> trace;
+    std::unique_ptr<VerilatedVcdC> trace{std::make_unique<VerilatedVcdC>()};
     uint64_t sim_time;
 
     void toggle_clock() {
@@ -82,38 +86,52 @@ private:
                     << " | b: " << +dut->b_i
                     << " | c_o: " << +dut->c_o << '\n';
     }
-
-    static uint32_t parse_verilator_seed(int argc, char** argv) {
-        constexpr uint32_t MAX_VERILATOR_SEED = 2147483647u; // 2^31 - 1
-        for (int i = 0; i < argc; ++i) {
-            std::string arg(argv[i]);
-            std::string prefix = "+verilator+seed+";
-            if (arg.find(prefix) == 0) {
-                try {
-                    uint64_t val = std::stoull(arg.substr(prefix.length()));
-                    if (val > 0 && val <= MAX_VERILATOR_SEED) {
-                        return static_cast<uint32_t>(val);
-                    } else {
-                        std::cerr << "Warning: Verilator seed out of range (1 to "
-                                  << MAX_VERILATOR_SEED << "): " << val << "\n";
-                    }
-                } catch (...) {
-                    std::cerr << "Warning: Invalid seed format in " << arg << std::endl;
-                }
-            }
-        }
-        // Fallback: generate random seed in valid range
-        std::random_device rd;
-        std::mt19937 gen(rd());
-        std::uniform_int_distribution<uint32_t> dist(1, MAX_VERILATOR_SEED);
-        return dist(gen);
-    }
 };
 
 int main(int argc, char** argv) {
+    Verilated::randReset(2); // Equivalent to setting +verilator+rand+reset+2
     Verilated::commandArgs(argc, argv);  // Initialise Verilator CLI args
 
-    VerilatorSim sim(argc, argv);
+    TbCommandLineParser cli_parser;
+    cli_parser.add_argument("--seed", "Simulation seed (integer in range 1 - 2^31 - 1)", false, true);
+    cli_parser.add_argument("--cycles", "Maximum simulation cycles", false, true);
+    cli_parser.set_default_value("--cycles", "20");
+
+    try {
+        cli_parser.parse(argc, argv);
+    } catch (const std::exception &e) {
+        std::cerr << "Error parsing arguments: " << e.what() << "\n";
+        cli_parser.print_help(argv[0]);
+        return 1;
+    }
+
+    uint32_t seed;
+    if (auto seed_opt = cli_parser.get("--seed"); seed_opt) {
+        try {
+            seed = std::stoul(*seed_opt);
+        } catch (...) {
+            std::cerr << "Invalid seed: " << *seed_opt << "\n";
+            return 1;
+        }
+    } else {
+        std::random_device rd;
+        seed = rd();
+    }
+
+    uint64_t max_cycles = 20;
+    if (auto cycles_opt = cli_parser.get("--cycles"); cycles_opt) {
+        try {
+            max_cycles = std::stoull(*cycles_opt);
+        } catch (...) {
+            std::cerr << "Invalid cycles value: " << *cycles_opt << "\n";
+            return 1;
+        }
+    }
+
+    std::cout << "Using seed: " << seed << "\n";
+    std::cout << "Max cycles: " << max_cycles << "\n";
+
+    VerilatorSim sim(seed, max_cycles);
     sim.run();
 
     return 0;

@@ -10,11 +10,18 @@ CXXFLAGS ?= -O2 -Wall -Werror -Wno-unused
 VERILATOR_TRACE_ARGS ?= --trace
 # Extra args, like assigning random values to 'x' values to catch uninitialised behaviour
 VERILATOR_EXTRA_ARGS ?= --x-assign unique --x-initial unique
+EXTERNAL_OBJECTS ?=
+INCLUDE_DIRS ?=
 
 $(info $$RTL_SRC_FILES is [${RTL_SRC_FILES}])
 $(info $$CPP_SRC_FILES is [${CPP_SRC_FILES}])
 $(info $$VERILATOR_TRACE_ARGS is [${VERILATOR_TRACE_ARGS}])
 $(info $$VERILATOR_EXTRA_ARGS is [${VERILATOR_EXTRA_ARGS}])
+$(info $$EXTERNAL_OBJECTS is [${EXTERNAL_OBJECTS}])
+$(info $$INCLUDE_DIRS is [${INCLUDE_DIRS}])
+
+# Transform INCLUDE_DIRS into proper -I flags
+INCLUDE_FLAGS := $(foreach dir,$(INCLUDE_DIRS),-I$(dir))
 
 # Make sure task_outdir directory exists
 $(TASK_OUTDIR):
@@ -28,7 +35,8 @@ $(TASK_OUTDIR)/V$(TOP_MODULE): $(RTL_SRC_FILES) $(CPP_SRC_FILES) | $(TASK_OUTDIR
 		--build \
 		--Mdir $(TASK_OUTDIR) \
 		$(VERILATOR_TRACE_ARGS) \
-		-CFLAGS "$(CXXFLAGS)"
+		-CFLAGS "$(CXXFLAGS) $(INCLUDE_FLAGS)" \
+		-LDFLAGS "$(EXTERNAL_OBJECTS)"
 
 # Optional renaming of executable
 $(TASK_OUTDIR)/$(OUTPUT_EXECUTABLE): $(TASK_OUTDIR)/V$(TOP_MODULE)

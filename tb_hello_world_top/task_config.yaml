@@ -1,8 +1,12 @@
 task_name: tb_hello_world_top
 task_type: verilator_tb_compile
 top_module: hello_world_top
+include_headers_from_tasks:
+  - "tb_command_line_parser"
 rtl_src_files:
   - "{@input:hello_world_top_verilate:*}"
 cpp_src_files:
   - tb_hello_world_top.cpp
+external_objects:
+  - "{@output:tb_command_line_parser:libtbcli.a}"
 output_executable: tb_hello_world_top.out

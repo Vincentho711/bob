@@ -18,11 +18,10 @@ def test_load_and_validate_tool_config_valid(mock_yaml_loader):
     mock_logger = MagicMock()
 
     with patch("pathlib.Path.exists", return_value=True), \
-        patch("pathlib.Path.is_file", return_value=True), \
         patch("shutil.which", return_value=tool_path):
         tool_config_parser = ToolConfigParser(mock_logger, proj_root="/mock/project")
-        print(tool_config_parser.validated_tools)
-        assert tool_config_parser.validated_tools["gcc"] == tool_path
+        assert tool_config_parser.tool_paths["gcc"] == tool_path
+        assert tool_config_parser.tool_flags["gcc"] == []
 
 def test_load_and_validate_tool_config_missing_tool_config_file():
     """Test loading and validating a tool_config.yaml but it does not exist"""
@@ -40,12 +39,11 @@ def test_load_and_validate_tool_config_invalid_tool_config_file(mock_yaml_loader
     mock_yaml.return_value = {tool: configured_path}
 
     with patch("pathlib.Path.exists", return_value=True), \
-         patch("pathlib.Path.is_file", return_value=False), \
          patch("shutil.which", return_value=None):
         mock_logger = MagicMock()
         tool_config_parser = ToolConfigParser(mock_logger, "/mock/project")
 
-    tool_config_parser.logger.error.assert_called_once_with(f"FileNotFoundError: Tool '{tool}' specified as '{configured_path}' not found in PATH or as an absolute path.")
+    tool_config_parser.logger.error.assert_called_once_with(f"FileNotFoundError: Tool '{tool}' specified as '{configured_path}' not found in PATH.")
 
 def test_get_tool_path_valid_config(mock_yaml_loader):
     """Test getting a valid tool from ToolConfigParser"""
@@ -54,7 +52,6 @@ def test_get_tool_path_valid_config(mock_yaml_loader):
     mock_yaml.return_value = {"gcc": tool_path}
 
     with patch("pathlib.Path.exists", return_value=True), \
-         patch("pathlib.Path.is_file", return_value=True), \
         patch("shutil.which", return_value=tool_path):
         mock_logger = MagicMock()
         tool_config_parser = ToolConfigParser(mock_logger,"/mock/prject")
@@ -85,6 +82,29 @@ def test_get_tool_path_not_found(mock_yaml_loader):
         tool_config_parser.get_tool_path(tool)
         tool_config_parser.logger.error.assert_called_once_with(f"FileNotFoundError: Tool '{tool}' not specified in tool_config.yaml and not found in system PATH.")
 
+def test_get_tool_flags(mock_yaml_loader):
+    """Testing getting all the default flags for a tool"""
+    m, mock_yaml = mock_yaml_loader
+    mock_yaml.return_value = {"verilator": {"path": "/usr/bin/verilator", "default_flags": ["-Wall", "-Wno-fatal"]}}
+
+    with patch("pathlib.Path.exists", return_value=True), \
+         patch("shutil.which", return_value="/usr/bin/verilator"):
+        mock_logger = MagicMock()
+        tool_config_parser = ToolConfigParser(mock_logger, "/mock/project")
+        assert tool_config_parser.get_tool_flags("verilator") == ["-Wall", "-Wno-fatal"]
+
+def test_get_command_with_extra_flags(mock_yaml_loader):
+    """Test get command, verify that default flags and extra flags are there"""
+    m, mock_yaml = mock_yaml_loader
+    mock_yaml.return_value = {"gcc": {"path": "/usr/bin/gcc", "default_flags": ["-O2"]}}
+
+    with patch("pathlib.Path.exists", return_value=True), \
+         patch("shutil.which", return_value="/usr/bin/gcc"):
+        mock_logger = MagicMock()
+        tool_config_parser = ToolConfigParser(mock_logger, "/mock/project")
+        command = tool_config_parser.get_command("gcc", extra_flags=["main.cpp"])
+        assert command == ["/usr/bin/gcc", "-O2", "main.cpp"]
+
 def test_has_tool_configured(mock_yaml_loader):
     """Test has_tool() for a tool that has been configured through tool_config.yaml"""
     m, mock_yaml = mock_yaml_loader
@@ -92,7 +112,6 @@ def test_has_tool_configured(mock_yaml_loader):
     mock_yaml.return_value = {"g++": tool_path}
 
     with patch("pathlib.Path.exists", return_value=True), \
-         patch("pathlib.Path.is_file", return_value=True), \
         patch("shutil.which", return_value=tool_path):
         mock_logger = MagicMock()
         tool_config_parser = ToolConfigParser(mock_logger, "/mock/project")

@@ -1410,3 +1410,152 @@ def test_visualise_dependency_graph(bob_with_sample_dependency_graph_for_visuali
     assert " [deploy]" in output_lines[6]
     assert " [compile_b]" in output_lines[7]
     assert "* [test]" in output_lines[8]
+
+@patch("subprocess.Popen")
+@patch("pathlib.Path.is_dir", return_value = True)
+def test_run_subprocess_success(mock_is_dir, mock_popen):
+    """Test running subprocess and verify that log has been written to the logfile"""
+    mock_logger = MagicMock()
+    bob_instance = Bob(mock_logger)
+    mock_log_file = MagicMock()
+
+    mock_process = MagicMock()
+    mock_process.stdout = ["hello\n", "world\n"]
+    mock_process.wait.return_value = None
+    mock_process.returncode = 0
+    mock_popen.return_value.__enter__.return_value = mock_process
+
+    result = bob_instance.run_subprocess(
+        task_name="test_task",
+        cmd = ["echo", "hello"],
+        env = os.environ.copy(),
+        log_file = mock_log_file,
+        cwd = "/fake/dir"
+    )
+
+    assert result is True
+    assert mock_log_file.write.call_count == 2
+    for call_arg in mock_log_file.write.call_args_list:
+        assert "[20" in call_arg.args[0]  # timestamp check
+
+@patch("pathlib.Path.is_dir", return_value=True)
+def test_run_subprocess_missing_cmd(mock_is_dir):
+    """Test running subpocess but the command to run is not specified"""
+    mock_logger = MagicMock()
+    bob_instance = Bob(mock_logger)
+    mock_log_file = MagicMock()
+
+    result = bob_instance.run_subprocess(
+        task_name="test_missing_cmd",
+        cmd=None,
+        env=os.environ.copy(),
+        log_file=mock_log_file,
+        cwd="/fake/dir"
+    )
+
+    assert result is False
+    mock_logger.error.assert_called_once()
+    assert "cmd" in mock_logger.error.call_args[0][0]
+
+@patch("subprocess.Popen", side_effect=OSError("Subprocess failed"))
+@patch("pathlib.Path.is_dir", return_value=True)
+def test_run_subprocess_subprocess_failure(mock_is_dir, mock_popen):
+    """Test running a subprocess which fails, verify the correct return and logging when the process failed."""
+    mock_logger = MagicMock()
+    bob_instance = Bob(mock_logger)
+    mock_log_file = MagicMock()
+
+    result = bob_instance.run_subprocess(
+        task_name="test_failure",
+        cmd=["nonexistent_command"],
+        env=os.environ.copy(),
+        log_file=mock_log_file,
+        cwd="/fake/dir"
+    )
+
+    assert result is False
+    mock_logger.critical.assert_called_once()
+    assert "Subprocess failed" in str(mock_logger.critical.call_args[0])
+
+@patch("pathlib.Path.is_dir", return_value=False)
+def test_run_subprocess_invalid_cwd(mock_is_dir):
+    """Test running a subprocess but the cwd(output_dir) does not exists"""
+    mock_logger = MagicMock()
+    bob_instance = Bob(mock_logger)
+    mock_log_file = MagicMock()
+
+    result = bob_instance.run_subprocess(
+        task_name="test_invalid_cwd",
+        cmd=["echo", "test"],
+        env=os.environ.copy(),
+        log_file=mock_log_file,
+        cwd="/invalid/dir"
+    )
+
+    assert result is False
+    mock_logger.error.assert_called_once()
+    assert "cwd" in mock_logger.error.call_args[0][0]
+
+@patch("subprocess.Popen")
+@patch("pathlib.Path.is_dir", return_value=True)
+def test_run_subprocess_uses_cwd(mock_is_dir, mock_popen):
+    """Test running a subprocess and verify that cwd has been passed into the subprocess.Popen correctly"""
+    mock_logger = MagicMock()
+    bob_instance = Bob(mock_logger)
+    mock_log_file = MagicMock()
+
+    mock_process = MagicMock()
+    mock_process.stdout = ["output\n"]
+    mock_process.wait.return_value = None
+    mock_process.returncode = 0
+    mock_popen.return_value.__enter__.return_value = mock_process
+
+    fake_cwd = "/some/valid/path"
+    result = bob_instance.run_subprocess(
+        task_name="cwd_test",
+        cmd=["echo", "test"],
+        env=os.environ.copy(),
+        log_file=mock_log_file,
+        cwd=fake_cwd
+    )
+
+    assert result is True
+    assert mock_popen.call_args[1]["cwd"] == fake_cwd
+
+@patch("subprocess.Popen")
+@patch("pathlib.Path.is_dir", return_value=True)
+def test_build_command_generates_output_file(mock_is_dir, mock_popen):
+    """Simulate a build command that generates a file in output_dir, verify it is correctly directed there."""
+    mock_logger = MagicMock()
+    bob_instance = Bob(mock_logger)
+    mock_log_file = MagicMock()
+
+    output_file_name = "output_file.txt"
+    output_dir = Path("/mock/output/dir")
+    output_file = output_dir / output_file_name
+
+    # Simulate the build process output
+    mock_process = MagicMock()
+    mock_process.stdout = ["Compiling...\n", "Done.\n"]
+    mock_process.wait.return_value = None
+    mock_process.returncode = 0
+    mock_popen.return_value.__enter__.return_value = mock_process
+
+    # Patch 'exists' only on this output_file instance
+    with patch("pathlib.Path.exists", return_value=True):
+        result = bob_instance.run_subprocess(
+            task_name="build_task",
+            cmd=["touch", str(output_file_name)],  # Simulated build command
+            env=os.environ.copy(),
+            log_file=mock_log_file,
+            cwd=str(output_dir)
+        )
+
+        assert result is True
+
+        # Check if subprocess was called with correct cwd
+        _, kwargs = mock_popen.call_args
+        assert kwargs["cwd"] == str(output_dir)
+
+        # Now check that the expected file "exists" after the build (via mock)
+        assert output_file.exists()

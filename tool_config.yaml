@@ -1,3 +1,15 @@
-gcc: /usr/bin/gcc
-g++: /usr/bin/g++
-verilator: /opt/homebrew/bin/verilator
+gcc:
+  path: /usr/bin/gcc
+  default_flags : ["-Wall", -Wextra]
+
+g++:
+  path: /usr/bin/g++
+  default_flags : ["-Wall", "-Wextra", "-std=c++17"]
+
+verilator:
+  path: /opt/homebrew/bin/verilator
+  default_flags : []
+
+ar:
+  path: /usr/bin/ar
+  default_flags : []

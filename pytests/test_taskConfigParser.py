@@ -892,6 +892,25 @@ def test_update_task_env_existing_val_is_str_override(tmp_path: Path):
     assert task_config_parser.task_configs["valid_task"] == expected_env_dict
     task_config_parser.logger.debug.assert_called_once_with(f"Task '{task_name}', overriding existing or creating env_key='{env_key}' with env_val='{expected_env_dict["task_env"]["env_key"]}'")
 
+def test_update_task_env_handles_path_objects(tmp_path: Path):
+    """Test that Path objects in env_val are converted to strings properly."""
+    task_name = "valid_task"
+    env_key = "env_key"
+    env_val = [Path("/some/path/to/a.cpp"), Path("/some/path/to/b.cpp")]
+
+    mock_logger = MagicMock()
+    task_config_parser = TaskConfigParser(mock_logger, str(tmp_path))
+    task_config_parser.task_configs[task_name] = {
+        "task_env" : {'env_key' : "/existing/path"}
+    }
+
+    task_config_parser.update_task_env(task_name, env_key, env_val, False, ":")
+
+    expected_val = "/existing/path:/some/path/to/a.cpp:/some/path/to/b.cpp"
+    actual_val = task_config_parser.task_configs[task_name]["task_env"][env_key]
+
+    assert actual_val == expected_val
+
 def test_validate_initial_task_config_dict_no_task_name(tmp_path: Path):
     """Test validating a task config which does not contain a valid task_name"""
     task_name = "invalid_task"

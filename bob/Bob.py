@@ -674,10 +674,16 @@ class Bob:
             self.logger.critical(f"Unexpected error during update_task_env() for task_name = '{task_name}' : {e}", exc_info=True)
             return False
 
-    def run_subprocess(self, task_name, cmd, env, log_file):
+    def run_subprocess(self, task_name, cmd, env, log_file, cwd = None) -> bool:
         """Executes a command as a subprocess and logs output line-by-line."""
         try:
-            with subprocess.Popen(cmd, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True) as process:
+            if cmd is None:
+                raise ValueError(f"Mandatory argument 'cmd' for run_subprocess() of task '{task_name}' has not been defined.")
+
+            if cwd is None or not Path(cwd).is_dir():
+                raise ValueError("Mandatory argument 'cwd' for run_subprocess() of task '{task_name}' has not been defined or the cwd doesn't exist.")
+
+            with subprocess.Popen(cmd, env=env, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True) as process:
                 for line in process.stdout:
                     timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                     formatted_line = f"[{timestamp}] {line.strip()}"
@@ -687,8 +693,13 @@ class Bob:
                 process.wait()
                 return process.returncode == 0
 
+        except ValueError as ve:
+            self.logger.error(f"ValueError : {ve}")
+            return False
+
         except Exception as e:
             self.logger.critical(f"Unexpected error during run_subprocess() for task_name = '{task_name}' : {e}", exc_info=True)
+            return False
 
     def execute_c_compile(self, task_name: str) -> bool:
         """Execute a C compile with gcc, using attributes within env var"""
@@ -747,9 +758,9 @@ class Bob:
                 self.logger.debug(f"Task '{task_name}' has include_header_dirs='{include_header_dirs}'")
                 self.update_task_env(task_name, "C_COMPILE_INCLUDE_HEADER_DIRS", str(include_header_dirs))
 
-            # Extract the path of gcc
-            gcc_path = self.tool_config_parser.get_tool_path("gcc")
-            self.logger.debug(f"gcc_path={gcc_path}")
+            # Extract the path of gcc, including default flags with get_command()
+            gcc_cmd_prefix = self.tool_config_parser.get_command("gcc")
+            self.logger.debug(f"gcc_cmd_prefix={gcc_cmd_prefix}")
 
             # Execute gcc compile
             # Compile each .c file to .o file
@@ -761,13 +772,13 @@ class Bob:
                     continue
 
                 obj_file = os.path.join(output_dir, os.path.basename(src).replace(".c", ".o"))
-                cmd_compile = [gcc_path, "-c", src, "-o", obj_file]
+                cmd_compile = gcc_cmd_prefix + ["-c", src, "-o", obj_file]
                 if include_header_dirs:
                     for inc_dir in include_header_dirs:
                         cmd_compile.extend(["-I", inc_dir])
                 self.logger.info(f"Executing c_compile command: {cmd_compile}")
                 print(f"Executing c_compile command: {cmd_compile}")
-                success = self.run_subprocess(task_name, cmd_compile, task_env, log_file)
+                success = self.run_subprocess(task_name, cmd_compile, task_env, log_file, output_dir)
 
                 if not success:
                     self.logger.error(f"GCC compilation failed for file '{src}'. Check log: {log_file_path}")
@@ -782,10 +793,10 @@ class Bob:
             # If 'executable_name' exists within task_config.yaml, then link object files into an executable
             # Link all .o files, including external ones) to create the final executable
             if executable_name:
-                cmd_link = [gcc_path] + object_files + external_objects + ["-o", executable_path]
+                cmd_link = gcc_cmd_prefix + object_files + external_objects + ["-o", executable_path]
                 self.logger.info(f"Executing c_link command: {cmd_link}")
                 print(f"Executing c_link command: {cmd_link}")
-                success = self.run_subprocess(task_name, cmd_link, task_env, log_file)
+                success = self.run_subprocess(task_name, cmd_link, task_env, log_file, output_dir)
 
                 if not success:
                     self.logger.error(f"GCC compilation failed for task '{task_name}'. Check log: {log_file_path}")
@@ -841,10 +852,23 @@ class Bob:
             self.logger.debug(f"Task '{task_name}' has src_files={src_files}")
             self.update_task_env(task_name, "CPP_COMPILE_SRC_FILES", src_files)
             executable_name = task_config_dict.get("executable_name", None)
+            lib_type = task_config_dict.get("lib_type", None)
+
+            generate_executable = False
+            generate_static_lib = False
+            generate_dynamic_lib = False
+
             if executable_name:
                 self.update_task_env(task_name, "CPP_COMPILE_EXECUTABLE_NAME", executable_name)
                 executable_path = output_dir / executable_name
                 self.update_task_env(task_name, "CPP_COMPILE_EXECUTABLE_PATH", executable_path)
+                generate_executable = True
+            elif lib_type == "static":
+                generate_static_lib = True
+                static_lib_name = task_config_dict.get("lib_name", None)
+            elif lib_type == "dynamic":
+                generate_dynamic_lib = True
+                dynamic_lib_name = task_config_dict.get("lib_name", None)
 
             # Check if we have external objects
             external_objects = self.task_configs[task_name].get("external_objects", [])
@@ -858,9 +882,9 @@ class Bob:
                 self.logger.debug(f"Task '{task_name}' has include_header_dirs='{include_header_dirs}'")
                 self.update_task_env(task_name, "CPP_COMPILE_INCLUDE_HEADER_DIRS", str(include_header_dirs))
 
-            # Extract the path of gcc
-            gpp_path = self.tool_config_parser.get_tool_path("g++")
-            self.logger.debug(f"gpp_path={gpp_path}")
+            # Extract the path of gcc, including default flags
+            gpp_cmd_prefix = self.tool_config_parser.get_command("g++")
+            self.logger.debug(f"gpp_cmd_prefix={gpp_cmd_prefix}")
 
             # Execute g++ compile
             # Compile each .cpp file to .o file
@@ -872,13 +896,13 @@ class Bob:
                     continue
 
                 obj_file = os.path.join(output_dir, os.path.basename(src).replace(".cpp", ".o"))
-                cmd_compile = [gpp_path, "-c", src, "-o", obj_file]
+                cmd_compile = gpp_cmd_prefix + ["-c", src, "-o", obj_file]
                 if include_header_dirs:
                     for inc_dir in include_header_dirs:
                         cmd_compile.extend(["-I", inc_dir])
                 self.logger.info(f"Executing cpp_compile command: {cmd_compile}")
                 print(f"Executing cpp_compile command: {cmd_compile}")
-                success = self.run_subprocess(task_name, cmd_compile, task_env, log_file)
+                success = self.run_subprocess(task_name, cmd_compile, task_env, log_file, output_dir)
 
                 if not success:
                     self.logger.error(f"G++ compilation failed for file '{src}'. Check log: {log_file_path}")
@@ -891,12 +915,12 @@ class Bob:
             print(f"G++ compilation succeeded for task '{task_name}'. Output: {object_files}")
 
             # If 'executable_name' exists within task_config.yaml, then link object files into an executable
-            # Link all .o files, including external ones) to create the final executable
-            if executable_name:
-                cmd_link = [gpp_path] + object_files + external_objects + ["-o", executable_path]
+            # Link all .o files, including external ones to create the final executable
+            if generate_executable:
+                cmd_link = gpp_cmd_prefix + object_files + external_objects + ["-o", executable_path]
                 self.logger.info(f"Executing cpp_link command: {cmd_link}")
                 print(f"Executing cpp_link command: {cmd_link}")
-                success = self.run_subprocess(task_name, cmd_link, task_env, log_file)
+                success = self.run_subprocess(task_name, cmd_link, task_env, log_file, output_dir)
 
                 if not success:
                     self.logger.error(f"G++ compilation failed for task '{task_name}'. Check log: {log_file_path}")
@@ -905,6 +929,25 @@ class Bob:
 
                 self.logger.info(f"G++ link succeeded for task '{task_name}'. Output: {executable_path}")
                 print(f"G++ link succeeded for task '{task_name}'. Output: {executable_path}")
+            # If 'lib_type' exists, then generate static or dynamic library
+            elif generate_static_lib:
+                # Extract the path of ar, including default flags
+                ar_cmd_prefix = self.tool_config_parser.get_command("ar")
+                self.logger.debug(f"ar_cmd_prefix={ar_cmd_prefix}")
+
+                cmd_archive = ar_cmd_prefix +  ["rcs"] + [static_lib_name] + object_files + external_objects
+                self.logger.info(f"Executing cmd_archive command : {cmd_archive}")
+                print(f"Executing cmd_archive command : {cmd_archive}")
+                success = self.run_subprocess(task_name, cmd_archive, task_env, log_file, output_dir)
+
+                if not success:
+                    self.logger.error(f"G++ compilation failed for task '{task_name}'. Static lib '{static_lib_name}' has not been generated. Check log: {log_file_path}")
+                    print(f"G++ compilation failed for task '{task_name}'. Static lib '{static_lib_name}' has not been generated. Check log: {log_file_path}")
+                    return False
+
+                self.logger.info(f"G++ compilation succeeded for task '{task_name}'. Generated static lib '{static_lib_name}'. Output: {str(Path(output_dir) / static_lib_name)}")
+                print(f"G++ compilation succeeded for task '{task_name}'. Generated static lib '{static_lib_name}'. Output: {str(Path(output_dir) / static_lib_name)}")
+
             return True
 
         except ValueError as ve:
@@ -957,18 +1000,18 @@ class Bob:
                 self.logger.debug(f"Using top_module = '{top_module}' for task '{task_name}'.")
                 self.update_task_env(task_name, "VERILATOR_VERILATE_TOP_MODULE", top_module)
 
-            # Extract the path of verilator
-            verilator_path = self.tool_config_parser.get_tool_path("verilator")
+            # Extract the path of verilator, including default flags
+            verilator_path = self.tool_config_parser.get_command("verilator")
             self.logger.debug(f"gpp_path={verilator_path}")
 
             # Execute 'verilator -cc {VERILATOR_VERILATE_SRC_FILES} --Mdir {output_dir} [--top-module {VERILATOR_VERILATE_TOP_MODULE}]'
-            cmd_verilate = [verilator_path, "--cc", *src_files, "--Mdir", output_dir]
+            cmd_verilate = verilator_path + ["--cc", *src_files, "--Mdir", output_dir]
             if top_module:
                 cmd_verilate.extend(["--top-module", top_module])
 
             self.logger.info(f"Executing verilator_verilate command: {cmd_verilate}")
             print(f"Executing verilator_verilate command: {cmd_verilate}")
-            success = self.run_subprocess(task_name, cmd_verilate, task_env, log_file)
+            success = self.run_subprocess(task_name, cmd_verilate, task_env, log_file, output_dir)
 
             if not success:
                 self.logger.error(f"Verilator verilation failed for task '{task_name}'. Check log: {log_file_path}")
@@ -1018,8 +1061,8 @@ class Bob:
             if not self.ensure_src_files_existence(task_name):
                 raise FileNotFoundError(f"Aborting execute_verilator_verilate as one or more source files are missing.")
 
-            # Extract the path of verilator
-            verilator_path = self.tool_config_parser.get_tool_path("verilator")
+            # Extract the path of verilator, including default flags
+            verilator_path = self.tool_config_parser.get_command("verilator")
             self.logger.debug(f"verilator_path={verilator_path}")
 
             # Ensure that build_scripts/verilator.mk exists
@@ -1036,7 +1079,7 @@ class Bob:
             self.logger.info(f"Executing verilator_tb_compile command: {cmd_verilate_tb_compile_make}")
             print(f"Executing verilator_tb_compile command: {cmd_verilate_tb_compile_make}")
 
-            success = self.run_subprocess(task_name, cmd_verilate_tb_compile_make, task_env, log_file)
+            success = self.run_subprocess(task_name, cmd_verilate_tb_compile_make, task_env, log_file, output_dir)
 
             if not success:
                 self.logger.error(f"Verilator tb compilation failed for task '{task_name}'. Check log: {log_file_path}")
