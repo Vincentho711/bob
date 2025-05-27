@@ -33,9 +33,13 @@ tasks:
   tb_command_line_parser:
     depends_on: []
 
+  tb_verification_framework:
+    depends_on: []
+
   tb_hello_world_top:
     depends_on:
       - tb_command_line_parser
+      - tb_verification_framework
 
   # hello_world:
   #   # script: build_scripts/fpga_build.tcl

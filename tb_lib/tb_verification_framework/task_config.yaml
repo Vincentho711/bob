@@ -1,0 +1,7 @@
+task_name : "tb_verification_framework"
+task_type : "cpp_compile"
+lib_type : "static"
+lib_name : "libtbverifframework.a"
+src_files:
+  - "tb_verification_framework.cpp"
+  - "tb_verification_framework.h"
