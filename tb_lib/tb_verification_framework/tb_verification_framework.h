@@ -4,6 +4,7 @@
 #include <iostream>
 #include <string>
 #include <vector>
+#include <chrono>
 #include <unordered_set>
 #include <iomanip>
 #include <sstream>
@@ -75,6 +76,8 @@ public:
     void check_adder(uint8_t a, uint8_t b, uint16_t output, uint64_t cycle);
     void set_pipeline_delay(uint32_t delay);
     void final_report();
+    void set_simulation_info(uint32_t seed, uint64_t max_cycles, const std::string& vcd_file = "");
+    void start_test_timer();
     bool simulation_passed() const;
 
 private:
@@ -82,6 +85,13 @@ private:
     CoverageTracker coverage;
     uint32_t pipeline_delay;
     bool pipeline_flushed;
+    uint32_t sim_seed;
+    uint64_t max_sim_cycles;
+    std::string vcd_filename;
+    uint64_t total_cycles_run;
+    std::chrono::system_clock::time_point test_start_time;
+    std::chrono::system_clock::time_point test_end_time;
+    bool test_timer_started;
 
     void setup_coverage_points();
 };

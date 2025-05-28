@@ -1,5 +1,7 @@
 #include "tb_verification_framework.h"
 
+#include <chrono>
+
 // ============================================================================
 // BaseChecker Implementation
 // ============================================================================
@@ -146,13 +148,24 @@ std::pair<uint8_t, uint8_t> CoverageTracker::decode_values(uint16_t encoded) con
 // ============================================================================
 
 VerificationEnvironment::VerificationEnvironment()
-    : adder_checker(), coverage("Adder Coverage"), pipeline_delay(2), pipeline_flushed(false) {
+    : adder_checker(), coverage("Adder Coverage"), pipeline_delay(2), pipeline_flushed(false), sim_seed(0), max_sim_cycles(0), vcd_filename(""),total_cycles_run(0), test_timer_started(false)  {
     setup_coverage_points();
 }
 
 void VerificationEnvironment::set_pipeline_delay(uint32_t delay) {
     pipeline_delay = delay;
     pipeline_flushed = false;
+}
+
+void VerificationEnvironment::set_simulation_info(uint32_t seed, uint64_t max_cycles, const std::string& vcd_file) {
+    sim_seed = seed;
+    max_sim_cycles = max_cycles;
+    vcd_filename = vcd_file;
+}
+
+void VerificationEnvironment::start_test_timer() {
+    test_start_time = std::chrono::system_clock::now();
+    test_timer_started = true;
 }
 
 void VerificationEnvironment::check_adder(uint8_t a, uint8_t b, uint16_t output, uint64_t cycle) {
@@ -170,9 +183,31 @@ void VerificationEnvironment::check_adder(uint8_t a, uint8_t b, uint16_t output,
     adder_checker.set_inputs(a, b, output, cycle);
     adder_checker.check();
     coverage.hit(a, b);
+    total_cycles_run = cycle;
 }
 
 void VerificationEnvironment::final_report() {
+    auto test_end_time = std::chrono::system_clock::now();
+
+    std::cout << "\n" << std::string(60, '=') << std::endl;
+    std::cout << "SIMULATION DEBUG INFORMATION" << std::endl;
+    std::cout << std::string(60, '=') << std::endl;
+    std::cout << "Seed Used: " << sim_seed << std::endl;
+    std::cout << "Max Cycles Configured: " << max_sim_cycles << std::endl;
+    std::cout << "Actual Cycles Run: " << total_cycles_run << std::endl;
+    std::cout << "Pipeline Delay: " << pipeline_delay << " cycles" << std::endl;
+    if (!vcd_filename.empty()) {
+        std::cout << "Waveform File: " << vcd_filename << std::endl;
+    }
+
+    // Show test execution time
+    if (test_timer_started) {
+        auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(test_end_time - test_start_time);
+        std::cout << "Test Execution Time: " << duration.count() << " ms" << std::endl;
+    } else {
+        std::cout << "Test Execution Time: Not measured (timer not started)" << std::endl;
+    }
+
     std::cout << "\n" << std::string(60, '=') << std::endl;
     std::cout << "FINAL VERIFICATION REPORT" << std::endl;
     std::cout << std::string(60, '=') << std::endl;

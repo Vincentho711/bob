@@ -41,6 +41,7 @@ public:
 
     void run() {
         uint64_t cycle_count = 0;
+        ve.start_test_timer();
 
         while (sim_time < max_sim_time && !Verilated::gotFinish()) {
             toggle_clock();
@@ -66,7 +67,10 @@ public:
             ++sim_time;
         }
 
-        std::cout << "Simulation completed after" << cycle_count << " cycles." << std::endl;
+        std::cout << "Simulation completed after " << cycle_count << " cycles." << std::endl;
+
+        // Set simulation info for debug reporting
+        ve.set_simulation_info(seed, max_sim_time / 2, "tb_hello_world_top.vcd");
 
         // Generate final verification report
         ve.final_report();
