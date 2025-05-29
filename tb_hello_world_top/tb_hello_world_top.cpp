@@ -9,7 +9,7 @@
 
 #include <Vhello_world_top.h>
 
-#include "tb_command_line_parser.h"
+#include "command_line_parser.h"
 #include "tb_verification_framework.h"
 
 constexpr int TRACE_DEPTH = 5;
@@ -192,7 +192,7 @@ int main(int argc, char** argv) {
     Verilated::randReset(2); // Equivalent to setting +verilator+rand+reset+2
     Verilated::commandArgs(argc, argv);  // Initialise Verilator CLI args
 
-    TbCommandLineParser cli_parser;
+    CommandLineParser cli_parser;
     cli_parser.add_argument("--seed", "Simulation seed (integer in range 1 - 2^31 - 1)", false, true);
     cli_parser.add_argument("--cycles", "Maximum simulation cycles", false, true);
     cli_parser.set_default_value("--cycles", "50");

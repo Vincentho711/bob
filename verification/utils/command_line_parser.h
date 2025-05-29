@@ -1,5 +1,5 @@
-#ifndef TB_COMMAND_LINE_PARSER_HPP
-#define TB_COMMAND_LINE_PARSER_HPP
+#ifndef COMMAND_LINE_PARSER_HPP
+#define COMMAND_LINE_PARSER_HPP
 
 #include <string>
 #include <unordered_map>
@@ -7,7 +7,7 @@
 #include <optional>
 #include <variant>
 
-class TbCommandLineParser {
+class CommandLineParser {
 public:
     struct Argument {
         std::string name;
@@ -17,7 +17,7 @@ public:
         std::optional<std::string> default_value;
     };
 
-    TbCommandLineParser();
+    CommandLineParser();
 
     void add_argument(const std::string& name, const std::string& help = "",
                       bool required = false, bool takes_value = true);
@@ -39,4 +39,4 @@ private:
     void validate_args() const;
 };
 
-#endif // TB_COMMAND_LINE_PARSER_HPP
+#endif // COMMAND_LINE_PARSER_HPP

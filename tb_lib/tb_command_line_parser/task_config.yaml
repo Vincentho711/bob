@@ -1,7 +1,0 @@
-task_name : "tb_command_line_parser"
-task_type : "cpp_compile"
-lib_type : "static"
-lib_name : "libtbcli.a"
-src_files:
-  - "tb_command_line_parser.cpp"
-  - "tb_command_line_parser.h"

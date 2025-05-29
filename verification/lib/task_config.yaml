@@ -1,0 +1,7 @@
+task_name : "verification_lib"
+task_type : "cpp_compile"
+lib_type : "static"
+lib_name : "lib_verification_lib.a"
+src_files:
+  - "transaction.cpp"
+  - "transaction.h"

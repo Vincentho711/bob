@@ -1,20 +1,20 @@
-#include "tb_command_line_parser.h"
+#include "command_line_parser.h"
 
 #include <iostream>
 #include <sstream>
 #include <stdexcept>
 #include <algorithm>
 
-TbCommandLineParser::TbCommandLineParser() {
+CommandLineParser::CommandLineParser() {
     add_argument("--help", "Show this help message", false, false);
 }
 
-void TbCommandLineParser::add_argument(const std::string& name, const std::string& help,
+void CommandLineParser::add_argument(const std::string& name, const std::string& help,
                                        bool required, bool takes_value) {
     arg_defs[name] = {name, help, required, takes_value, std::nullopt};
 }
 
-void TbCommandLineParser::set_default_value(const std::string& name, const std::string& default_val) {
+void CommandLineParser::set_default_value(const std::string& name, const std::string& default_val) {
     auto it = arg_defs.find(name);
     if (it == arg_defs.end()) {
         throw std::runtime_error("Attempt to set default for undefined argument: " + name);
@@ -22,7 +22,7 @@ void TbCommandLineParser::set_default_value(const std::string& name, const std::
     it->second.default_value = default_val;
 }
 
-void TbCommandLineParser::parse(int argc, char** argv) {
+void CommandLineParser::parse(int argc, char** argv) {
     for (int i = 1; i < argc; ++i) {
         std::string token = argv[i];
 
@@ -49,7 +49,7 @@ void TbCommandLineParser::parse(int argc, char** argv) {
     validate_args();
 }
 
-void TbCommandLineParser::validate_args() const {
+void CommandLineParser::validate_args() const {
     for (const auto& [name, arg] : arg_defs) {
         bool has_val = arg_values.count(name) > 0 || flags.end() != std::find(flags.begin(), flags.end(), name);
         if (arg.required && !has_val && !arg.default_value.has_value()) {
@@ -58,7 +58,7 @@ void TbCommandLineParser::validate_args() const {
     }
 }
 
-std::optional<std::string> TbCommandLineParser::get(const std::string& name) const noexcept {
+std::optional<std::string> CommandLineParser::get(const std::string& name) const noexcept {
     if (auto it = arg_values.find(name); it != arg_values.end()) {
         return it->second;
     }
@@ -68,11 +68,11 @@ std::optional<std::string> TbCommandLineParser::get(const std::string& name) con
     return std::nullopt;
 }
 
-bool TbCommandLineParser::has(const std::string& name) const noexcept {
+bool CommandLineParser::has(const std::string& name) const noexcept {
     return std::find(flags.begin(), flags.end(), name) != flags.end();
 }
 
-void TbCommandLineParser::print_help(const std::string& program_name) const {
+void CommandLineParser::print_help(const std::string& program_name) const {
     std::cout << "Usage: " << program_name << " [options]\n\nOptions:\n";
     for (const auto& [name, arg] : arg_defs) {
         std::cout << "  " << name

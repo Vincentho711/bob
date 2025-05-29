@@ -30,15 +30,16 @@ tasks:
   hello_world_top_verilate:
     depends_on: []
 
-  tb_command_line_parser:
+  verification_lib:
     depends_on: []
 
-  tb_verification_framework:
+  verification_utils:
     depends_on: []
 
   tb_hello_world_top:
     depends_on:
-      - tb_command_line_parser
+      - verification_lib
+      - verification_utils
       - tb_verification_framework
 
   # hello_world:
