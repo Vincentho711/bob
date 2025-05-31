@@ -68,12 +68,37 @@ private:
     std::pair<uint8_t, uint8_t> decode_values(uint16_t encoded) const;
 };
 
+// Transaction tracker for monitoring test stimulus
+class TransactionTracker {
+public:
+    enum class TransactionType {
+        CORNER_CASE,
+        RANDOM,
+        DIRECTED
+    };
+
+    TransactionTracker(const std::string& name);
+
+    void add_transaction(const std::string& txn_name, TransactionType type);
+    void report() const;
+    uint32_t get_total_count() const;
+    uint32_t get_corner_case_count() const;
+
+private:
+    std::string tracker_name;
+    std::vector<std::string> transaction_names;
+    uint32_t corner_case_count;
+    uint32_t random_count;
+    uint32_t directed_count;
+};
+
 // Verification environment that manages all checkers
 class VerificationEnvironment {
 public:
     VerificationEnvironment();
 
     void check_adder(uint8_t a, uint8_t b, uint16_t output, uint64_t cycle);
+    void add_transaction(const std::string& txn_name, const std::string& txn_type = "");
     void set_pipeline_delay(uint32_t delay);
     void final_report();
     void set_simulation_info(uint32_t seed, uint64_t max_cycles, const std::string& vcd_file = "");
@@ -83,6 +108,7 @@ public:
 private:
     AdderChecker adder_checker;
     CoverageTracker coverage;
+    TransactionTracker transaction_tracker;
     uint32_t pipeline_delay;
     bool pipeline_flushed;
     uint32_t sim_seed;

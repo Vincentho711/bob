@@ -8,6 +8,7 @@ include_headers_from_tasks:
 rtl_src_files:
   - "{@input:hello_world_top_verilate:*}"
 cpp_src_files:
+  - adder_verification/adder_transaction.cpp
   - tb_hello_world_top.cpp
 external_objects:
   - "{@output:verification_lib:lib_verification_lib.a}"

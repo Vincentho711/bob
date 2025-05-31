@@ -3,6 +3,7 @@
 #include <random>
 #include <cstdint>
 #include <array>
+#include <queue>
 
 #include <verilated.h>
 #include <verilated_vcd_c.h>
@@ -11,6 +12,7 @@
 
 #include "command_line_parser.h"
 #include "tb_verification_framework.h"
+#include "adder_verification/adder_transaction.h"
 
 constexpr int TRACE_DEPTH = 5;
 
@@ -21,7 +23,8 @@ public:
           max_sim_time(max_sim_time),
           rng(seed),
           dist(0, 255),
-          sim_time(0) {
+          sim_time(0),
+          current_txn_index(0) {
 
         Verilated::traceEverOn(true);
         Verilated::randSeed(seed);
@@ -36,8 +39,39 @@ public:
         dut->a_i = 0;
         dut->b_i = 0;
 
-        std::cout << "Verification environment initialised." << std::endl;
+        // Generate transactions for stimulus
+        generate_transactions();
+
+        // Register all transactions with the verification environment
+        for (const auto& txn : transactions) {
+            ve.add_transaction(txn->get_name());
+        }
+
+        std::cout << "Verification environment initialised with " << transactions.size() << std::endl;
     }
+
+    void check_design(uint64_t current_cycle) {
+    // The design has a 2-cycle delay (adder + output register)
+    // So output at cycle N corresponds to inputs from cycle N-2
+    if (current_cycle > 2 && input_history.size() >= 2) {
+        size_t history_index = input_history.size() - 2;  // 2 cycles ago
+        const auto& hist = input_history[history_index];
+
+        if (hist.txn) {
+            // Verify that the stored expected result matches our calculation
+            uint16_t expected = hist.txn->get_expected_result();
+            if (expected != (static_cast<uint16_t>(hist.a) + static_cast<uint16_t>(hist.b))) {
+                std::cout << "[WARNING] Transaction expected result mismatch!" << std::endl;
+            }
+
+            std::cout << "[VERIFY] Checking transaction: " << hist.txn->get_name()
+                      << " (ID: " << hist.txn->get_transaction_id() << ")" << std::endl;
+        }
+
+        // Perform verification checks using the verification environment
+        ve.check_adder(hist.a, hist.b, dut->c_o, current_cycle);
+    }
+}
 
     void run() {
         uint64_t cycle_count = 0;
@@ -47,7 +81,7 @@ public:
             toggle_clock();
 
             if (dut->clk_i == 1 && (cycle_count > 0)) {
-                apply_inputs();
+                apply_inputs(cycle_count);
             }
 
             dut->eval();
@@ -97,11 +131,15 @@ private:
     // Verification environment
     VerificationEnvironment ve;
 
+    std::vector<std::unique_ptr<AdderTransaction>> transactions;
+    size_t current_txn_index;
+
     // History for pipeline delay tracking
     struct InputHistory {
         uint8_t a;
         uint8_t b;
         uint64_t cycle;
+        std::unique_ptr<AdderTransaction> txn;
     };
     std::vector<InputHistory> input_history;
 
@@ -109,43 +147,66 @@ private:
         dut->clk_i = !dut->clk_i;
     }
 
-    void apply_inputs() {
-         // Simple test stimulus with some directed tests mixed in
-        uint8_t a_val, b_val;
+    void generate_transactions() {
+        // First, add all corner cases for comprehensive coverage
+        auto corner_cases = AdderTransactionFactory::get_all_corner_cases();
+        for (size_t i = 0; i < corner_cases.size(); ++i) {
+            std::string name = "corner_case_" + std::to_string(i);
+            transactions.push_back(AdderTransactionFactory::create_corner_case(corner_cases[i], name));
+        }
 
-        // Mix random and directed tests
-        if (input_history.size() < 20) {
-            // First 20 cycles: use some directed corner cases
-            switch (input_history.size()) {
-                case 0: a_val = 0; b_val = 0; break;           // Min + Min
-                case 1: a_val = 255; b_val = 255; break;       // Max + Max
-                case 2: a_val = 0; b_val = 255; break;         // Min + Max
-                case 3: a_val = 255; b_val = 0; break;         // Max + Min
-                case 4: a_val = 128; b_val = 128; break;       // Mid + Mid
-                case 5: a_val = 1; b_val = 1; break;           // Small values
-                case 6: a_val = 254; b_val = 1; break;         // Near overflow
-                case 7: a_val = 1; b_val = 254; break;         // Near overflow
-                case 8: a_val = 127; b_val = 128; break;       // Around midpoint
-                case 9: a_val = 128; b_val = 127; break;       // Around midpoint
-                case 10: a_val = 254; b_val = 254; break;     // Near maximum
-                case 11: a_val = 255; b_val = 1; break;       // Overflow boundary
-                case 12: a_val = 1; b_val = 255; break;       // Overflow boundary
-                default:
-                    a_val = dist(rng);
-                    b_val = dist(rng);
-                    break;
-            }
-        } else {
-            // Rest: random values
+        // Then add random transactions to fill remaining cycles
+        size_t total_cycles = max_sim_time / 2;  // Convert sim_time to cycles
+        size_t remaining_cycles = (total_cycles > corner_cases.size()) ? 
+                                  (total_cycles - corner_cases.size()) : 0;
+
+        for (size_t i = 0; i < remaining_cycles; ++i) {
+            std::string name = "random_txn_" + std::to_string(i);
+            transactions.push_back(AdderTransactionFactory::create_random(rng, name));
+        }
+
+        std::cout << "Generated " << corner_cases.size() << " corner case transactions and " 
+                  << remaining_cycles << " random transactions." << std::endl;
+    }
+
+    void apply_inputs(uint64_t cycle_count) {
+        uint8_t a_val = 0, b_val = 0;
+        std::unique_ptr<AdderTransaction> current_txn = nullptr;
+  
+        if (current_txn_index < transactions.size()) {
+            // Use transaction-based stimulus
+            const auto& txn = transactions[current_txn_index];
+            a_val = txn->get_a();
+            b_val = txn->get_b();
+
+            // Clone the transaction for history tracking
+            current_txn = std::unique_ptr<AdderTransaction>(
+                static_cast<AdderTransaction*>(txn->clone().release())
+            );
+
+            std::cout << "[TXN] Cycle " << cycle_count << ": " << txn->convert2string() << std::endl;
+
+            current_txn_index++;
+        }else{
+            // Fallback to random if we run out of transactions
+            std::uniform_int_distribution<uint8_t> dist(0, 255);
             a_val = dist(rng);
             b_val = dist(rng);
+
+            std::string name = "fallback_random_" + std::to_string(cycle_count);
+            current_txn = AdderTransactionFactory::create_directed(a_val, b_val, name);
         }
 
         dut->a_i = a_val;
         dut->b_i = b_val;
 
-        // Store input history for pipeline delay handling
-        input_history.push_back({a_val, b_val, (sim_time >> 1) + 1});
+        // Store input history with transaction for pipeline delay handling
+        InputHistory hist;
+        hist.a = a_val;
+        hist.b = b_val;
+        hist.cycle = cycle_count;
+        hist.txn = std::move(current_txn);
+        input_history.push_back(std::move(hist));
     }
 
     void log_outputs(uint64_t cycle) {
@@ -155,18 +216,6 @@ private:
                     << " | c_o: " << +dut->c_o << '\n';
     }
 
-    void check_design(uint64_t current_cycle) {
-        // The design has a 2-cycle delay (adder + output register)
-        // So output at cycle N corresponds to inputs from cycle N-2
-        // Only start checking after pipeline delay + 1 to account for random initial values
-        if (current_cycle > 2 && input_history.size() >= 2) {
-            size_t history_index = input_history.size() - 2;  // 2 cycles ago
-            const auto& hist = input_history[history_index];
-
-            // Verify the adder functionality
-            ve.check_adder(hist.a, hist.b, dut->c_o, current_cycle);
-        }
-    }
 };
 
 // Function to generate a truly random seed using hardware entropy

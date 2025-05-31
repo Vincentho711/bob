@@ -144,11 +144,64 @@ std::pair<uint8_t, uint8_t> CoverageTracker::decode_values(uint16_t encoded) con
 }
 
 // ============================================================================
+// TransactionTracker Implementation
+// ============================================================================
+
+TransactionTracker::TransactionTracker(const std::string& name) 
+    : tracker_name(name), corner_case_count(0), random_count(0), directed_count(0) {
+}
+
+void TransactionTracker::add_transaction(const std::string& txn_name, TransactionType type) {
+    transaction_names.push_back(txn_name);
+    
+    switch (type) {
+        case TransactionType::CORNER_CASE:
+            corner_case_count++;
+            break;
+        case TransactionType::RANDOM:
+            random_count++;
+            break;
+        case TransactionType::DIRECTED:
+            directed_count++;
+            break;
+    }
+}
+
+void TransactionTracker::report() const {
+    std::cout << "\n=== " << tracker_name << " Report ===" << std::endl;
+    std::cout << "Total Transactions: " << transaction_names.size() << std::endl;
+    std::cout << "  - Corner Cases: " << corner_case_count << std::endl;
+    std::cout << "  - Random: " << random_count << std::endl;
+    std::cout << "  - Directed: " << directed_count << std::endl;
+    
+    if (!transaction_names.empty()) {
+        std::cout << "Transaction Types Distribution:" << std::endl;
+        double corner_pct = (double)corner_case_count / transaction_names.size() * 100.0;
+        double random_pct = (double)random_count / transaction_names.size() * 100.0;
+        double directed_pct = (double)directed_count / transaction_names.size() * 100.0;
+        
+        std::cout << "  - Corner Cases: " << std::fixed << std::setprecision(1) << corner_pct << "%" << std::endl;
+        std::cout << "  - Random: " << std::fixed << std::setprecision(1) << random_pct << "%" << std::endl;
+        std::cout << "  - Directed: " << std::fixed << std::setprecision(1) << directed_pct << "%" << std::endl;
+    }
+}
+
+uint32_t TransactionTracker::get_total_count() const {
+    return transaction_names.size();
+}
+
+uint32_t TransactionTracker::get_corner_case_count() const {
+    return corner_case_count;
+}
+
+// ============================================================================
 // VerificationEnvironment Implementation
 // ============================================================================
 
 VerificationEnvironment::VerificationEnvironment()
-    : adder_checker(), coverage("Adder Coverage"), pipeline_delay(2), pipeline_flushed(false), sim_seed(0), max_sim_cycles(0), vcd_filename(""),total_cycles_run(0), test_timer_started(false)  {
+    : adder_checker(), coverage("Adder Coverage"), transaction_tracker("Transaction Tracker"),
+      pipeline_delay(2), pipeline_flushed(false), sim_seed(0), max_sim_cycles(0), 
+      vcd_filename(""), total_cycles_run(0), test_timer_started(false) {
     setup_coverage_points();
 }
 
@@ -186,6 +239,20 @@ void VerificationEnvironment::check_adder(uint8_t a, uint8_t b, uint16_t output,
     total_cycles_run = cycle;
 }
 
+void VerificationEnvironment::add_transaction(const std::string& txn_name, const std::string& txn_type) {
+    TransactionTracker::TransactionType type;
+    
+    if (txn_name.find("corner_case") != std::string::npos) {
+        type = TransactionTracker::TransactionType::CORNER_CASE;
+    } else if (txn_name.find("random") != std::string::npos) {
+        type = TransactionTracker::TransactionType::RANDOM;
+    } else {
+        type = TransactionTracker::TransactionType::DIRECTED;
+    }
+    
+    transaction_tracker.add_transaction(txn_name, type);
+}
+
 void VerificationEnvironment::final_report() {
     auto test_end_time = std::chrono::system_clock::now();
 
@@ -196,6 +263,7 @@ void VerificationEnvironment::final_report() {
     std::cout << "Max Cycles Configured: " << max_sim_cycles << std::endl;
     std::cout << "Actual Cycles Run: " << total_cycles_run << std::endl;
     std::cout << "Pipeline Delay: " << pipeline_delay << " cycles" << std::endl;
+    std::cout << "Effective Verification Cycles: " << (total_cycles_run > pipeline_delay ? total_cycles_run - pipeline_delay : 0) << std::endl;
     if (!vcd_filename.empty()) {
         std::cout << "Waveform File: " << vcd_filename << std::endl;
     }
@@ -212,20 +280,38 @@ void VerificationEnvironment::final_report() {
     std::cout << "FINAL VERIFICATION REPORT" << std::endl;
     std::cout << std::string(60, '=') << std::endl;
 
+    // Show transaction statistics
+    transaction_tracker.report();
+    
+    // Show functional verification results
     adder_checker.report();
+    
+    // Show coverage results
     coverage.report();
 
     std::cout << "\n=== SUMMARY ===" << std::endl;
     bool overall_pass = adder_checker.all_passed();
     std::cout << "Overall Test Result: " << (overall_pass ? "PASSED" : "FAILED") << std::endl;
 
-    if (!overall_pass) {
-        std::cout << "Some functional checks failed!" << std::endl;
+    if (!overall_pass && adder_checker.get_fail_count() > 0) {
+        std::cout << "❌ " << adder_checker.get_fail_count() << " functional check(s) failed!" << std::endl;
+    } else if (overall_pass && adder_checker.get_pass_count() > 0) {
+        std::cout << "✅ All " << adder_checker.get_pass_count() << " functional checks passed!" << std::endl;
     }
 
     double corner_cov = coverage.get_corner_coverage();
     if (corner_cov < 100.0) {
-        std::cout << "Warning: Corner case coverage incomplete (" << corner_cov << "%)" << std::endl;
+        std::cout << "⚠️  Corner case coverage incomplete (" << std::fixed << std::setprecision(1) << corner_cov << "%)" << std::endl;
+    } else {
+        std::cout << "✅ All corner cases covered (100%)" << std::endl;
+    }
+
+    // Additional statistics
+    uint32_t total_transactions = transaction_tracker.get_total_count();
+    uint32_t corner_transactions = transaction_tracker.get_corner_case_count();
+    if (total_transactions > 0) {
+        std::cout << "📊 Executed " << total_transactions << " transactions (" 
+                  << corner_transactions << " corner cases)" << std::endl;
     }
 
     std::cout << std::string(60, '=') << std::endl;
@@ -242,10 +328,10 @@ void VerificationEnvironment::setup_coverage_points() {
     coverage.add_corner_case(0, 255);         // Min + Max
     coverage.add_corner_case(255, 0);         // Max + Min
     coverage.add_corner_case(128, 128);       // Mid values
+    coverage.add_corner_case(1, 1);           // Small values
+    coverage.add_corner_case(254, 1);         // Near overflow
+    coverage.add_corner_case(255, 1);         // Overflow boundary
     coverage.add_corner_case(127, 128);       // Around mid point
     coverage.add_corner_case(128, 127);       // Around mid point
-    coverage.add_corner_case(1, 1);           // Small values
     coverage.add_corner_case(254, 254);       // Near maximum
-    coverage.add_corner_case(255, 1);         // Overflow boundary
-    coverage.add_corner_case(1, 255);         // Overflow boundary
 }
