@@ -14,7 +14,8 @@ EXTERNAL_OBJECTS ?=
 INCLUDE_DIRS ?=
 
 $(info $$RTL_SRC_FILES is [${RTL_SRC_FILES}])
-$(info $$CPP_SRC_FILES is [${CPP_SRC_FILES}])
+$(info $$TB_CPP_SRC_FILES is [${TB_CPP_SRC_FILES}])
+$(info $$TB_HEADER_SRC_FILES is [${TB_HEADER_SRC_FILES}])
 $(info $$VERILATOR_TRACE_ARGS is [${VERILATOR_TRACE_ARGS}])
 $(info $$VERILATOR_EXTRA_ARGS is [${VERILATOR_EXTRA_ARGS}])
 $(info $$EXTERNAL_OBJECTS is [${EXTERNAL_OBJECTS}])
@@ -28,10 +29,10 @@ $(TASK_OUTDIR):
 	mkdir -p $(TASK_OUTDIR)
 
 # Run Verilator and build simulation executable
-$(TASK_OUTDIR)/V$(TOP_MODULE): $(RTL_SRC_FILES) $(CPP_SRC_FILES) | $(TASK_OUTDIR)
+$(TASK_OUTDIR)/V$(TOP_MODULE): $(RTL_SRC_FILES) $(TB_CPP_SRC_FILES) $(TB_HEADER_SRC_FILES) | $(TASK_OUTDIR)
 	$(VERILATOR) --cc $(RTL_SRC_FILES) \
 		--top-module $(TOP_MODULE) \
-		--exe $(CPP_SRC_FILES) \
+		--exe $(TB_CPP_SRC_FILES) \
 		--build \
 		--Mdir $(TASK_OUTDIR) \
 		$(VERILATOR_TRACE_ARGS) \

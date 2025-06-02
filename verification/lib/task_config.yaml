@@ -5,3 +5,7 @@ lib_name : "lib_verification_lib.a"
 src_files:
   - "transaction.cpp"
   - "transaction.h"
+  - "driver.cpp"
+  - "driver.h"
+  - "checker.cpp"
+  - "checker.h"

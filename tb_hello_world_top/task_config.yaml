@@ -4,14 +4,21 @@ top_module: hello_world_top
 include_headers_from_tasks:
   - "verification_utils"
   - "verification_lib"
-  - "tb_verification_framework"
+  # - "tb_verification_framework"
 rtl_src_files:
   - "{@input:hello_world_top_verilate:*}"
-cpp_src_files:
+tb_cpp_src_files:
   - adder_verification/adder_transaction.cpp
-  - tb_hello_world_top.cpp
+  - adder_verification/adder_checker.cpp
+  - adder_verification/adder_driver.cpp
+  - tb_hello_world_top_2.cpp
+tb_header_src_files: # Although not used in verilator.mk, we need to register them as source files to work out whether to rebuild
+  - adder_verification/adder_transaction.h
+  - adder_verification/adder_checker.h
+  - adder_verification/adder_checker_impl.h
+  - adder_verification/adder_driver.h
 external_objects:
   - "{@output:verification_lib:lib_verification_lib.a}"
   - "{@output:verification_utils:command_line_parser.o}"
-  - "{@output:tb_verification_framework:libtbverifframework.a}"
-output_executable: tb_hello_world_top.out
+  # - "{@output:tb_verification_framework:libtbverifframework.a}"
+output_executable: tb_hello_world_top_2.out

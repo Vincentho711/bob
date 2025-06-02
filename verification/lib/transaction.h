@@ -1,4 +1,5 @@
-#pragma once
+#ifndef TRANSACTION_H
+#define TRANSACTION_H
 
 #include <string>
 #include <memory>
@@ -27,7 +28,7 @@ public:
     Transaction& operator=(Transaction&& other) noexcept;
 
     // Core UVM-style methods
-    virtual std::unique_ptr<Transaction> clone() const = 0;
+    virtual std::shared_ptr<Transaction> clone() const = 0;
     virtual void copy(const Transaction& other);
     virtual bool compare(const Transaction& other) const;
     virtual std::string convert2string() const;
@@ -54,3 +55,5 @@ private:
 
     void assign_transaction_id();
 };
+
+#endif

@@ -13,6 +13,7 @@
 #include "command_line_parser.h"
 #include "tb_verification_framework.h"
 #include "adder_verification/adder_transaction.h"
+#include "adder_verification/adder_driver.h"
 
 constexpr int TRACE_DEPTH = 5;
 
@@ -21,32 +22,32 @@ public:
     VerilatorSim(uint32_t seed, uint64_t max_sim_time)
         : seed(seed),
           max_sim_time(max_sim_time),
-          rng(seed),
-          dist(0, 255),
-          sim_time(0),
-          current_txn_index(0) {
+          rng(seed) {
 
         Verilated::traceEverOn(true);
         Verilated::randSeed(seed);
 
-        dut = std::make_unique<Vhello_world_top>();  // create DUT after seed is set
+        // Create DUT as shared_ptr for driver
+        dut_ = std::make_shared<Vhello_world_top>();  // create DUT after seed is set
 
-        dut->trace(trace.get(), TRACE_DEPTH);
-        trace->open("tb_hello_world_top.vcd");
+        // Setup tracing
+        trace_ = std::make_unique<VerilatedVcdC>();
+        dut_->trace(trace_.get(), TRACE_DEPTH);
+        trace_->open("tb_hello_world_top.vcd");
 
-        // Initialize inputs
-        dut->clk_i = 0;
-        dut->a_i = 0;
-        dut->b_i = 0;
+        // Initialize DUT
+        dut_->clk_i = 0;
+        dut_->a_i = 0;
+        dut_->b_i = 0;
 
-        // Generate transactions for stimulus
-        generate_transactions();
+        driver = std::make_unique<AdderDriver>("main_adder_driver", dut, driver_config);
 
-        // Register all transactions with the verification environment
-        for (const auto& txn : transactions) {
-            ve.add_transaction(txn->get_name());
-        }
+        // Generate test stimulus using the driver
+        generate_test_stimulus();
 
+        // Set up verification environment
+        ve.set_pipeline_delay(2);
+        register_transactions_with_ve();
         std::cout << "Verification environment initialised with " << transactions.size() << std::endl;
     }
 
@@ -119,20 +120,29 @@ public:
     }
 
 private:
+    // DUT and simulation infrastructure
+    std::shared_ptr<Vhello_world_top> dut_;
+    std::unqiue_ptr<VerilatedVcdC> trace_;
+    // Driver
+    std::unique_ptr<AdderDriver> driver_;
+
+    // Transaction management
+    std::vector<std::unique_ptr<AdderTransaction>> transactions_;
+
+    // Simulation parameters
     const uint32_t seed;
     const uint64_t max_sim_time;
+    uint64_t sim_time{0};
+    uint64_t cycle_count_{0};
+    size_t current_txn_index_{0};
+
+    // Random number generation
     std::mt19937 rng;  // Mersenne Twister engine
     std::uniform_int_distribution<uint8_t> dist;  // 0-255 for 8-bit inputs
 
-    std::unique_ptr<Vhello_world_top> dut;
-    std::unique_ptr<VerilatedVcdC> trace{std::make_unique<VerilatedVcdC>()};
-    uint64_t sim_time;
 
     // Verification environment
     VerificationEnvironment ve;
-
-    std::vector<std::unique_ptr<AdderTransaction>> transactions;
-    size_t current_txn_index;
 
     // History for pipeline delay tracking
     struct InputHistory {
@@ -149,24 +159,18 @@ private:
 
     void generate_transactions() {
         // First, add all corner cases for comprehensive coverage
-        auto corner_cases = AdderTransactionFactory::get_all_corner_cases();
-        for (size_t i = 0; i < corner_cases.size(); ++i) {
-            std::string name = "corner_case_" + std::to_string(i);
-            transactions.push_back(AdderTransactionFactory::create_corner_case(corner_cases[i], name));
-        }
+        driver_->generate_corner_cases();
+        size_t corner_case_transactions = driver_.pending_count();
 
         // Then add random transactions to fill remaining cycles
         size_t total_cycles = max_sim_time / 2;  // Convert sim_time to cycles
-        size_t remaining_cycles = (total_cycles > corner_cases.size()) ? 
-                                  (total_cycles - corner_cases.size()) : 0;
+        size_t remaining_cycles = (total_cycles > corner_case_transactions) ? 
+                                  (total_cycles - corner_case_transactions) : 0;
+        driver_->generate_random_transactions(remaining_cycles, rng);
+        size_t random_transactions = driver_.pending_count() - corner_case_transactions;
 
-        for (size_t i = 0; i < remaining_cycles; ++i) {
-            std::string name = "random_txn_" + std::to_string(i);
-            transactions.push_back(AdderTransactionFactory::create_random(rng, name));
-        }
-
-        std::cout << "Generated " << corner_cases.size() << " corner case transactions and " 
-                  << remaining_cycles << " random transactions." << std::endl;
+        std::cout << "Generated " << corner_case_transactions << " corner case transactions and " 
+                  << random_transactions << " random transactions." << std::endl;
     }
 
     void apply_inputs(uint64_t cycle_count) {

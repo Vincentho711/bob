@@ -16,8 +16,8 @@ AdderTransaction::AdderTransaction(uint8_t a, uint8_t b, const std::string& name
     calculate_expected();
 }
 
-std::unique_ptr<Transaction> AdderTransaction::clone() const {
-    return std::make_unique<AdderTransaction>(*this);
+std::shared_ptr<Transaction> AdderTransaction::clone() const {
+    return std::make_shared<AdderTransaction>(*this);
 }
 
 void AdderTransaction::copy(const Transaction& other) {
@@ -128,20 +128,20 @@ void AdderTransaction::set_corner_case_values(CornerCase case_type) {
 // AdderTransactionFactory Implementation
 // ============================================================================
 
-std::unique_ptr<AdderTransaction> AdderTransactionFactory::create_random(std::mt19937& rng, const std::string& name) {
-    auto txn = std::make_unique<AdderTransaction>(name);
+std::shared_ptr<AdderTransaction> AdderTransactionFactory::create_random(std::mt19937& rng, const std::string& name) {
+    auto txn = std::make_shared<AdderTransaction>(name);
     txn->randomize(rng);
     return txn;
 }
 
-std::unique_ptr<AdderTransaction> AdderTransactionFactory::create_corner_case(AdderTransaction::CornerCase case_type, const std::string& name) {
-    auto txn = std::make_unique<AdderTransaction>(name);
+std::shared_ptr<AdderTransaction> AdderTransactionFactory::create_corner_case(AdderTransaction::CornerCase case_type, const std::string& name) {
+    auto txn = std::make_shared<AdderTransaction>(name);
     txn->set_corner_case(case_type);
     return txn;
 }
 
-std::unique_ptr<AdderTransaction> AdderTransactionFactory::create_directed(uint8_t a, uint8_t b, const std::string& name) {
-    return std::make_unique<AdderTransaction>(a, b, name);
+std::shared_ptr<AdderTransaction> AdderTransactionFactory::create_directed(uint8_t a, uint8_t b, const std::string& name) {
+    return std::make_shared<AdderTransaction>(a, b, name);
 }
 
 std::vector<AdderTransaction::CornerCase> AdderTransactionFactory::get_all_corner_cases() {

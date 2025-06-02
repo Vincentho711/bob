@@ -33,7 +33,7 @@ public:
     virtual ~AdderTransaction() = default;
 
     // UVM-style methods implementation
-    std::unique_ptr<Transaction> clone() const override;
+    std::shared_ptr<Transaction> clone() const override;
     void copy(const Transaction& other) override;
     bool compare(const Transaction& other) const override;
     std::string convert2string() const override;
@@ -67,9 +67,9 @@ private:
  */
 class AdderTransactionFactory {
 public:
-    static std::unique_ptr<AdderTransaction> create_random(std::mt19937& rng, const std::string& name = "random_adder_txn");
-    static std::unique_ptr<AdderTransaction> create_corner_case(AdderTransaction::CornerCase case_type, const std::string& name = "corner_case_adder_txn");
-    static std::unique_ptr<AdderTransaction> create_directed(uint8_t a, uint8_t b, const std::string& name = "directed_adder_txn");
+    static std::shared_ptr<AdderTransaction> create_random(std::mt19937& rng, const std::string& name = "random_adder_txn");
+    static std::shared_ptr<AdderTransaction> create_corner_case(AdderTransaction::CornerCase case_type, const std::string& name = "corner_case_adder_txn");
+    static std::shared_ptr<AdderTransaction> create_directed(uint8_t a, uint8_t b, const std::string& name = "directed_adder_txn");
 
     // Get all corner cases for comprehensive testing
     static std::vector<AdderTransaction::CornerCase> get_all_corner_cases();
