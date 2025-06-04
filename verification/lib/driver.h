@@ -119,14 +119,22 @@ protected:
      * @param txn Transaction about to be driven
      * @param cycle Current cycle
      */
-    virtual void pre_drive(const TXN_TYPE& txn, uint64_t cycle) {}
+    virtual void pre_drive(const TXN_TYPE& txn, uint64_t cycle) {
+        (void)txn;
+        (void)cycle;
+        // default empty implementation
+    }
 
     /**
      * @brief Virtual method called after driving a transaction
      * @param txn Transaction that was driven
      * @param cycle Current cycle
      */
-    virtual void post_drive(const TXN_TYPE& txn, uint64_t cycle) {}
+    virtual void post_drive(const TXN_TYPE& txn, uint64_t cycle) {
+        (void)txn;
+        (void)cycle;
+        // default empty implementation
+    }
 
     /**
      * @brief Access to DUT for derived classes

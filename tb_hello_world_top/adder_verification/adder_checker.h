@@ -2,6 +2,7 @@
 
 #include "checker.h"
 #include "adder_transaction.h"
+#include "adder_simulation_context.h"
 #include <queue>
 #include <unordered_map>
 #include <memory>
@@ -56,10 +57,10 @@ struct PendingTransaction {
     uint64_t expected_result_cycle;              ///< Cycle when result is expected
     std::chrono::high_resolution_clock::time_point drive_time;
 
-    PendingTransaction(std::shared_ptr<AdderTransaction> txn, uint64_t cycle, uint32_t pipeline_depth)
+    PendingTransaction(std::shared_ptr<AdderTransaction> txn, uint64_t drive_cycle, uint32_t pipeline_depth)
         : transaction(txn)
-        , drive_cycle(cycle)
-        , expected_result_cycle(cycle + pipeline_depth)
+        , drive_cycle(drive_cycle)
+        , expected_result_cycle(drive_cycle + pipeline_depth)
         , drive_time(std::chrono::high_resolution_clock::now()) {}
 };
 
@@ -91,6 +92,7 @@ public:
     using DutPtr = std::shared_ptr<DUT_TYPE>;
     using Base = BaseChecker<DUT_TYPE, AdderTransaction>;
     using TransactionPtr = std::shared_ptr<AdderTransaction>;
+    using AdderSimulationContextPtr = std::shared_ptr<AdderSimulationContext>;
 
     /**
      * @brief Construct AdderChecker
@@ -98,8 +100,9 @@ public:
      * @param name Checker instance name
      * @param dut Shared pointer to DUT
      * @param config Adder-specific configuration
+     * @param simulation_context Adder-specific simulation context for tracking global state
      */
-    AdderChecker(const std::string& name, DutPtr dut, const AdderCheckerConfig& config = {});
+    AdderChecker(const std::string& name, DutPtr dut, AdderSimulationContextPtr ctx, const AdderCheckerConfig& config = {});
 
     /**
      * @brief Destructor - prints final report
@@ -115,7 +118,7 @@ public:
     const AdderCheckerConfig& get_adder_config() const { return adder_config_; }
 
     // Transaction tracking
-    void expect_transaction(TransactionPtr txn, uint64_t cycle);
+    void expect_transaction(TransactionPtr txn);
     // void expect_transaction(const AdderTransaction& txn, uint64_t cycle);
 
     // Verification control
@@ -141,15 +144,18 @@ protected:
     virtual void log_mismatch(const AdderTransaction& txn, uint16_t expected, uint16_t actual);
 
 private:
+    // Simulation context
+    AdderSimulationContextPtr ctx_;
+
     // Configuration
     AdderCheckerConfig adder_config_;
-    
+
     // Statistics
     AdderCheckerStats adder_stats_;
-    
+
     // Pipeline management
     std::queue<PendingTransaction> pending_transactions_;
-    
+
     // Internal helper methods
     void process_pending_transactions();
     bool verify_transaction_result(const PendingTransaction& pending_txn);
@@ -157,12 +163,12 @@ private:
     void classify_transaction_type(const AdderTransaction& txn);
     void check_pipeline_health();
     uint16_t read_dut_output() const;
-    
+
     // Validation helpers
     bool is_overflow_case(uint8_t a, uint8_t b) const;
     bool is_corner_case(const AdderTransaction& txn) const;
     std::string format_transaction_error(const AdderTransaction& txn, uint16_t expected, uint16_t actual) const;
-    
+
     // Performance monitoring
     void start_timing();
     void end_timing();

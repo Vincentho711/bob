@@ -1,3 +1,6 @@
+#ifndef ADDER_SIMULATION_CONTEXT_H
+#define ADDER_SIMULATION_CONTEXT_H
+
 #include "simulation_context.h"
 
 class AdderSimulationContext : public SimulationContext {
@@ -10,3 +13,5 @@ public:
 private:
     bool pipeline_flushed_ = false;
 };
+
+#endif

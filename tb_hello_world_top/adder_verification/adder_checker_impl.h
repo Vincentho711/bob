@@ -4,8 +4,8 @@
 // This file is included by adder_checker.h and should not be included directly
 
 template<typename DUT_TYPE>
-AdderChecker<DUT_TYPE>::AdderChecker(const std::string& name, DutPtr dut, const AdderCheckerConfig& config)
-    : Base(name, dut), adder_config_(config) {
+AdderChecker<DUT_TYPE>::AdderChecker(const std::string& name, DutPtr dut, AdderSimulationContextPtr ctx, const AdderCheckerConfig& config)
+    : Base(name, dut, ctx), ctx_(ctx), adder_config_(config) {
     
     // Validate configuration
     std::string error_msg;
@@ -42,7 +42,8 @@ void AdderChecker<DUT_TYPE>::update_config(const AdderCheckerConfig& new_config)
 }
 
 template<typename DUT_TYPE>
-void AdderChecker<DUT_TYPE>::expect_transaction(TransactionPtr txn, uint64_t cycle) {
+void AdderChecker<DUT_TYPE>::expect_transaction(TransactionPtr txn) {
+    uint64_t current_cycle = ctx_->current_cycle();
     if (!txn) {
         this->log_error("Cannot expect null transaction");
         return;
@@ -60,16 +61,10 @@ void AdderChecker<DUT_TYPE>::expect_transaction(TransactionPtr txn, uint64_t cyc
     
     // Create pending transaction with pipeline delay
     // Args : txn, current_cycle, pipeline_depth
-    pending_transactions_.emplace(txn, cycle, adder_config_.pipeline_depth);
+    pending_transactions_.emplace(txn, current_cycle, adder_config_.pipeline_depth);
     
-    this->log_debug("Expected transaction at cycle " + std::to_string(cycle + adder_config_.pipeline_depth));
+    this->log_debug("Expected transaction at cycle " + std::to_string(current_cycle + adder_config_.pipeline_depth));
 }
-
-// template<typename DUT_TYPE>
-// void AdderChecker<DUT_TYPE>::expect_transaction(const AdderTransaction& txn, uint64_t cycle) {
-//     auto txn_copy = std::make_shared<AdderTransaction>(txn);
-//     expect_transaction(txn_copy, cycle);
-// }
 
 template<typename DUT_TYPE>
 uint32_t AdderChecker<DUT_TYPE>::check_cycle() {
@@ -84,7 +79,6 @@ uint32_t AdderChecker<DUT_TYPE>::check_cycle() {
     }
     
     end_timing();
-    this->current_cycle_++;
     return 1U;
 }
 
@@ -114,8 +108,6 @@ void AdderChecker<DUT_TYPE>::reset() {
     while (!pending_transactions_.empty()) {
         pending_transactions_.pop();
     }
-    
-    this->current_cycle_ = 0;
     
     // Reset statistics if configured to do so
     if (adder_config_.strict_mode) {
@@ -197,11 +189,12 @@ bool AdderChecker<DUT_TYPE>::check_overflow_handling(const AdderTransaction& txn
 
 template<typename DUT_TYPE>
 bool AdderChecker<DUT_TYPE>::check_timing(const PendingTransaction& pending_txn) {
+    uint64_t current_cycle = ctx_->current_cycle();
     if (!adder_config_.enable_timing_checks) {
         return true;
     }
 
-    uint64_t cycles_elapsed = this->current_cycle_ - pending_txn.drive_cycle;
+    uint64_t cycles_elapsed = current_cycle - pending_txn.drive_cycle;
 
     if (cycles_elapsed > adder_config_.max_response_cycles) {
         adder_stats_.timing_violations++;
@@ -222,11 +215,13 @@ void AdderChecker<DUT_TYPE>::log_mismatch(const AdderTransaction& txn, uint16_t 
 
 template<typename DUT_TYPE>
 void AdderChecker<DUT_TYPE>::process_pending_transactions() {
+    uint64_t current_cycle = ctx_->current_cycle();
+
     while (!pending_transactions_.empty()) {
         auto& pending = pending_transactions_.front();
 
         // Check if this transaction's result should be available
-        if (this->current_cycle_ < pending.expected_result_cycle) {
+        if (current_cycle < pending.expected_result_cycle) {
             break; // Not ready yet
         }
 
@@ -296,6 +291,7 @@ void AdderChecker<DUT_TYPE>::classify_transaction_type(const AdderTransaction& t
 
 template<typename DUT_TYPE>
 void AdderChecker<DUT_TYPE>::check_pipeline_health() {
+    uint64_t current_cycle = ctx_->current_cycle();
     size_t pending_count = pending_transactions_.size();
 
     if (pending_count > adder_config_.max_pending_transactions / 2) {
@@ -305,10 +301,10 @@ void AdderChecker<DUT_TYPE>::check_pipeline_health() {
 
     // Check for stalled transactions
     if (!pending_transactions_.empty()) {
-        this->log_error("Current_cycle = " + std::to_string(this->current_cycle_) + ", Number of pending_transactions = " + std::to_string(pending_count));
+        this->log_error("Current_cycle = " + std::to_string(current_cycle) + ", Number of pending_transactions = " + std::to_string(pending_count));
         const auto& oldest = pending_transactions_.front();
         this->log_error("oldest.drive_cycle = " + std::to_string(oldest.drive_cycle));
-        uint64_t age = this->current_cycle_ - oldest.drive_cycle;
+        uint64_t age = current_cycle - oldest.drive_cycle;
         this->log_error("pending_transactions_.front()'s age = " + std::to_string(age));
 
         if (age > adder_config_.max_response_cycles * 2) {

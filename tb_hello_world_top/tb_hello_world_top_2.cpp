@@ -14,6 +14,7 @@
 #include "adder_verification/adder_transaction.h"
 #include "adder_verification/adder_driver.h"
 #include "adder_verification/adder_checker.h"
+#include "adder_verification/adder_simulation_context.h"
 
 constexpr int TRACE_DEPTH = 5;
 constexpr uint32_t PIPELINE_DEPTH = 2;
@@ -139,6 +140,7 @@ private:
     std::unique_ptr<VerilatedVcdC> trace_;
     
     // Verification components
+    std::shared_ptr<AdderSimulationContext> ctx_;
     std::unique_ptr<AdderDriver> driver_;
     std::unique_ptr<AdderChecker<Vhello_world_top>> checker_;
     
@@ -166,6 +168,9 @@ private:
      * @brief Setup verification components (driver and checker)
      */
     void setup_verification_components() {
+        // Configure simulation context
+        ctx_ = std::make_shared<AdderSimulationContext>();
+
         // Configure driver
         AdderDriver::Config driver_config;
         driver_config.enable_input_validation = true;
@@ -185,7 +190,7 @@ private:
         checker_config.enable_value_logging = true;
 
         // Create checker
-        checker_ = std::make_unique<AdderChecker<Vhello_world_top>>("main_adder_checker", dut_, checker_config);
+        checker_ = std::make_unique<AdderChecker<Vhello_world_top>>("main_adder_checker", dut_, ctx_, checker_config);
 
         std::cout << "Verification components initialized" << std::endl;
     }
@@ -263,7 +268,7 @@ private:
                 // Get the next transaction
                 AdderDriver::TransactionPtr next_transaction = driver_->get_next_transaction();
                 // Add transaction to checker. expect_transaction accounts for the pipeline depth so only supply current cycle_count_
-                checker_->expect_transaction(next_transaction, cycle_count_);
+                checker_->expect_transaction(next_transaction);
                 // Drive the transaction
                 driver_->drive_next(cycle_count_);
             } else {

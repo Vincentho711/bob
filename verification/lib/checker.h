@@ -1,6 +1,7 @@
 #ifndef CHECKER_H
 #define CHECKER_H
 
+#include "simulation_context.h"
 #include "transaction.h"
 #include <memory>
 #include <queue>
@@ -67,6 +68,7 @@ class BaseChecker {
 public:
     using DutPtr = std::shared_ptr<DUT_TYPE>;
     using TransactionPtr = std::shared_ptr<TRANSACTION_TYPE>;
+    using SimulationContextPtr = std::shared_ptr<SimulationContext>;
     using CheckFunction = std::function<bool(const TRANSACTION_TYPE&, const DUT_TYPE&)>;
     
     /**
@@ -76,7 +78,7 @@ public:
         TransactionPtr transaction;
         uint64_t expected_cycle;
         uint64_t submitted_cycle;
-        
+
         PendingTransaction(TransactionPtr txn, uint64_t exp_cycle, uint64_t sub_cycle)
             : transaction(txn), expected_cycle(exp_cycle), submitted_cycle(sub_cycle) {}
     };
@@ -86,10 +88,10 @@ protected:
     DutPtr dut_;
     CheckerConfig config_;
     CheckerStats stats_;
-    uint64_t current_cycle_;
+    SimulationContextPtr ctx_;
     std::queue<PendingTransaction> pending_transactions_;
     std::unordered_map<std::string, CheckFunction> custom_checks_;
-    
+
 public:
     /**
      * @brief Construct a new BaseChecker
@@ -99,8 +101,8 @@ public:
      * @param config Configuration for checker behavior
      */
     explicit BaseChecker(const std::string& name, DutPtr dut, 
-                        const CheckerConfig& config = CheckerConfig{})
-        : name_(name), dut_(dut), config_(config), current_cycle_(0) {
+                        SimulationContextPtr ctx, const CheckerConfig& config = CheckerConfig{})
+        : name_(name), dut_(dut), config_(config), ctx_(ctx) {
         if (!dut_) {
             throw std::invalid_argument("DUT pointer cannot be null");
         }
@@ -124,12 +126,13 @@ public:
      * @param expected_cycle The cycle when the result should be available
      */
     void add_expected_transaction(TransactionPtr transaction, uint64_t expected_cycle) {
+        uint64_t current_cycle = ctx_->current_cycle();
         if (!transaction) {
             log_error("Attempted to add null transaction");
             return;
         }
-        
-        pending_transactions_.emplace(transaction, expected_cycle, current_cycle_);
+
+        pending_transactions_.emplace(transaction, expected_cycle, current_cycle);
         log_debug("Added expected transaction for cycle " + std::to_string(expected_cycle));
     }
 
@@ -139,37 +142,37 @@ public:
      * @return Number of checks performed
      */
     virtual uint32_t check_cycle() {
+        uint64_t current_cycle = ctx_->current_cycle();
         uint32_t checks_performed = 0;
         stats_.last_activity = std::chrono::steady_clock::now();
-        
+
         // Process all transactions ready for checking
         while (!pending_transactions_.empty() && 
-               pending_transactions_.front().expected_cycle <= current_cycle_) {
-            
+               pending_transactions_.front().expected_cycle <= current_cycle) {
+
             auto& pending = pending_transactions_.front();
-            
+
             // Check for timeout
             if (config_.enable_timeout_checking && 
-                (current_cycle_ - pending.submitted_cycle) > config_.timeout_cycles) {
+                (current_cycle - pending.submitted_cycle) > config_.timeout_cycles) {
                 handle_timeout(pending);
             } else {
                 // Perform the actual check
                 bool check_result = perform_check(*pending.transaction);
                 update_stats(check_result);
                 checks_performed++;
-                
+
                 if (!check_result && config_.stop_on_first_error) {
                     log_fatal("Stopping on first error as configured");
                     break;
                 }
             }
-            
+
             pending_transactions_.pop();
         }
-        
+
         stats_.cycles_active++;
-        current_cycle_++;
-        
+
         return checks_performed;
     }
 
@@ -177,7 +180,6 @@ public:
      * @brief Reset the checker to initial state
      */
     virtual void reset() {
-        current_cycle_ = 0;
         while (!pending_transactions_.empty()) {
             pending_transactions_.pop();
         }
@@ -213,7 +215,7 @@ public:
     const std::string& get_name() const { return name_; }
     const CheckerStats& get_stats() const { return stats_; }
     const CheckerConfig& get_config() const { return config_; }
-    uint64_t get_current_cycle() const { return current_cycle_; }
+    uint64_t get_current_cycle() const { return ctx_->current_cycle(); }
     size_t pending_count() const { return pending_transactions_.size(); }
     bool has_failures() const { return stats_.checks_failed > 0; }
     double get_pass_rate() const { 
@@ -234,10 +236,10 @@ public:
         std::cout << "\n" << std::string(50, '=') << std::endl;
         std::cout << "CHECKER REPORT: " << name_ << std::endl;
         std::cout << std::string(50, '=') << std::endl;
-        
+
         auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(
             stats_.last_activity - stats_.start_time);
-        
+
         std::cout << "Statistics:" << std::endl;
         std::cout << "  Transactions Checked: " << stats_.transactions_checked << std::endl;
         std::cout << "  Checks Passed: " << stats_.checks_passed << std::endl;
@@ -247,13 +249,13 @@ public:
         std::cout << "  Active Cycles: " << stats_.cycles_active << std::endl;
         std::cout << "  Runtime: " << duration.count() << " ms" << std::endl;
         std::cout << "  Pending: " << pending_transactions_.size() << " transactions" << std::endl;
-        
+
         std::cout << "\nConfiguration:" << std::endl;
         std::cout << "  Detailed Logging: " << (config_.enable_detailed_logging ? "Enabled" : "Disabled") << std::endl;
         std::cout << "  Stop on Error: " << (config_.stop_on_first_error ? "Enabled" : "Disabled") << std::endl;
         std::cout << "  Timeout Checking: " << (config_.enable_timeout_checking ? "Enabled" : "Disabled") << std::endl;
         std::cout << "  Timeout Cycles: " << config_.timeout_cycles << std::endl;
-        
+
         std::cout << std::string(50, '=') << std::endl;
     }
 
@@ -278,8 +280,9 @@ protected:
      * @param pending The pending transaction that timed out
      */
     virtual void handle_timeout(const PendingTransaction& pending) {
+        uint64_t current_cycle = ctx_->current_cycle();
         log_error("Transaction timed out: " + pending.transaction->convert2string() +
-                 " (waited " + std::to_string(current_cycle_ - pending.submitted_cycle) + " cycles)");
+                 " (waited " + std::to_string(current_cycle - pending.submitted_cycle) + " cycles)");
         stats_.checks_failed++;
         stats_.transactions_checked++;
     }
@@ -353,9 +356,10 @@ protected:
 
 private:
     void log_message(const std::string& level, const std::string& message) const {
+        uint64_t current_cycle = ctx_->current_cycle();
         if (config_.enable_detailed_logging) {
             std::cout << "[" << level << "] [" << name_ << "] [Cycle " 
-                      << current_cycle_ << "] " << message << std::endl;
+                      << current_cycle << "] " << message << std::endl;
         }
     }
 };
