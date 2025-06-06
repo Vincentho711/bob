@@ -108,14 +108,13 @@ void AdderDriver::drive_transaction(const AdderTransaction& txn) {
 }
 
 void AdderDriver::pre_drive(const AdderTransaction& txn) {
-    uint64_t current_cycle = ctx_->current_cycle();
     // Pipeline tracking or pre-processing can be added here
     if (config_.enable_pipeline_tracking) {
-        log_debug("Pre-drive: Pipeline cycle " + std::to_string(current_cycle % config_.pipeline_depth));
+        log_debug("Pre-drive: Pipeline cycle " + std::to_string(cycle % config_.pipeline_depth));
     }
 }
 
-void AdderDriver::post_drive(const AdderTransaction& txn) {
+void AdderDriver::post_drive(const AdderTransaction& txn, uint64_t cycle) {
     // Post-processing or additional validation can be added here
     if (config_.enable_pipeline_tracking) {
         log_debug("Post-drive: Transaction will appear at output in " + 

@@ -9,6 +9,7 @@ public:
 
     virtual uint64_t current_cycle() const;
     virtual void set_cycle(uint64_t c);
+    virtual void increment_cycle();
 
 protected:
     uint64_t current_cycle_ = 0;

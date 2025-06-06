@@ -99,8 +99,8 @@ public:
      * 
      * @param name Checker instance name
      * @param dut Shared pointer to DUT
+     * @param ctx Adder-specific simulation context for tracking global state
      * @param config Adder-specific configuration
-     * @param simulation_context Adder-specific simulation context for tracking global state
      */
     AdderChecker(const std::string& name, DutPtr dut, AdderSimulationContextPtr ctx, const AdderCheckerConfig& config = {});
 

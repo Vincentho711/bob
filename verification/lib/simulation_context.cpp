@@ -9,3 +9,7 @@ uint64_t SimulationContext::current_cycle() const {
 void SimulationContext::set_cycle(uint64_t c) {
     current_cycle_ = c;
 }
+
+void SimulationContext::increment_cycle() {
+  current_cycle_++;
+}

@@ -3,6 +3,7 @@
 
 #include "driver.h"
 #include "adder_transaction.h"
+#include "adder_simulation_context.h"
 #include "Vhello_world_top.h"
 #include <vector>
 #include <random>
@@ -20,6 +21,7 @@ class AdderDriver : public BaseDriver<Vhello_world_top, AdderTransaction> {
 public:
     using Base = BaseDriver<Vhello_world_top, AdderTransaction>;
     using DutPtr = Base::DutPtr;
+    using AdderSimulationContextPtr = std::shared_ptr<AdderSimulationContext>;
 
     /**
      * @brief Configuration for the AdderDriver
@@ -37,16 +39,18 @@ public:
      * @brief Constructor with default configuration
      * @param name Driver instance name
      * @param dut Shared pointer to the adder DUT
+     * @param ctx Adder-specific simulation context for tracking global state
      */
-    explicit AdderDriver(const std::string& name, DutPtr dut);
+    explicit AdderDriver(const std::string& name, DutPtr dut, AdderSimulationContextPtr ctx);
 
     /**
      * @brief Constructor with custom configuration
      * @param name Driver instance name
      * @param dut Shared pointer to the adder DUT
+     * @param ctx Adder-specific simulation context for tracking global state
      * @param config Driver configuration
      */
-    explicit AdderDriver(const std::string& name, DutPtr dut, const Config& config);
+    explicit AdderDriver(const std::string& name, DutPtr dut, AdderSimulationContextPtr ctx, const Config& config);
 
     /**
      * @brief Generate and add a set of corner case transactions
@@ -112,22 +116,23 @@ protected:
     /**
      * @brief Drive transaction to DUT inputs
      */
-    void drive_transaction(const AdderTransaction& txn, uint64_t cycle) override;
+    void drive_transaction(const AdderTransaction& txn) override;
 
     /**
      * @brief Pre-drive hook for additional processing
      */
-    void pre_drive(const AdderTransaction& txn, uint64_t cycle) override;
+    void pre_drive(const AdderTransaction& txn) override;
 
     /**
      * @brief Post-drive hook for additional processing
      */
-    void post_drive(const AdderTransaction& txn, uint64_t cycle) override;
+    void post_drive(const AdderTransaction& txn) override;
 
 private:
+    AdderSimulationContextPtr ctx_;
     Config config_;
     CurrentInputs current_inputs_;
-    
+
     // Statistics and tracking
     struct AdderStats {
         uint64_t corner_cases_driven = 0;
@@ -140,7 +145,7 @@ private:
 
     // Input validation
     bool validate_inputs(uint8_t a, uint8_t b) const;
-    void update_current_inputs(uint8_t a, uint8_t b, uint64_t cycle);
+    void update_current_inputs(uint8_t a, uint8_t b);
     
     // Transaction classification
     void classify_and_update_stats(const AdderTransaction& txn);

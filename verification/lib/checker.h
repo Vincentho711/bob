@@ -23,7 +23,7 @@ struct CheckerStats {
     uint64_t cycles_active = 0;
     std::chrono::steady_clock::time_point start_time;
     std::chrono::steady_clock::time_point last_activity;
-    
+
     CheckerStats() : start_time(std::chrono::steady_clock::now()), 
                      last_activity(start_time) {}
 };
@@ -49,7 +49,7 @@ struct CheckerConfig {
     uint32_t timeout_cycles = 1000;
     CheckerLogLevel log_level = CheckerLogLevel::INFO;
     bool enable_statistics = true;
-    
+
     CheckerConfig() = default;
 };
 
@@ -70,7 +70,7 @@ public:
     using TransactionPtr = std::shared_ptr<TRANSACTION_TYPE>;
     using SimulationContextPtr = std::shared_ptr<SimulationContext>;
     using CheckFunction = std::function<bool(const TRANSACTION_TYPE&, const DUT_TYPE&)>;
-    
+
     /**
      * @brief Structure to hold pending transactions with metadata
      */

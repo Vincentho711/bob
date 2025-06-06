@@ -31,7 +31,6 @@ public:
         : seed_(seed)
         , max_cycles_(max_cycles)
         , sim_time_(0)
-        , cycle_count_(0)
         , rng_(seed) {
         
         // Initialize Verilator
@@ -86,7 +85,7 @@ public:
             
             // Process positive clock edge
             if (dut_->clk_i == 1) {
-                cycle_count_++;
+                ctx_->increment_cycle();
                 process_clock_cycle();
             }
             
@@ -105,7 +104,7 @@ public:
         auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
         
         std::cout << "\n=== Simulation Complete ===" << std::endl;
-        std::cout << "Total Cycles: " << cycle_count_ << std::endl;
+        std::cout << "Total Cycles: " << ctx_->current_cycle() << std::endl;
         std::cout << "Simulation Time: " << duration.count() << " ms" << std::endl;
     }
     
@@ -115,15 +114,18 @@ public:
     bool passed() const {
         // Check if checker reports pass
         bool checker_passed = checker_->is_pass_rate_acceptable();
-        
+        std::cout << "\nchecker_passed = " << checker_passed << std::endl;
+
         // Check if all transactions were processed
         bool all_transactions_driven = (driver_->pending_count() == 0);
-        
+        std::cout << "driver_->pending_count() = " << driver_->pending_count() << " , all_transactions_driven = " << all_transactions_driven << std::endl;
+
         // Check basic statistics
         const auto& checker_stats = checker_->get_adder_stats();
         bool has_sufficient_coverage = (checker_stats.corner_cases_checked > 0) && 
                                       (checker_stats.overflow_cases_checked > 0);
-        
+        std::cout << "has_sufficient_coverage = " << has_sufficient_coverage << std::endl;
+
         return checker_passed && all_transactions_driven && has_sufficient_coverage;
     }
 
@@ -132,18 +134,17 @@ private:
     const uint32_t seed_;
     const uint64_t max_cycles_;
     uint64_t sim_time_;
-    uint64_t cycle_count_;
     std::mt19937 rng_;
-    
+
     // Verilator components
     std::shared_ptr<Vhello_world_top> dut_;
     std::unique_ptr<VerilatedVcdC> trace_;
-    
+
     // Verification components
     std::shared_ptr<AdderSimulationContext> ctx_;
     std::unique_ptr<AdderDriver> driver_;
     std::unique_ptr<AdderChecker<Vhello_world_top>> checker_;
-    
+
     /**
      * @brief Setup waveform tracing
      */
@@ -180,7 +181,7 @@ private:
         driver_config.idle_value_b = 0;
 
         // Create driver
-        driver_ = std::make_unique<AdderDriver>("main_adder_driver", dut_, driver_config);
+        driver_ = std::make_unique<AdderDriver>("main_adder_driver", dut_, ctx_, driver_config);
 
         // Configure checker
         AdderCheckerConfig checker_config = create_strict_adder_config();
@@ -262,15 +263,16 @@ private:
      * @brief Drive inputs for current cycle
      */
     void drive_inputs() {
+        uint64_t current_cycle = ctx_->current_cycle();
         // Only start driving transaction after PIPELINE_DEPTH to ensure that all transactions driven are checked
-        if (cycle_count_ >= PIPELINE_DEPTH){
+        if (current_cycle >= PIPELINE_DEPTH){
             if (driver_->has_pending_transactions()) {
                 // Get the next transaction
                 AdderDriver::TransactionPtr next_transaction = driver_->get_next_transaction();
-                // Add transaction to checker. expect_transaction accounts for the pipeline depth so only supply current cycle_count_
+                // Add transaction to checker. expect_transaction accounts for the pipeline depth
                 checker_->expect_transaction(next_transaction);
                 // Drive the transaction
-                driver_->drive_next(cycle_count_);
+                driver_->drive_next();
             } else {
                 // Drive idle values when no more transactions
                 driver_->drive_idle_cycles(1);
@@ -284,14 +286,15 @@ private:
      * @brief Check outputs for current cycle
      */
     void check_outputs() {
+        uint64_t current_cycle = ctx_->current_cycle();
         // The checker handles pipeline delay internally
         // It will only check when appropriate transactions are available
         try {
-            if (cycle_count_ >= PIPELINE_DEPTH) {
+            if (current_cycle >= PIPELINE_DEPTH) {
                 checker_->check_cycle();
             }
         } catch (const std::exception& e) {
-            std::cerr << "Checker error at cycle " << cycle_count_ << ": " << e.what() << std::endl;
+            std::cerr << "Checker error at cycle " << current_cycle << ": " << e.what() << std::endl;
         }
     }
 
@@ -299,10 +302,11 @@ private:
      * @brief Log current cycle state for debugging
      */
     void log_cycle_state() {
-        if (cycle_count_ % 10 == 0 || cycle_count_ <= 10) {
-            std::cout << "Cycle " << std::setw(4) << cycle_count_ 
+        uint64_t current_cycle = ctx_->current_cycle();
+        if (current_cycle <= max_cycles_) {
+            std::cout << "Cycle " << std::setw(4) << current_cycle
                       << " | a_i: " << std::setw(3) << +dut_->a_i
-                      << " | b_i: " << std::setw(3) << +dut_->b_i  
+                      << " | b_i: " << std::setw(3) << +dut_->b_i
                       << " | c_o: " << std::setw(3) << +dut_->c_o
                       << " | Pending: " << driver_->pending_count()
                       << std::endl;
@@ -338,7 +342,7 @@ private:
         // Print simulation summary
         std::cout << "\nSimulation Summary:" << std::endl;
         std::cout << "  Seed: " << seed_ << std::endl;
-        std::cout << "  Cycles: " << cycle_count_ << std::endl;
+        std::cout << "  Cycles: " << ctx_->current_cycle() << std::endl;
         std::cout << "  Waveform: tb_hello_world_top.vcd" << std::endl;
         
         if (checker_) {

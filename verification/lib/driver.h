@@ -7,6 +7,7 @@
 #include <stdexcept>
 #include <type_traits>
 #include "transaction.h"
+#include "simulation_context.h"
 
 /**
  * @brief Base driver class providing common functionality for all drivers
@@ -25,6 +26,7 @@ class BaseDriver {
 public:
     using DutPtr = std::shared_ptr<DUT_TYPE>;
     using TransactionPtr = std::shared_ptr<TXN_TYPE>;
+    using SimulationContextPtr = std::shared_ptr<SimulationContext>;
     using ClockCallback = std::function<void()>;
 
     /**
@@ -32,7 +34,7 @@ public:
      * @param name Driver instance name for debugging
      * @param dut Shared pointer to the DUT
      */
-    explicit BaseDriver(const std::string& name, DutPtr dut);
+    explicit BaseDriver(const std::string& name, DutPtr dut, SimulationContextPtr ctx);
     
     virtual ~BaseDriver() = default;
 
@@ -59,10 +61,9 @@ public:
 
     /**
      * @brief Drive the next transaction in the queue
-     * @param cycle Current simulation cycle
      * @return true if transaction was driven, false if queue empty
      */
-    bool drive_next(uint64_t cycle);
+    bool drive_next();
 
     /**
      * @brief Check if there are pending transactions
@@ -110,29 +111,24 @@ protected:
     /**
      * @brief Pure virtual method to be implemented by derived classes
      * @param txn Transaction to drive
-     * @param cycle Current cycle
      */
-    virtual void drive_transaction(const TXN_TYPE& txn, uint64_t cycle) = 0;
+    virtual void drive_transaction(const TXN_TYPE& txn) = 0;
 
     /**
      * @brief Virtual method called before driving a transaction
      * @param txn Transaction about to be driven
-     * @param cycle Current cycle
      */
-    virtual void pre_drive(const TXN_TYPE& txn, uint64_t cycle) {
+    virtual void pre_drive(const TXN_TYPE& txn) {
         (void)txn;
-        (void)cycle;
         // default empty implementation
     }
 
     /**
      * @brief Virtual method called after driving a transaction
      * @param txn Transaction that was driven
-     * @param cycle Current cycle
      */
-    virtual void post_drive(const TXN_TYPE& txn, uint64_t cycle) {
+    virtual void post_drive(const TXN_TYPE& txn) {
         (void)txn;
-        (void)cycle;
         // default empty implementation
     }
 
@@ -151,6 +147,7 @@ protected:
 private:
     std::string name_;
     DutPtr dut_;
+    SimulationContextPtr ctx_;
     std::queue<TransactionPtr> transaction_queue_;
     ClockCallback clock_callback_;
     DriverStats stats_;
@@ -164,8 +161,8 @@ private:
 // ============================================================================
 
 template<typename DUT_TYPE, typename TXN_TYPE>
-BaseDriver<DUT_TYPE, TXN_TYPE>::BaseDriver(const std::string& name, DutPtr dut)
-    : name_(name), dut_(std::move(dut)), debug_enabled_(false) {
+BaseDriver<DUT_TYPE, TXN_TYPE>::BaseDriver(const std::string& name, DutPtr dut, SimulationContextPtr ctx)
+    : name_(name), dut_(dut), ctx_(ctx), debug_enabled_(false) {
     if (!dut_) {
         throw std::invalid_argument("DUT pointer cannot be null");
     }
@@ -181,7 +178,7 @@ void BaseDriver<DUT_TYPE, TXN_TYPE>::add_transaction(TransactionPtr txn) {
     }
     
     log_debug("Added transaction: " + txn->convert2string());
-    transaction_queue_.push(std::move(txn));
+    transaction_queue_.push(txn);
 }
 
 template<typename DUT_TYPE, typename TXN_TYPE>
@@ -193,7 +190,8 @@ typename BaseDriver<DUT_TYPE, TXN_TYPE>::TransactionPtr BaseDriver<DUT_TYPE, TXN
 }
 
 template<typename DUT_TYPE, typename TXN_TYPE>
-bool BaseDriver<DUT_TYPE, TXN_TYPE>::drive_next(uint64_t cycle) {
+bool BaseDriver<DUT_TYPE, TXN_TYPE>::drive_next() {
+    uint64_t current_cycle = ctx_->current_cycle();
     if (transaction_queue_.empty()) {
         return false;
     }
@@ -202,19 +200,19 @@ bool BaseDriver<DUT_TYPE, TXN_TYPE>::drive_next(uint64_t cycle) {
     transaction_queue_.pop();
 
     try {
-        pre_drive(*txn, cycle);
-        drive_transaction(*txn, cycle);
-        post_drive(*txn, cycle);
-        
+        pre_drive(*txn);
+        drive_transaction(*txn);
+        post_drive(*txn);
+
         update_stats();
-        log_debug("Driven transaction at cycle " + std::to_string(cycle) + 
+        log_debug("Driven transaction at cycle " + std::to_string(current_cycle) + 
                  ": " + txn->convert2string());
-        
+
         // Execute clock callback if set
         if (clock_callback_) {
             clock_callback_();
         }
-        
+
         return true;
     } catch (const std::exception& e) {
         log_error("Error driving transaction: " + std::string(e.what()));
