@@ -167,7 +167,7 @@ BaseDriver<DUT_TYPE, TXN_TYPE>::BaseDriver(const std::string& name, DutPtr dut, 
         throw std::invalid_argument("DUT pointer cannot be null");
     }
     stats_.start_time = std::chrono::steady_clock::now();
-    log_info("Driver initialized");
+    log_info("Driver initialised");
 }
 
 template<typename DUT_TYPE, typename TXN_TYPE>
