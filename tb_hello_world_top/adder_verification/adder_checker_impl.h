@@ -95,7 +95,7 @@ bool AdderChecker<DUT_TYPE>::perform_check(const AdderTransaction& txn) {
     // Possibly add more validation
     update_statistics(txn, actual_result, passed);
     if (!passed) {
-        log_mismatch(txn, txn.get_expected_result(), actual_result);
+        log_mismatch(txn, txn.get_result(), actual_result);
     }
     return passed;
 }
@@ -144,7 +144,7 @@ void AdderChecker<DUT_TYPE>::reset_statistics() {
 
 template<typename DUT_TYPE>
 bool AdderChecker<DUT_TYPE>::check_arithmetic(const AdderTransaction& txn, uint16_t actual_result) {
-    uint16_t expected = txn.get_expected_result();
+    uint16_t expected = txn.get_result();
 
     if (actual_result != expected) {
         log_mismatch(txn, expected, actual_result);

@@ -7,12 +7,12 @@
 // ============================================================================
 
 AdderTransaction::AdderTransaction(const std::string& name) 
-    : Transaction(name), a_(0), b_(0), expected_result_(0) {
+    : Transaction(name), a_(0), b_(0), result_(0) {
     calculate_expected();
 }
 
 AdderTransaction::AdderTransaction(uint8_t a, uint8_t b, const std::string& name) 
-    : Transaction(name), a_(a), b_(b), expected_result_(0) {
+    : Transaction(name), a_(a), b_(b), result_(0) {
     calculate_expected();
 }
 
@@ -27,7 +27,7 @@ void AdderTransaction::copy(const Transaction& other) {
     if (adder_txn != nullptr) {
         a_ = adder_txn->a_;
         b_ = adder_txn->b_;
-        expected_result_ = adder_txn->expected_result_;
+        result_ = adder_txn->result_;
     }
 }
 
@@ -43,13 +43,13 @@ bool AdderTransaction::compare(const Transaction& other) const {
     
     return (a_ == adder_txn->a_ && 
             b_ == adder_txn->b_ && 
-            expected_result_ == adder_txn->expected_result_);
+            result_ == adder_txn->result_);
 }
 
 std::string AdderTransaction::convert2string() const {
     std::ostringstream oss;
     oss << get_type_name() << " [" << get_name() << "] (ID: " << get_transaction_id() << ")"
-        << " - a=" << +a_ << ", b=" << +b_ << ", expected=" << expected_result_;
+        << " - a=" << +a_ << ", b=" << +b_ << ", result=" << result_;
     return oss.str();
 }
 
@@ -75,13 +75,20 @@ void AdderTransaction::set_corner_case(CornerCase case_type) {
     calculate_expected();
 }
 
+AdderTransaction::AdderTransactionPtr AdderTransaction::create_actual(uint8_t a, uint8_t b, uint16_t result, const std::string& name) {
+    auto txn = std::make_shared<AdderTransaction>(name);
+    txn->set_inputs(a, b);
+    txn->set_result(result);
+    return txn;
+}
+
 bool AdderTransaction::is_valid() const {
     // For adder, all 8-bit input combinations are valid
-    return true;
+    return a_ <= 255 && b_ <= 255;
 }
 
 void AdderTransaction::calculate_expected() {
-    expected_result_ = static_cast<uint16_t>(a_) + static_cast<uint16_t>(b_);
+    result_ = static_cast<uint16_t>(a_) + static_cast<uint16_t>(b_);
 }
 
 void AdderTransaction::set_corner_case_values(CornerCase case_type) {

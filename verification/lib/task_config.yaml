@@ -9,5 +9,7 @@ src_files:
   - "driver.h"
   - "checker.cpp"
   - "checker.h"
+  - "monitor.h"
+  - "monitor.cpp"
   - "simulation_context.h"
   - "simulation_context.cpp"

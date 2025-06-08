@@ -25,7 +25,7 @@ void AdderDriver::generate_corner_cases(const std::string& name_prefix) {
         auto txn = AdderTransactionFactory::create_corner_case(corner_cases[i], name);
         add_transaction(txn);
     }
-    
+
     log_info("Generated " + std::to_string(corner_cases.size()) + " corner case transactions");
 }
 
@@ -36,7 +36,7 @@ void AdderDriver::generate_random_transactions(size_t count, std::mt19937& rng,
         auto txn = AdderTransactionFactory::create_random(rng, name);
         add_transaction(txn);
     }
-    
+
     log_info("Generated " + std::to_string(count) + " random transactions");
 }
 
@@ -104,7 +104,7 @@ void AdderDriver::drive_transaction(const AdderTransaction& txn) {
     
     log_debug("Drove inputs: a=" + std::to_string(a) + 
               ", b=" + std::to_string(b) + 
-              ", expected=" + std::to_string(txn.get_expected_result()));
+              ", expected=" + std::to_string(txn.get_result()));
 }
 
 void AdderDriver::pre_drive(const AdderTransaction& txn) {

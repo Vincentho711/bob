@@ -9,4 +9,4 @@ always_ff @(posedge clk_i) begin
   c_o <= a_i + b_i;
 end
 
-endmodule
+endmodule  

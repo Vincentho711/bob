@@ -10,6 +10,8 @@
  */
 class AdderTransaction : public Transaction {
 public:
+    using AdderTransactionPtr = std::shared_ptr<AdderTransaction>;
+
     // Corner case enumeration for directed testing (moved before methods that use it)
     enum class CornerCase {
         MIN_MIN,        // 0 + 0
@@ -43,11 +45,13 @@ public:
     void randomize(std::mt19937& rng);
     void set_inputs(uint8_t a, uint8_t b);
     void set_corner_case(CornerCase case_type);
+    static AdderTransactionPtr create_actual(uint8_t a, uint8_t b, uint16_t result, const std::string& name = "actual_adder_txn");
 
     // Getters
     uint8_t get_a() const { return a_; }
     uint8_t get_b() const { return b_; }
-    uint16_t get_expected_result() const { return expected_result_; }
+    uint16_t get_result() const { return result_; }
+    void set_result(uint16_t val) { result_ = val; }
 
     // Validation
     bool is_valid() const;
@@ -55,7 +59,7 @@ public:
 private:
     uint8_t a_;
     uint8_t b_;
-    uint16_t expected_result_;
+    uint16_t result_; // Used for both expected and actual result
 
     void calculate_expected();
     void set_corner_case_values(CornerCase case_type);

@@ -2,6 +2,7 @@
 #define MONITOR_H
 
 #include <iostream>
+#include "transaction.h"
 #include "simulation_context.h"
 
 /**
@@ -63,6 +64,11 @@ public:
 
 protected:
     /**
+     * @brief Pure virtual method to be implemented by derived classes
+     */
+    virtual TransactionPtr sample_output() = 0;
+
+    /**
      * @brief Access to DUT for derived classes
      */
     DutPtr get_dut() const { return dut_; }
@@ -77,7 +83,7 @@ protected:
 private:
     std::string name_;
     DutPtr dut_;
-    SimlationContextPtr ctx_;
+    SimulationContextPtr ctx_;
     MonitorStats stats_;
     bool debug_enabled_;
 
@@ -96,6 +102,13 @@ BaseMonitor<DUT_TYPE, TXN_TYPE>::BaseMonitor(const std::string& name, DutPtr dut
     }
     stats_.start_time = std::chrono::steady_clock::now();
     log_info("Monitor initialised");
+}
+
+template<typename DUT_TYPE, typename TXN_TYPE>
+void BaseMonitor<DUT_TYPE, TXN_TYPE>::reset() {
+    stats_.cycles_active = 0;
+    stats_.start_time = std::chrono::steady_clock::now();
+    stats_.last_activity = stats_.start_time;
 }
 
 template<typename DUT_TYPE, typename TXN_TYPE>
