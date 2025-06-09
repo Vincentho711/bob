@@ -3,6 +3,7 @@
 
 #include "transaction.h"
 #include <random>
+#include <optional>
 
 /**
  * Adder-specific transaction class for RTL adder verification
@@ -28,8 +29,10 @@ public:
     };
 
     // Constructors
-    AdderTransaction(const std::string& name = "adder_txn");
-    AdderTransaction(uint8_t a, uint8_t b, const std::string& name = "adder_txn");
+    AdderTransaction(Kind kind, const std::string& name = "adder_txn");
+    AdderTransaction(uint8_t a, uint8_t b, const std::string& name = "adder_expected_txn");
+    AdderTransaction(uint8_t a, uint8_t b, uint64_t cycle, const std::string& name = "adder_expected_txn");
+    AdderTransaction(uint16_t result, uint64_t cycle, const std::string& name = "adder_actual_txn");
 
     // Virtual destructor
     virtual ~AdderTransaction() = default;
@@ -45,21 +48,25 @@ public:
     void randomize(std::mt19937& rng);
     void set_inputs(uint8_t a, uint8_t b);
     void set_corner_case(CornerCase case_type);
-    static AdderTransactionPtr create_actual(uint8_t a, uint8_t b, uint16_t result, const std::string& name = "actual_adder_txn");
+    void set_result(uint16_t result);
+    void set_cycle(uint64_t cycle);
+    static AdderTransactionPtr create_expected(uint8_t a, uint8_t b, uint64_t driven_cycle, const std::string& name = "expected_adder_txn");
+    static AdderTransactionPtr create_actual(uint16_t c, uint64_t captured_cycle, const std::string& name = "actual_adder_txn");
 
     // Getters
-    uint8_t get_a() const { return a_; }
-    uint8_t get_b() const { return b_; }
-    uint16_t get_result() const { return result_; }
-    void set_result(uint16_t val) { result_ = val; }
+    uint8_t get_a() const { if (!a_.has_value()) throw std::logic_error("a_ is not set."); return a_.value(); }
+    uint8_t get_b() const { if (!b_.has_value()) throw std::logic_error("b_ is not set."); return b_.value(); }
+    uint16_t get_result() const { if (!result_.has_value()) throw std::logic_error("result_ is not set."); return result_.value(); }
+    uint64_t get_cycle() const { return cycle_; }
 
     // Validation
     bool is_valid() const;
 
 private:
-    uint8_t a_;
-    uint8_t b_;
-    uint16_t result_; // Used for both expected and actual result
+    std::optional<uint8_t> a_;
+    std::optional<uint8_t> b_;
+    std::optional<uint16_t> result_;
+    uint64_t cycle_; // For expected transaction, store the cycle when transaction is driven into DUT. For actual, store the cycle when it comes out of the DUT.
 
     void calculate_expected();
     void set_corner_case_values(CornerCase case_type);

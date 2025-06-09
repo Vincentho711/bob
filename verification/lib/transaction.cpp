@@ -1,22 +1,22 @@
 #include "transaction.h"
 #include <iostream>
-#include <iomanip>
 
 // Static member initialization
 std::uint64_t Transaction::next_transaction_id_ = 1;
 
-Transaction::Transaction(const std::string& name) 
-    : name_(name) {
+Transaction::Transaction(Kind kind, const std::string& name) 
+    : kind_(kind), name_(name) {
     assign_transaction_id();
 }
 
-Transaction::Transaction(const Transaction& other) 
-    : name_(other.name_) {
+Transaction::Transaction(const Transaction& other)
+    : kind_(other.kind_), name_(other.name_) {
     assign_transaction_id();
 }
 
 Transaction& Transaction::operator=(const Transaction& other) {
     if (this != &other) {
+        kind_ = other.kind_;
         name_ = other.name_;
         // Note: transaction_id_ remains unchanged during assignment
     }
@@ -24,13 +24,15 @@ Transaction& Transaction::operator=(const Transaction& other) {
 }
 
 Transaction::Transaction(Transaction&& other) noexcept 
-    : name_(std::move(other.name_)), 
+    : kind_(other.kind_),
+      name_(std::move(other.name_)), 
       transaction_id_(other.transaction_id_) {
     other.transaction_id_ = 0;
 }
 
 Transaction& Transaction::operator=(Transaction&& other) noexcept {
     if (this != &other) {
+        kind_ = other.kind_;
         name_ = std::move(other.name_);
         transaction_id_ = other.transaction_id_;
         other.transaction_id_ = 0;
@@ -40,18 +42,20 @@ Transaction& Transaction::operator=(Transaction&& other) noexcept {
 
 void Transaction::copy(const Transaction& other) {
     if (this != &other) {
+        kind_ = other.kind_;
         name_ = other.name_;
         // transaction_id_ remains unchanged
     }
 }
 
 bool Transaction::compare(const Transaction& other) const {
-    return (typeid(*this) == typeid(other)) && (name_ == other.name_);
+    return (typeid(*this) == typeid(other)) && (kind_ == other.kind_) && (name_ == other.name_);
 }
 
 std::string Transaction::convert2string() const {
     std::ostringstream oss;
-    oss << get_type_name() << " [" << name_ << "] (ID: " << transaction_id_ << ")";
+    oss << get_type_name() << " [" << name_ << "] (ID: " << transaction_id_ << ")"
+        << " <Kind: " << (is_expected() ? "Expected" : "Actual") << ">";
     return oss.str();
 }
 

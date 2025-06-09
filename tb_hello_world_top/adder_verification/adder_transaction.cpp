@@ -6,14 +6,20 @@
 // AdderTransaction Implementation
 // ============================================================================
 
-AdderTransaction::AdderTransaction(const std::string& name) 
-    : Transaction(name), a_(0), b_(0), result_(0) {
-    calculate_expected();
+AdderTransaction::AdderTransaction(Kind kind, const std::string& name)
+    : Transaction(kind, name), cycle_(0) {
 }
 
 AdderTransaction::AdderTransaction(uint8_t a, uint8_t b, const std::string& name) 
-    : Transaction(name), a_(a), b_(b), result_(0) {
-    calculate_expected();
+    : Transaction(Kind::Expected, name), a_(a), b_(b), cycle_(0) {
+}
+
+AdderTransaction::AdderTransaction(uint8_t a, uint8_t b, uint64_t cycle, const std::string& name) 
+    : Transaction(Kind::Expected, name), a_(a), b_(b), cycle_(cycle) {
+}
+
+AdderTransaction::AdderTransaction(uint16_t c, uint64_t cycle, const std::string& name) 
+    : Transaction(Kind::Actual, name), result_(c), cycle_(cycle) {
 }
 
 std::shared_ptr<Transaction> AdderTransaction::clone() const {
@@ -28,6 +34,7 @@ void AdderTransaction::copy(const Transaction& other) {
         a_ = adder_txn->a_;
         b_ = adder_txn->b_;
         result_ = adder_txn->result_;
+        cycle_ = adder_txn->cycle_;
     }
 }
 
@@ -35,21 +42,27 @@ bool AdderTransaction::compare(const Transaction& other) const {
     if (!Transaction::compare(other)) {
         return false;
     }
-    
+
     const AdderTransaction* adder_txn = dynamic_cast<const AdderTransaction*>(&other);
     if (adder_txn == nullptr) {
         return false;
     }
-    
-    return (a_ == adder_txn->a_ && 
-            b_ == adder_txn->b_ && 
-            result_ == adder_txn->result_);
+
+    return (a_ == adder_txn->a_ &&
+            b_ == adder_txn->b_ &&
+            result_ == adder_txn->result_ &&
+            cycle_ == adder_txn->cycle_);
 }
 
 std::string AdderTransaction::convert2string() const {
     std::ostringstream oss;
-    oss << get_type_name() << " [" << get_name() << "] (ID: " << get_transaction_id() << ")"
-        << " - a=" << +a_ << ", b=" << +b_ << ", result=" << result_;
+    if (this->kind_ == Kind::Expected) {
+      oss << get_type_name() << " [" << get_name() << "] (ID: " << get_transaction_id() << ")"
+          << " - cycle=" << +get_cycle() << " - a=" << +get_a() << ", b=" << get_b();
+    } else {
+      oss << get_type_name() << " [" << get_name() << "] (ID: " << get_transaction_id() << ")"
+          << " - cycle=" << +get_cycle() << " - result=" << get_result();
+    }
     return oss.str();
 }
 
@@ -61,24 +74,32 @@ void AdderTransaction::randomize(std::mt19937& rng) {
     std::uniform_int_distribution<uint8_t> dist(0, 255);
     a_ = dist(rng);
     b_ = dist(rng);
-    calculate_expected();
 }
 
 void AdderTransaction::set_inputs(uint8_t a, uint8_t b) {
     a_ = a;
     b_ = b;
-    calculate_expected();
 }
 
 void AdderTransaction::set_corner_case(CornerCase case_type) {
     set_corner_case_values(case_type);
-    calculate_expected();
 }
 
-AdderTransaction::AdderTransactionPtr AdderTransaction::create_actual(uint8_t a, uint8_t b, uint16_t result, const std::string& name) {
-    auto txn = std::make_shared<AdderTransaction>(name);
-    txn->set_inputs(a, b);
-    txn->set_result(result);
+void AdderTransaction::set_result(uint16_t result) {
+    result_ = result;
+}
+
+void AdderTransaction::set_cycle(uint64_t cycle) {
+    cycle_ = cycle;
+}
+
+AdderTransaction::AdderTransactionPtr AdderTransaction::create_expected(uint8_t a, uint8_t b, uint64_t driven_cycle, const std::string& name) {
+    auto txn = std::make_shared<AdderTransaction>(a, b, driven_cycle, name);
+    return txn;
+}
+
+AdderTransaction::AdderTransactionPtr AdderTransaction::create_actual(uint16_t c, uint64_t captured_cycle, const std::string& name) {
+    auto txn = std::make_shared<AdderTransaction>(c, captured_cycle, name);
     return txn;
 }
 
@@ -88,7 +109,7 @@ bool AdderTransaction::is_valid() const {
 }
 
 void AdderTransaction::calculate_expected() {
-    result_ = static_cast<uint16_t>(a_) + static_cast<uint16_t>(b_);
+    set_result(static_cast<uint16_t>(get_a()) + static_cast<uint16_t>(get_b()));
 }
 
 void AdderTransaction::set_corner_case_values(CornerCase case_type) {
@@ -136,13 +157,13 @@ void AdderTransaction::set_corner_case_values(CornerCase case_type) {
 // ============================================================================
 
 std::shared_ptr<AdderTransaction> AdderTransactionFactory::create_random(std::mt19937& rng, const std::string& name) {
-    auto txn = std::make_shared<AdderTransaction>(name);
+    auto txn = std::make_shared<AdderTransaction>(AdderTransaction::Kind::Expected, name);
     txn->randomize(rng);
     return txn;
 }
 
 std::shared_ptr<AdderTransaction> AdderTransactionFactory::create_corner_case(AdderTransaction::CornerCase case_type, const std::string& name) {
-    auto txn = std::make_shared<AdderTransaction>(name);
+    auto txn = std::make_shared<AdderTransaction>(AdderTransaction::Kind::Expected, name);
     txn->set_corner_case(case_type);
     return txn;
 }

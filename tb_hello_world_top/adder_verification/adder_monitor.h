@@ -32,9 +32,15 @@ public:
     explicit AdderMonitor(const std::string& name, DutPtr dut, AdderSimulationContextPtr ctx);
 
     /**
+      * @brief Sample the input of the adder DUT
+      */
+    AdderTransactionPtr sample_input() override;
+
+    /**
      * @brief Sample the output of the adder DUT
      */
     AdderTransactionPtr sample_output() override;
+
 protected:
     /**
      * @brief Reset the stats of monitor

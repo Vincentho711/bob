@@ -8,16 +8,24 @@ AdderMonitor::AdderMonitor(const std::string& name, DutPtr dut, AdderSimulationC
     log_info("AdderMonitor initialised.");
 }
 
-AdderMonitor::AdderTransactionPtr AdderMonitor::sample_output() {
+AdderMonitor::AdderTransactionPtr AdderMonitor::sample_input() {
+    uint64_t current_cycle = ctx_->current_cycle();
     auto dut = get_dut();
     uint8_t a = dut->a_i;
     uint8_t b = dut->b_i;
+
+    auto txn = AdderTransaction::create_expected(a, b, current_cycle, "monitored_adder_txn");
+    log_debug("Sampled DUT input -> a:" + std::to_string(a) + ", b:" + std::to_string(b));
+    return txn;
+}
+
+AdderMonitor::AdderTransactionPtr AdderMonitor::sample_output() {
+    uint64_t current_cycle = ctx_->current_cycle();
+    auto dut = get_dut();
     uint16_t c = dut->c_o;
 
-    auto txn = AdderTransaction::create_actual(a, b, c, "monitored_adder_txn");
-    log_debug("Sampled DUT output -> a:" + std::to_string(a) +
-              ", b: " + std::to_string(b) +
-              ", result: " + std::to_string(c));
+    auto txn = AdderTransaction::create_actual(c, current_cycle, "monitored_adder_txn");
+    log_debug("Sampled DUT output -> c:" + std::to_string(c));
     return txn;
 }
 

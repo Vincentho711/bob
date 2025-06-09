@@ -10,6 +10,7 @@
 #include <verilated_vcd_c.h>
 #include <Vhello_world_top.h>
 
+#include "adder_verification/adder_monitor.h"
 #include "command_line_parser.h"
 #include "adder_verification/adder_transaction.h"
 #include "adder_verification/adder_driver.h"
@@ -143,6 +144,7 @@ private:
     // Verification components
     std::shared_ptr<AdderSimulationContext> ctx_;
     std::unique_ptr<AdderDriver> driver_;
+    std::unique_ptr<AdderMonitor> monitor_;
     std::unique_ptr<AdderChecker<Vhello_world_top>> checker_;
 
     /**
@@ -154,7 +156,7 @@ private:
         trace_->open("tb_hello_world_top.vcd");
         std::cout << "Waveform tracing enabled: tb_hello_world_top.vcd" << std::endl;
     }
-    
+
     /**
      * @brief Reset DUT to known state
      */
@@ -182,6 +184,9 @@ private:
 
         // Create driver
         driver_ = std::make_unique<AdderDriver>("main_adder_driver", dut_, ctx_, driver_config);
+
+        // Create monitor
+        monitor_ = std::make_unique<AdderMonitor>("main_adder_monitor", dut_, ctx_);
 
         // Configure checker
         AdderCheckerConfig checker_config = create_strict_adder_config();
@@ -269,10 +274,12 @@ private:
             if (driver_->has_pending_transactions()) {
                 // Get the next transaction
                 AdderDriver::TransactionPtr next_transaction = driver_->get_next_transaction();
-                // Add transaction to checker. expect_transaction accounts for the pipeline depth
-                checker_->expect_transaction(next_transaction);
                 // Drive the transaction
                 driver_->drive_next();
+                // Sample the input with monitor
+                auto expected_txn = monitor_->sample_input();
+                // Add transaction to checker. expect_transaction accounts for the pipeline depth
+                checker_->expect_transaction(expected_txn);
             } else {
                 // Drive idle values when no more transactions
                 driver_->drive_idle_cycles(1);

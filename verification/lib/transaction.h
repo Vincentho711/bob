@@ -13,8 +13,11 @@
  */
 class Transaction {
 public:
+    // Enum to indicate whether a transaction is an expected or actual transaction
+    enum class Kind { Expected, Actual };
+
     // Constructor
-    Transaction(const std::string& name = "transaction");
+    Transaction(Kind kind, const std::string& name = "transaction");
 
     // Virtual destructor for proper inheritance
     virtual ~Transaction() = default;
@@ -40,14 +43,19 @@ public:
 
     std::uint64_t get_transaction_id() const { return transaction_id_; }
 
+    Kind kind() const { return kind_; }
+
     // Utility methods
     virtual std::string get_type_name() const;
+    bool is_expected() const { return kind_ == Kind::Expected; }
+    bool is_actual() const { return kind_ == Kind::Actual; }
 
     // Stream operator
     friend std::ostream& operator<<(std::ostream& os, const Transaction& txn);
 
 protected:
     std::string name_;
+    Kind kind_;
     std::uint64_t transaction_id_;
 
 private:

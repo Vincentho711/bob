@@ -103,8 +103,7 @@ void AdderDriver::drive_transaction(const AdderTransaction& txn) {
     classify_and_update_stats(txn);
     
     log_debug("Drove inputs: a=" + std::to_string(a) + 
-              ", b=" + std::to_string(b) + 
-              ", expected=" + std::to_string(txn.get_result()));
+              ", b=" + std::to_string(b));
 }
 
 void AdderDriver::pre_drive(const AdderTransaction& txn) {

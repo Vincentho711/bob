@@ -64,7 +64,12 @@ public:
 
 protected:
     /**
-     * @brief Pure virtual method to be implemented by derived classes
+     * @brief Pure virtual method to be implemented by derived classes for sampling the input of DUT
+     */
+    virtual TransactionPtr sample_input() = 0;
+
+    /**
+     * @brief Pure virtual method to be implemented by derived classes for sampling the output of DUT
      */
     virtual TransactionPtr sample_output() = 0;
 
