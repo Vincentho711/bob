@@ -4,6 +4,7 @@
 #include "simulation_context.h"
 #include "transaction.h"
 #include "checker.h"
+#include <chrono>
 #include <iostream>
 
 /**
@@ -24,8 +25,12 @@ struct ScoreboardConfig {
     uint32_t max_latency_cycles = 10;
     bool enable_out_of_order_matching = false;
     bool stop_on_first_error = true;
+    bool enable_detailed_logging = true;
     bool use_chceker = true;
     ScoreboardLogLevel log_level = ScoreboardLogLevel::INFO;
+    uint32_t max_pending_transactions = 1000; ///< Maximum pending transactions
+    uint32_t timeout_cycles = 100;            ///< Transaction timeout in cycles
+    double min_match_rate = 0.95;             ///< Minimum acceptable match rate
 
     ScoreboardConfig() = default;
 };
@@ -40,7 +45,16 @@ struct ScoreboardStats {
     uint64_t mismatch = 0;
     uint64_t timed_out = 0;
 
+    std::chrono::high_resolution_clock::time_point first_transaction_time;
+    std::chrono::high_resolution_clock::time_point last_transaction_time;
+
     ScoreboardStats() = default;
+
+    void reset() {
+        *this = ScoreboardStats{};
+        first_transaction_time = std::chrono::high_resolution_clock::now();
+        last_transaction_time = first_transaction_time;
+    }
 };
 
 template<typename DUT_TYPE, typename TRANSACTION_TYPE>
@@ -54,12 +68,12 @@ public:
   /**
     * @brief Structure to hold pending transactions with metadata
     */
-  struct ExpectedTransaction {
+  struct PendingTransaction {
       TransactionPtr transaction;
       uint64_t expected_cycle;
       uint64_t submitted_cycle;
 
-      ExpectedTransaction(TransactionPtr txn, uint64_t exp_cycle, uint64_t sub_cycle)
+      PendingTransaction(TransactionPtr txn, uint64_t exp_cycle, uint64_t sub_cycle)
           : transaction(txn), expected_cycle(exp_cycle), submitted_cycle(sub_cycle) {}
   };
 
@@ -69,6 +83,155 @@ protected:
     ScoreboardConfig config_;
     ScoreboardStats stats_;
     SimulationContextPtr ctx_;
-    std::queue<ExpectedTransaction> expected_transactions_;
+    std::queue<PendingTransaction> expected_queue_;
+    std::queue<PendingTransaction> actual_queue_;
+
+public:
+    /**
+     * @brief Construct a new BaseChecker
+     * 
+     * @param name Unique name for this scoreboard instance
+     * @param dut Shared pointer to the DUT
+     * @param config Configuration for scoreboard behaviour
+     */
+    explicit BaseScoreboard(const std::string& name, DutPtr dut,
+                            SimulationContextPtr ctx, const ScoreboardConfig& config = ScoreboardConfig{})
+        : name_(name), dut_(dut), config_(config), ctx_(ctx) {
+        if (!dut_) {
+            throw std::invalid_argument("DUT pointer cannot be null");
+        }
+        log_info("BaseScoreboard '" + name_ + "' initialised");
+    }
+
+    /**
+     * @brief Virtual destructor
+     */
+    virtual ~BaseScoreboard() = default;
+
+    // Disable copy constructor and assignment (scoreboard should be unique)
+    BaseScoreboard(const BaseScoreboard&) = delete;
+    BaseScoreboard& operator=(const BaseScoreboard&) = delete;
+
+    // Enable move constructor and assignment
+    BaseScoreboard(BaseScoreboard&&) = default;
+    BaseScoreboard& operator=(BaseScoreboard&&) = default;
+
+    /**
+     * @brief Add expected transaction to expected_queue_
+     * 
+     * @param transaction Expected transaction
+     * @param expected_cycle Cycle expected to be popped from queue
+     */
+    virtual void add_expected(TransactionPtr transaction, uint64_t expected_cycle);
+
+    /**
+     * @brief Add actual transaction to actual_queue_
+     * 
+     * @param transaction Expected transaction
+     * @param expected_cycle Cycle expected to be popped from queue
+     */
+    virtual void add_actual(TransactionPtr transaction, uint64_t expected_cycle);
+
+    /**
+     * @brief Process pending transactions and perform matching
+     * Called periodically to handle timeouts and matching
+     */
+    virtual void process_transactions();
+
+    /**
+     * @brief Check if all transactions have been processed
+     * 
+     * @return true if scoreboard is empty (all transactions matched/dropped)
+     */
+    virtual bool is_empty() const;
+    
+    /**
+     * @brief Get current match rate
+     * 
+     * @return Match rate as a value between 0.0 and 1.0
+     */
+    virtual double get_match_rate() const;
+    
+    /**
+     * @brief Check if scoreboard performance is acceptable
+     * 
+     * @return true if match rate meets minimum requirements
+     */
+    virtual bool is_passing() const;
+
+    // Configuration management
+
+    /**
+     * @brief Update scoreboard configuration
+     * 
+     * @param new_config New configuration to apply
+     */
+    void update_config(const ScoreboardConfig& new_config);
+
+    /**
+     * @brief Get current configuration
+     */
+    const ScoreboardConfig& get_config() const { return config_; }
+
+    // Statistics and reporting
+
+    /**
+     * @brief Get current statistics
+     */
+    const ScoreboardStats& get_stats() const { return stats_; }
+
+    /**
+     * @brief Reset all statistics
+     */
+    void reset_stats();
+
+    /**
+     * @brief Print comprehensive report
+     */
+    virtual void print_report() const;
+
+    /**
+     * @brief Print summary report
+     */
+    virtual void print_summary() const;
+
+protected:
+    // Logging methods
+    void log_debug(const std::string& message) const {
+        if (config_.log_level <= ScoreboardLogLevel::DEBUG) {
+            log_message("DEBUG", message);
+        }
+    }
+
+    void log_info(const std::string& message) const {
+        if (config_.log_level <= ScoreboardLogLevel::INFO) {
+            log_message("INFO", message);
+        }
+    }
+
+    void log_warning(const std::string& message) const {
+        if (config_.log_level <= ScoreboardLogLevel::WARNING) {
+            log_message("WARNING", message);
+        }
+    }
+
+    void log_error(const std::string& message) const {
+        if (config_.log_level <= ScoreboardLogLevel::ERROR) {
+            log_message("ERROR", message);
+        }
+    }
+
+    void log_fatal(const std::string& message) const {
+        log_message("FATAL", message);
+    }
+
+private:
+    void log_message(const std::string& level, const std::string& message) const {
+        uint64_t current_cycle = ctx_->current_cycle();
+        if (config_.enable_detailed_logging) {
+            std::cout << "[" << level << "] [" << name_ << "] [Cycle " 
+                      << current_cycle << "] " << message << std::endl;
+        }
+    }
 };
 
