@@ -19,7 +19,7 @@ enum class ScoreboardLogLevel {
 };
 
 /**
- * @brief Configuration structure for checker behavior
+ * @brief Configuration structure for scoreboard behavior
  */
 struct ScoreboardConfig {
     uint32_t max_latency_cycles = 10;
@@ -88,7 +88,7 @@ protected:
 
 public:
     /**
-     * @brief Construct a new BaseChecker
+     * @brief Construct a new BaseScoreboard
      * 
      * @param name Unique name for this scoreboard instance
      * @param dut Shared pointer to the DUT
