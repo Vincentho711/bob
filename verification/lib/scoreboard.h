@@ -5,7 +5,9 @@
 #include "transaction.h"
 #include "checker.h"
 #include <chrono>
+#include <cstdint>
 #include <iostream>
+#include <stdexcept>
 
 /**
  * @brief Enumeration for scoreboard log levels
@@ -41,6 +43,8 @@ struct ScoreboardConfig {
 struct ScoreboardStats {
     uint64_t total_expected = 0;
     uint64_t total_actual = 0;
+    uint64_t expected_transaction_dropped = 0;
+    uint64_t actual_transaction_dropped = 0;
     uint64_t matched = 0;
     uint64_t mismatch = 0;
     uint64_t timed_out = 0;
@@ -57,13 +61,13 @@ struct ScoreboardStats {
     }
 };
 
-template<typename DUT_TYPE, typename TRANSACTION_TYPE>
+template<typename DUT_TYPE, typename TXN_TYPE>
 class BaseScoreboard {
 public:
   using DutPtr = std::shared_ptr<DUT_TYPE>;
-  using TransactionPtr = std::shared_ptr<TRANSACTION_TYPE>;
+  using TransactionPtr = std::shared_ptr<TXN_TYPE>;
   using SimulationContextPtr = std::shared_ptr<SimulationContext>;
-  using CheckerPtr = std::shared_ptr<BaseChecker<DUT_TYPE, TRANSACTION_TYPE>>;
+  using CheckerPtr = std::shared_ptr<BaseChecker<DUT_TYPE, TXN_TYPE>>;
 
   /**
     * @brief Structure to hold pending transactions with metadata
@@ -234,4 +238,62 @@ private:
         }
     }
 };
+
+// ============================================================================
+// Template Implementation
+// ============================================================================
+
+template<typename DUT_TYPE, typename TXN_TYPE>
+BaseScoreboard<DUT_TYPE, TXN_TYPE>::BaseScoreboard(const std::string& name, DutPtr dut, SimulationContextPtr ctx)
+    : name_(name), dut_(dut), ctx_(ctx) {
+    if (!dut) {
+        throw std::invalid_argument("DUT pointer cannot be null");
+    }
+    log_info("Scoreboard initialised.");
+}
+
+template<typename DUT_TYPE, typename TXN_TYPE>
+void BaseScoreboard<DUT_TYPE, TXN_TYPE>::add_expected(TransactionPtr transaction, uint64_t expected_cycle) {
+    if (!transaction) {
+        log_error("Cannot add null expected transaction");
+        return;
+    }
+    if (expected_queue_.size() >= config_.max_pending_transactions) {
+        stats_.expected_transaction_dropped++;
+        log_warning("Dropping expected transaction - expected queue is full");
+        return;
+    }
+
+    uint64_t current_cycle = ctx_->current_cycle();
+    PendingTransaction pending(transaction, expected_cycle, current_cycle);
+
+    expected_queue_.push(pending);
+    log_debug("Added expected transaction: " + transaction->convert2string());
+    stats_.total_expected++;
+    if (stats_.total_expected == 1) {
+        stats_.first_transaction_time = std::chrono::high_resolution_clock::now();
+    }
+    stats_.last_transaction_time = std::chrono::high_resolution_clock::now();
+}
+
+template<typename DUT_TYPE, typename TXN_TYPE>
+void BaseScoreboard<DUT_TYPE, TXN_TYPE>::add_actual(TransactionPtr transaction, uint64_t expected_cycle) {
+    if (!transaction) {
+        log_error("Cannot add nll expected transation");
+        return;
+    }
+    if (actual_queue_.size() >= config_.max_pending_transactions) {
+        stats_.actual_transaction_dropped++;
+        log_warning("Dropping actual transaction - actual queue is full");
+        return;
+    }
+
+    uint64_t current_cycle = ctx_->current_cycle();
+    PendingTransaction pending(transaction, expected_cycle, current_cycle);
+
+    actual_queue_.push(pending);
+    log_debug("Added actual transaction: " + transaction->convert2string());
+    stats_.total_actual++;
+    stats_.last_transaction_time = std::chrono::high_resolution_clock::now();
+}
 
