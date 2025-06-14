@@ -28,6 +28,7 @@ struct ScoreboardConfig {
     bool enable_out_of_order_matching = false;
     bool stop_on_first_error = true;
     bool enable_detailed_logging = true;
+    bool enable_timout_checking = true;
     bool use_chceker = true;
     ScoreboardLogLevel log_level = ScoreboardLogLevel::INFO;
     uint32_t max_pending_transactions = 1000; ///< Maximum pending transactions
@@ -48,6 +49,8 @@ struct ScoreboardStats {
     uint64_t matched = 0;
     uint64_t mismatch = 0;
     uint64_t timed_out = 0;
+    uint64_t checks_performed = 0;
+    uint64_t checks_passed = 0;
 
     std::chrono::high_resolution_clock::time_point first_transaction_time;
     std::chrono::high_resolution_clock::time_point last_transaction_time;
@@ -84,6 +87,7 @@ public:
 protected:
     std::string name_;
     DutPtr dut_;
+    CheckerPtr checker_;
     ScoreboardConfig config_;
     ScoreboardStats stats_;
     SimulationContextPtr ctx_;
@@ -96,13 +100,21 @@ public:
      * 
      * @param name Unique name for this scoreboard instance
      * @param dut Shared pointer to the DUT
+     * @param checker Shared pointer to the checker
+     * @param ctx Shared pointer to the simulation context
      * @param config Configuration for scoreboard behaviour
      */
-    explicit BaseScoreboard(const std::string& name, DutPtr dut,
+    explicit BaseScoreboard(const std::string& name, DutPtr dut, CheckerPtr checker,
                             SimulationContextPtr ctx, const ScoreboardConfig& config = ScoreboardConfig{})
-        : name_(name), dut_(dut), config_(config), ctx_(ctx) {
+        : name_(name), dut_(dut), checker_(checker), config_(config), ctx_(ctx) {
         if (!dut_) {
             throw std::invalid_argument("DUT pointer cannot be null");
+        }
+        if (!checker_) {
+            throw std::invalid_argument("Checker potiner cannot be null");
+        }
+        if (!ctx_) {
+            throw std::invalid_argument("SimulationContext pointer cannot be null");
         }
         log_info("BaseScoreboard '" + name_ + "' initialised");
     }
@@ -135,12 +147,20 @@ public:
      * @param expected_cycle Cycle expected to be popped from queue
      */
     virtual void add_actual(TransactionPtr transaction, uint64_t expected_cycle);
+    
+    /**
+     * @brief Match 2 pending transactions
+     * 
+     * @return true if match, false if they do not
+     */
+    virtual bool compare_transactions(PendingTransaction expected_transaction, PendingTransaction actual_transaction);
 
     /**
      * @brief Process pending transactions and perform matching
      * Called periodically to handle timeouts and matching
+     * @return true if success, false if fail
      */
-    virtual void process_transactions();
+    virtual bool process_transactions();
 
     /**
      * @brief Check if all transactions have been processed
@@ -244,10 +264,16 @@ private:
 // ============================================================================
 
 template<typename DUT_TYPE, typename TXN_TYPE>
-BaseScoreboard<DUT_TYPE, TXN_TYPE>::BaseScoreboard(const std::string& name, DutPtr dut, SimulationContextPtr ctx)
-    : name_(name), dut_(dut), ctx_(ctx) {
+BaseScoreboard<DUT_TYPE, TXN_TYPE>::BaseScoreboard(const std::string& name, DutPtr dut, CheckerPtr checker, SimulationContextPtr ctx)
+    : name_(name), dut_(dut), checker_(checker), ctx_(ctx) {
     if (!dut) {
         throw std::invalid_argument("DUT pointer cannot be null");
+    }
+    if (!checker_) {
+        throw std::invalid_argument("Checker potiner cannot be null");
+    }
+    if (!ctx_) {
+        throw std::invalid_argument("SimulationContext pointer cannot be null");
     }
     log_info("Scoreboard initialised.");
 }
@@ -295,5 +321,67 @@ void BaseScoreboard<DUT_TYPE, TXN_TYPE>::add_actual(TransactionPtr transaction, 
     log_debug("Added actual transaction: " + transaction->convert2string());
     stats_.total_actual++;
     stats_.last_transaction_time = std::chrono::high_resolution_clock::now();
+}
+template<typename DUT_TYPE, typename TXN_TYPE>
+bool BaseScoreboard<DUT_TYPE, TXN_TYPE>::compare_transactions(PendingTransaction& expected_transaction, PendingTransaction& actual_transaction) {
+    if (!expected_transaction) {
+        log_error("Cannot compare null expected transaction.");
+        return false;
+    }
+    if (!actual_transaction) {
+        log_error("Cannot compare null actual transaction.");
+        return false;
+    }
+    // Compare transaction based on their expected cycle based on each cycle 1 transaction in and out of DUT assumption
+    return (expected_transaction.expected_cycle == actual_transaction.expected_cycle);
+}
+
+template<typename DUT_TYPE, typename TXN_TYPE>
+bool BaseScoreboard<DUT_TYPE, TXN_TYPE>::process_transactions() {
+    uint64_t current_cycle = ctx_->current_cycle();
+
+    // Process all transactions ready for checking
+    while (!actual_queue_.empty() && !expected_queue_.empty()) {
+        auto& expected_transaction = expected_queue_.front();
+        auto& actual_transaction = actual_queue_.front();
+
+        // Perform timeout checking first if it is enabled
+        if (config_.enable_timout_checking){
+            if ((current_cycle - expected_transaction.submitted_cycle) > config_.timeout_cycles) {
+                log_error("Expected transaction is submitted at cycle " + expected_transaction.submitted_cycle + ", it timed out after" + config_.timeout_cycles + " cycles.");
+                stats_.timed_out++;
+                if (config_.stop_on_first_error) {
+                    return false;
+                }
+            }
+            if ((current_cycle - actual_transaction.submitted_cycle) > config_.timeout_cycles) {
+                log_error("Actual transaction is submitted at cycle " + actual_transaction.submitted_cycle + ", it timed out after" + config_.timeout_cycles + " cycles.");
+                stats_.timed_out++;
+                if (config_.stop_on_first_error) {
+                    return false;
+                }
+            }
+        }
+        // Compare them to see whether they are a pair
+        if ((actual_transaction.expected_cycle <= current_cycle) &&compare_transactions(expected_transaction)) {
+            stats_.matched++;
+            stats_.checks_performed++;
+            // Perform the actual check with checker
+            bool pass = checker_->perform_check(expected_transaction.transaction, actual_transaction.transaction);
+            if (!pass && config_.stop_on_first_error) {
+                log_fatal("Checker performed check and it failed. Stopping on first error.");
+                return false;
+            }else if (pass){
+                log_debug("Checker performed check and check passed.");
+                stats_.checks_passed++;
+            }
+        }else{
+            log_debug("Expected and actual transaction did not match. No comparison was done.");
+            stats_.mismatch++;
+        }
+        expected_queue_.pop();
+        actual_queue_.pop();
+    }
+    return true;
 }
 
