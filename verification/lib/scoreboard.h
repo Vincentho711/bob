@@ -28,7 +28,7 @@ struct ScoreboardConfig {
     bool enable_out_of_order_matching = false;
     bool stop_on_first_error = true;
     bool enable_detailed_logging = true;
-    bool enable_timout_checking = true;
+    bool enable_timeout_checking = true;
     bool use_chceker = true;
     ScoreboardLogLevel log_level = ScoreboardLogLevel::INFO;
     uint32_t max_pending_transactions = 1000; ///< Maximum pending transactions
@@ -153,7 +153,17 @@ public:
      * 
      * @return true if match, false if they do not
      */
-    virtual bool compare_transactions(PendingTransaction expected_transaction, PendingTransaction actual_transaction);
+    virtual bool compare_transactions(const PendingTransaction& expected_transaction, const PendingTransaction& actual_transaction);
+
+    /**
+     * @brief Handle transaction timeouts
+     */
+    virtual void handle_timeout(const PendingTransaction& timed_out_transaction);
+
+    /**
+     * @brief Check for whether there are time-outed transactions, pop them
+     */
+    virtual void check_for_timeouts();
 
     /**
      * @brief Process pending transactions and perform matching
@@ -163,12 +173,12 @@ public:
     virtual bool process_transactions();
 
     /**
-     * @brief Check if all transactions have been processed
+     * @brief Check if all transactions have been processed in the pending queues
      * 
      * @return true if scoreboard is empty (all transactions matched/dropped)
      */
-    virtual bool is_empty() const;
-    
+    virtual bool empty_queues() const;
+
     /**
      * @brief Get current match rate
      * 
@@ -257,6 +267,8 @@ private:
                       << current_cycle << "] " << message << std::endl;
         }
     }
+
+    bool validate_scoreboard_config(const ScoreboardConfig& config, std::string& error_msg) const;
 };
 
 // ============================================================================
@@ -322,6 +334,7 @@ void BaseScoreboard<DUT_TYPE, TXN_TYPE>::add_actual(TransactionPtr transaction, 
     stats_.total_actual++;
     stats_.last_transaction_time = std::chrono::high_resolution_clock::now();
 }
+
 template<typename DUT_TYPE, typename TXN_TYPE>
 bool BaseScoreboard<DUT_TYPE, TXN_TYPE>::compare_transactions(PendingTransaction& expected_transaction, PendingTransaction& actual_transaction) {
     if (!expected_transaction) {
@@ -337,6 +350,33 @@ bool BaseScoreboard<DUT_TYPE, TXN_TYPE>::compare_transactions(PendingTransaction
 }
 
 template<typename DUT_TYPE, typename TXN_TYPE>
+void BaseScoreboard<DUT_TYPE, TXN_TYPE>::check_for_timeouts() {
+    if (config_.enable_timeout_checking) {
+        uint64_t current_cycle = ctx_->current_cycle();
+        // Check whether there are timeout transactions in expected queue first, log errors and pop them
+        while (!expected_queue_.empty()) {
+            const auto& expected_transaction = expected_queue_.front();
+            if ((current_cycle - expected_transaction.submitted_cycle) > config_.timeout_cycles) {
+                handle_timeout(expected_transaction);
+                expected_queue_.pop();
+            }else{
+                break; // Remaining transactions are newer
+            }
+        }
+
+        while (!actual_queue_.empty()) {
+            const auto& actual_transaction = actual_queue_.front();
+            if ((current_cycle - actual_transaction.submitted_cycle) > config_.timeout_cycles) {
+                handle_timeout(actual_transaction);
+                actual_queue_.pop();
+            }else{
+                break; // Remaining transactions are newer
+            }
+        }
+    }
+}
+
+template<typename DUT_TYPE, typename TXN_TYPE>
 bool BaseScoreboard<DUT_TYPE, TXN_TYPE>::process_transactions() {
     uint64_t current_cycle = ctx_->current_cycle();
 
@@ -345,23 +385,6 @@ bool BaseScoreboard<DUT_TYPE, TXN_TYPE>::process_transactions() {
         auto& expected_transaction = expected_queue_.front();
         auto& actual_transaction = actual_queue_.front();
 
-        // Perform timeout checking first if it is enabled
-        if (config_.enable_timout_checking){
-            if ((current_cycle - expected_transaction.submitted_cycle) > config_.timeout_cycles) {
-                log_error("Expected transaction is submitted at cycle " + expected_transaction.submitted_cycle + ", it timed out after" + config_.timeout_cycles + " cycles.");
-                stats_.timed_out++;
-                if (config_.stop_on_first_error) {
-                    return false;
-                }
-            }
-            if ((current_cycle - actual_transaction.submitted_cycle) > config_.timeout_cycles) {
-                log_error("Actual transaction is submitted at cycle " + actual_transaction.submitted_cycle + ", it timed out after" + config_.timeout_cycles + " cycles.");
-                stats_.timed_out++;
-                if (config_.stop_on_first_error) {
-                    return false;
-                }
-            }
-        }
         // Compare them to see whether they are a pair
         if ((actual_transaction.expected_cycle <= current_cycle) &&compare_transactions(expected_transaction)) {
             stats_.matched++;
@@ -381,7 +404,76 @@ bool BaseScoreboard<DUT_TYPE, TXN_TYPE>::process_transactions() {
         }
         expected_queue_.pop();
         actual_queue_.pop();
+
+        // Check whether the next transaction is timed out
+        if (config_.enable_timeout_checking) {
+            check_for_timeouts();
+        }
     }
     return true;
 }
 
+template<typename DUT_TYPE, typename TXN_TYPE>
+bool BaseScoreboard<DUT_TYPE, TXN_TYPE>::empty_queues() {
+    log_debug("expected_queue_.size() = " + expected_queue_.size());
+    log_debug("actual_queue_.size() = " + actual_queue_.size());
+    return expected_queue_.empty() && actual_queue_.empty();
+}
+
+template<typename DUT_TYPE, typename TXN_TYPE>
+double BaseScoreboard<DUT_TYPE, TXN_TYPE>::get_match_rate() {
+    return static_cast<double>(stats_.matched / (stats_.matched + stats_.mismatch));
+}
+
+template<typename DUT_TYPE, typename TXN_TYPE>
+bool BaseScoreboard<DUT_TYPE, TXN_TYPE>::is_passing() {
+    return get_match_rate() >= config_.min_match_rate;
+}
+
+template<typename DUT_TYPE, typename TXN_TYPE>
+void BaseScoreboard<DUT_TYPE, TXN_TYPE>::update_config(const ScoreboardConfig& new_config) {
+    std::string error_msg;
+    if (!validate_scoreboard_config(new_config, error_msg)) {
+        log_error("Cannot update config: " + error_msg);
+        return;
+    }
+    config_ = new_config;
+}
+
+template<typename DUT_TYPE, typename TXN_TYPE>
+void BaseScoreboard<DUT_TYPE, TXN_TYPE>::reset_stats() {
+    stats_.reset();
+}
+
+template<typename DUT_TYPE, typename TXN_TYPE>
+void BaseScoreboard<DUT_TYPE, TXN_TYPE>::handle_timeout(const PendingTransaction& pending) {
+    uint64_t current_cycle = ctx_->current_cycle();
+    stats_.timed_out++;
+    log_error("Transaction timeout (cycle " + std::to_string(current_cycle - pending.expected_cycle) +
+              "): " + pending.transaction->convert2string());
+}
+
+template<typename DUT_TYPE, typename TXN_TYPE>
+bool BaseScoreboard<DUT_TYPE, TXN_TYPE>::validate_scoreboard_config(const ScoreboardConfig& config, std::string& error_msg) {
+    if (config.max_latency_cycles == 0) {
+        error_msg = "max_latency_cycles must be greater than 0";
+        return false;
+    }
+
+    if (config.max_pending_transactions == 0) {
+        error_msg = "max_pending_transactions must be greater than 0";
+        return false;
+    }
+
+    if (config.timeout_cycles == 0) {
+        error_msg = "timeout_cycles must be greater than 0";
+        return false;
+    }
+
+    if (config.min_match_rate < 0.0 || config.min_match_rate > 1.0) {
+        error_msg = "min_match_rate must be between 0.0 and 1.0";
+        return false;
+    }
+
+    return true;
+}
