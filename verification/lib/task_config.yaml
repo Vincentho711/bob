@@ -11,5 +11,7 @@ src_files:
   - "checker.h"
   - "monitor.h"
   - "monitor.cpp"
+  - "scoreboard.h"
+  - "scoreboard.cpp"
   - "simulation_context.h"
   - "simulation_context.cpp"

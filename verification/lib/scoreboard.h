@@ -29,7 +29,7 @@ struct ScoreboardConfig {
     bool stop_on_first_error = true;
     bool enable_detailed_logging = true;
     bool enable_timeout_checking = true;
-    bool use_chceker = true;
+    bool use_checker = true;
     ScoreboardLogLevel log_level = ScoreboardLogLevel::INFO;
     uint32_t max_pending_transactions = 1000; ///< Maximum pending transactions
     uint32_t timeout_cycles = 100;            ///< Transaction timeout in cycles
@@ -51,6 +51,7 @@ struct ScoreboardStats {
     uint64_t timed_out = 0;
     uint64_t checks_performed = 0;
     uint64_t checks_passed = 0;
+    uint64_t checks_failed = 0;
 
     std::chrono::high_resolution_clock::time_point first_transaction_time;
     std::chrono::high_resolution_clock::time_point last_transaction_time;
@@ -153,7 +154,7 @@ public:
      * 
      * @return true if match, false if they do not
      */
-    virtual bool compare_transactions(const PendingTransaction& expected_transaction, const PendingTransaction& actual_transaction);
+    virtual bool compare_transactions(const PendingTransaction& expected_transaction, const PendingTransaction& actual_transaction) const;
 
     /**
      * @brief Handle transaction timeouts
@@ -268,27 +269,12 @@ private:
         }
     }
 
-    bool validate_scoreboard_config(const ScoreboardConfig& config, std::string& error_msg) const;
+    bool validate_scoreboard_config(const ScoreboardConfig& config, std::string& error_msg);
 };
 
 // ============================================================================
 // Template Implementation
 // ============================================================================
-
-template<typename DUT_TYPE, typename TXN_TYPE>
-BaseScoreboard<DUT_TYPE, TXN_TYPE>::BaseScoreboard(const std::string& name, DutPtr dut, CheckerPtr checker, SimulationContextPtr ctx)
-    : name_(name), dut_(dut), checker_(checker), ctx_(ctx) {
-    if (!dut) {
-        throw std::invalid_argument("DUT pointer cannot be null");
-    }
-    if (!checker_) {
-        throw std::invalid_argument("Checker potiner cannot be null");
-    }
-    if (!ctx_) {
-        throw std::invalid_argument("SimulationContext pointer cannot be null");
-    }
-    log_info("Scoreboard initialised.");
-}
 
 template<typename DUT_TYPE, typename TXN_TYPE>
 void BaseScoreboard<DUT_TYPE, TXN_TYPE>::add_expected(TransactionPtr transaction, uint64_t expected_cycle) {
@@ -336,7 +322,7 @@ void BaseScoreboard<DUT_TYPE, TXN_TYPE>::add_actual(TransactionPtr transaction, 
 }
 
 template<typename DUT_TYPE, typename TXN_TYPE>
-bool BaseScoreboard<DUT_TYPE, TXN_TYPE>::compare_transactions(PendingTransaction& expected_transaction, PendingTransaction& actual_transaction) {
+bool BaseScoreboard<DUT_TYPE, TXN_TYPE>::compare_transactions(const PendingTransaction& expected_transaction, const PendingTransaction& actual_transaction) const {
     if (!expected_transaction) {
         log_error("Cannot compare null expected transaction.");
         return false;
@@ -390,13 +376,19 @@ bool BaseScoreboard<DUT_TYPE, TXN_TYPE>::process_transactions() {
             stats_.matched++;
             stats_.checks_performed++;
             // Perform the actual check with checker
-            bool pass = checker_->perform_check(expected_transaction.transaction, actual_transaction.transaction);
-            if (!pass && config_.stop_on_first_error) {
-                log_fatal("Checker performed check and it failed. Stopping on first error.");
+            if (config_.use_checker) {
+                bool pass = checker_->perform_check(expected_transaction.transaction, actual_transaction.transaction);
+                if (!pass && config_.stop_on_first_error) {
+                    stats_.checks_failed++;
+                    log_fatal("Checker performed check and it failed. Stopping on first error.");
+                    return false;
+                }else if (pass){
+                    log_debug("Checker performed check and check passed.");
+                    stats_.checks_passed++;
+                }
+            } else {
+                log_fatal("Not using checker, please implement checking function in scoreboard.");
                 return false;
-            }else if (pass){
-                log_debug("Checker performed check and check passed.");
-                stats_.checks_passed++;
             }
         }else{
             log_debug("Expected and actual transaction did not match. No comparison was done.");
@@ -414,19 +406,19 @@ bool BaseScoreboard<DUT_TYPE, TXN_TYPE>::process_transactions() {
 }
 
 template<typename DUT_TYPE, typename TXN_TYPE>
-bool BaseScoreboard<DUT_TYPE, TXN_TYPE>::empty_queues() {
+bool BaseScoreboard<DUT_TYPE, TXN_TYPE>::empty_queues() const {
     log_debug("expected_queue_.size() = " + expected_queue_.size());
     log_debug("actual_queue_.size() = " + actual_queue_.size());
     return expected_queue_.empty() && actual_queue_.empty();
 }
 
 template<typename DUT_TYPE, typename TXN_TYPE>
-double BaseScoreboard<DUT_TYPE, TXN_TYPE>::get_match_rate() {
+double BaseScoreboard<DUT_TYPE, TXN_TYPE>::get_match_rate() const {
     return static_cast<double>(stats_.matched / (stats_.matched + stats_.mismatch));
 }
 
 template<typename DUT_TYPE, typename TXN_TYPE>
-bool BaseScoreboard<DUT_TYPE, TXN_TYPE>::is_passing() {
+bool BaseScoreboard<DUT_TYPE, TXN_TYPE>::is_passing() const {
     return get_match_rate() >= config_.min_match_rate;
 }
 
@@ -477,3 +469,26 @@ bool BaseScoreboard<DUT_TYPE, TXN_TYPE>::validate_scoreboard_config(const Scoreb
 
     return true;
 }
+
+template<typename DUT_TYPE, typename TXN_TYPE>
+void BaseScoreboard<DUT_TYPE, TXN_TYPE>::print_report() const {
+    std::cout << "\n" << std::string(70, '=') << std::endl;
+    std::cout << "SCOREBOARD DETAILED REPORT: " << name_ << std::endl;
+    std::cout << std::string(70, '=') << std::endl;
+
+    print_scoreboard_stats(stats_, std::cout);
+    std::cout << std::endl;
+    print_scoreboard_config(config_, std::cout);
+
+    std::cout << std::string(70, '=') << std::endl;
+}
+
+template<typename DUT_TYPE, typename TXN_TYPE>
+void BaseScoreboard<DUT_TYPE, TXN_TYPE>::print_summary() const {
+    std::cout << name_ << " Summary: " 
+              << stats_.matched << "/" << (stats_.matched + stats_.mismatch)
+              << " matched (" << std::fixed << std::setprecision(1)
+              << (get_match_rate() * 100.0) << "%)" << std::endl;
+}
+
+#endif
