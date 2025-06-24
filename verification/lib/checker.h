@@ -188,6 +188,15 @@ public:
     }
 
     /**
+     * @brief Pure virtual function to perform the actual checking
+     * Must be implemented by derived classes
+     * 
+     * @param transaction The transaction to check
+     * @return true if check passed, false otherwise
+     */
+    virtual bool perform_check(const TRANSACTION_TYPE& expected_transaction, const TRANSACTION_TYPE& actual_transaction) = 0;
+
+    /**
      * @brief Add a custom check function
      * 
      * @param name Name of the custom check
@@ -264,15 +273,6 @@ protected:
      * @brief Get the DUT pointer (for derived classes)
      */
     DutPtr get_dut() const { return dut_; }
-
-    /**
-     * @brief Pure virtual function to perform the actual checking
-     * Must be implemented by derived classes
-     * 
-     * @param transaction The transaction to check
-     * @return true if check passed, false otherwise
-     */
-    virtual bool perform_check(const TRANSACTION_TYPE& transaction) = 0;
 
     /**
      * @brief Handle timeout situations

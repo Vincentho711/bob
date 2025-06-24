@@ -2,18 +2,18 @@
 #include "adder_transaction.h"
 #include "adder_checker.h"
 #include "adder_simulation_context.h"
+#include "Vhello_world_top.h"
 
 struct AdderScoreboardConfig : public ScoreboardConfig {
     uint32_t pipeline_depth = 2;
 };
 
-template<DUT_TYPE, AdderTransaction> 
-class AdderScoreboard : public BaseScoreboard<DUT_TYPE, AdderTransaction> {
+class AdderScoreboard : public BaseScoreboard<Vhello_world_top, AdderTransaction> {
 public:
-    using DutPtr = std::shared_ptr<DUT_TYPE>;
-    using Base = BaseChecker<DUT_TYPE, AdderTransaction>;
-    using TransactionPtr = std::shared_ptr<AdderTransaction>;
-    using CheckerPtr = std::shared_ptr<AdderChecker>;
+    using DutPtr = std::shared_ptr<Vhello_world_top>;
+    using Base = BaseScoreboard<Vhello_world_top, AdderTransaction>;
+    using AdderTransactionPtr = std::shared_ptr<AdderTransaction>;
+    using AdderCheckerPtr = std::shared_ptr<AdderChecker<Vhello_world_top>>;
     using AdderSimulationContextPtr = std::shared_ptr<AdderSimulationContext>;
 
     /**
@@ -25,19 +25,24 @@ public:
      * @param config Adder-specific configuration
      * @param checker Shared pointer to checker object
      */
-    AdderScoreboard(const std::string& name, DutPtr dut, AdderSimulationContextPtr ctx, const AdderScoreboardConfig& config, CheckerPtr checker);
+    AdderScoreboard(const std::string& name, DutPtr dut, AdderSimulationContextPtr ctx, const AdderScoreboardConfig& config, AdderCheckerPtr checker);
 
     /**
       * @brief Destructor - prints final report
       */
     virtual ~AdderScoreboard();
 
-    void push_expected(TransactionPtr txn);
-    void push_actual(TransactionPtr txn);
+    void push_expected(AdderTransactionPtr txn);
+    void push_actual(AdderTransactionPtr txn);
     bool validate_scoreboard_config(const AdderScoreboardConfig& config, std::string& error_msg);
-    void print_report() const;
-    void print_summary() const;
+    void print_report() const override;
+    void print_summary() const override;
 
 protected:
     AdderScoreboardConfig adder_config_;
+    void reset() override;
+
+private:
+    AdderSimulationContextPtr ctx_;
+    AdderCheckerPtr checker_;
 };

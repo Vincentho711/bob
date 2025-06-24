@@ -106,19 +106,7 @@ public:
      * @param config Configuration for scoreboard behaviour
      */
     explicit BaseScoreboard(const std::string& name, DutPtr dut, CheckerPtr checker,
-                            SimulationContextPtr ctx, const ScoreboardConfig& config = ScoreboardConfig{})
-        : name_(name), dut_(dut), checker_(checker), config_(config), ctx_(ctx) {
-        if (!dut_) {
-            throw std::invalid_argument("DUT pointer cannot be null");
-        }
-        if (!checker_) {
-            throw std::invalid_argument("Checker potiner cannot be null");
-        }
-        if (!ctx_) {
-            throw std::invalid_argument("SimulationContext pointer cannot be null");
-        }
-        log_info("BaseScoreboard '" + name_ + "' initialised");
-    }
+                            SimulationContextPtr ctx, const ScoreboardConfig& config = ScoreboardConfig{});
 
     /**
      * @brief Virtual destructor
@@ -221,6 +209,11 @@ public:
     void reset_stats();
 
     /**
+     * @brief Reset scoreboard state
+     */
+    virtual void reset();
+
+    /**
      * @brief Print comprehensive report
      */
     virtual void print_report() const;
@@ -273,8 +266,31 @@ private:
 };
 
 // ============================================================================
+// External Function Declaration
+// ============================================================================
+
+void print_scoreboard_config(const ScoreboardConfig& config, std::ostream& os);
+
+void print_scoreboard_stats(const ScoreboardStats& stats, std::ostream& os);
+
+// ============================================================================
 // Template Implementation
 // ============================================================================
+
+template<typename DUT_TYPE, typename TXN_TYPE>
+BaseScoreboard<DUT_TYPE, TXN_TYPE>::BaseScoreboard(const std::string& name, DutPtr dut, CheckerPtr checker, SimulationContextPtr ctx, const ScoreboardConfig& config)
+    : name_(name), dut_(dut), config_(config) , ctx_(ctx) {
+    if (!dut_) {
+        throw std::invalid_argument("DUT pointer cannot be null");
+    }
+    if (!checker_) {
+        throw std::invalid_argument("Checker potiner cannot be null");
+    }
+    if (!ctx_) {
+        throw std::invalid_argument("SimulationContext pointer cannot be null");
+    }
+    log_info("BaseScoreboard '" + name_ + "' initialised");
+}
 
 template<typename DUT_TYPE, typename TXN_TYPE>
 void BaseScoreboard<DUT_TYPE, TXN_TYPE>::add_expected(TransactionPtr transaction, uint64_t expected_cycle) {
@@ -323,11 +339,11 @@ void BaseScoreboard<DUT_TYPE, TXN_TYPE>::add_actual(TransactionPtr transaction, 
 
 template<typename DUT_TYPE, typename TXN_TYPE>
 bool BaseScoreboard<DUT_TYPE, TXN_TYPE>::compare_transactions(const PendingTransaction& expected_transaction, const PendingTransaction& actual_transaction) const {
-    if (!expected_transaction) {
+    if (!expected_transaction.transaction) {
         log_error("Cannot compare null expected transaction.");
         return false;
     }
-    if (!actual_transaction) {
+    if (!actual_transaction.transaction) {
         log_error("Cannot compare null actual transaction.");
         return false;
     }
@@ -372,7 +388,7 @@ bool BaseScoreboard<DUT_TYPE, TXN_TYPE>::process_transactions() {
         auto& actual_transaction = actual_queue_.front();
 
         // Compare them to see whether they are a pair
-        if ((actual_transaction.expected_cycle <= current_cycle) &&compare_transactions(expected_transaction)) {
+        if ((actual_transaction.expected_cycle <= current_cycle) && compare_transactions(expected_transaction, actual_transaction)) {
             stats_.matched++;
             stats_.checks_performed++;
             // Perform the actual check with checker
@@ -407,8 +423,8 @@ bool BaseScoreboard<DUT_TYPE, TXN_TYPE>::process_transactions() {
 
 template<typename DUT_TYPE, typename TXN_TYPE>
 bool BaseScoreboard<DUT_TYPE, TXN_TYPE>::empty_queues() const {
-    log_debug("expected_queue_.size() = " + expected_queue_.size());
-    log_debug("actual_queue_.size() = " + actual_queue_.size());
+    log_debug("expected_queue_.size() = " + std::to_string(expected_queue_.size()));
+    log_debug("actual_queue_.size() = " + std::to_string(actual_queue_.size()));
     return expected_queue_.empty() && actual_queue_.empty();
 }
 
@@ -489,6 +505,11 @@ void BaseScoreboard<DUT_TYPE, TXN_TYPE>::print_summary() const {
               << stats_.matched << "/" << (stats_.matched + stats_.mismatch)
               << " matched (" << std::fixed << std::setprecision(1)
               << (get_match_rate() * 100.0) << "%)" << std::endl;
+}
+
+template<typename DUT_TYPE, typename TXN_TYPE>
+void BaseScoreboard<DUT_TYPE, TXN_TYPE>::reset() {
+    reset_stats();
 }
 
 #endif
