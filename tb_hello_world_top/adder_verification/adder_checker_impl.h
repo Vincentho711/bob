@@ -3,6 +3,7 @@
 // Template implementation for AdderChecker
 // This file is included by adder_checker.h and should not be included directly
 
+#include <stdexcept>
 template<typename DUT_TYPE>
 AdderChecker<DUT_TYPE>::AdderChecker(const std::string& name, DutPtr dut, AdderSimulationContextPtr ctx, const AdderCheckerConfig& config)
     : Base(name, dut, ctx), ctx_(ctx), adder_config_(config) {
@@ -83,21 +84,34 @@ uint32_t AdderChecker<DUT_TYPE>::check_cycle() {
 }
 
 template<typename DUT_TYPE>
-bool AdderChecker<DUT_TYPE>::perform_check(const AdderTransaction& txn) {
-    // Read result from DUT
-    uint16_t actual_result = read_dut_output();
-
-    // Run all check stages
-    bool passed = true;
-    passed &= check_arithmetic(txn, actual_result);
-    passed &= check_overflow_handling(txn, actual_result);
-
-    // Possibly add more validation
-    update_statistics(txn, actual_result, passed);
-    if (!passed) {
-        log_mismatch(txn, txn.get_result(), actual_result);
+bool AdderChecker<DUT_TYPE>::perform_check(std::shared_ptr<AdderTransaction> expected_txn, std::shared_ptr<AdderTransaction> actual_txn) {
+    std::optional<uint8_t> a = expected_txn->get_a();
+    if (!a.has_value()) {
+        this->log_error("Expected transaction input a doesn't contain any valid value.\n");
+        return false;
     }
-    return passed;
+    std::optional<uint8_t> b = expected_txn->get_b();
+    if (!b.has_value()) {
+        this->log_error("Expected transaction input b doesn't contain any valid value.\n");
+        return false;
+    }
+    std::optional<uint16_t> result = actual_txn->get_result();
+    if (!result.has_value()) {
+        this->log_error("Actual transaction does not have valid result value.\n");
+        return false;
+    }
+    // Check that it doesn't overflow, only bit 0-8 can be set
+    if (result.value() & 0xFE) {
+        this->log_error("Result = " + std::to_string(result.value()) + ", it overflowed as only bit 0-8 can be set.\n");
+        return false;
+    }
+    this->log_debug("Perform check, a = " + std::to_string(a.value()) + ", b = " + std::to_string(b.value()) + ", result = " + std::to_string(result.value()) + "\n");
+    bool check_passed = ((a.value() + b.value()) == result.value());
+    if (!check_passed) {
+        this->log_error("Check failed, a = " + std::to_string(a.value()) + ", b = " + std::to_string(b.value()) + ", result = " + std::to_string(result.value()) + ". Hence a + b != result.\n");
+        return false;
+    }
+    return check_passed;
 }
 
 template<typename DUT_TYPE>

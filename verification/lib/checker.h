@@ -137,44 +137,12 @@ public:
     }
 
     /**
-     * @brief Check all transactions that should be ready at the current cycle
+     * @brief Pure virtual function to perform the check current cycle
+     * Must be implemented by derived classes
      * 
      * @return Number of checks performed
      */
-    virtual uint32_t check_cycle() {
-        uint64_t current_cycle = ctx_->current_cycle();
-        uint32_t checks_performed = 0;
-        stats_.last_activity = std::chrono::steady_clock::now();
-
-        // Process all transactions ready for checking
-        while (!pending_transactions_.empty() && 
-               pending_transactions_.front().expected_cycle <= current_cycle) {
-
-            auto& pending = pending_transactions_.front();
-
-            // Check for timeout
-            if (config_.enable_timeout_checking && 
-                (current_cycle - pending.submitted_cycle) > config_.timeout_cycles) {
-                handle_timeout(pending);
-            } else {
-                // Perform the actual check
-                bool check_result = perform_check(*pending.transaction);
-                update_stats(check_result);
-                checks_performed++;
-
-                if (!check_result && config_.stop_on_first_error) {
-                    log_fatal("Stopping on first error as configured");
-                    break;
-                }
-            }
-
-            pending_transactions_.pop();
-        }
-
-        stats_.cycles_active++;
-
-        return checks_performed;
-    }
+    virtual uint32_t check_cycle() = 0;
 
     /**
      * @brief Reset the checker to initial state
@@ -191,10 +159,11 @@ public:
      * @brief Pure virtual function to perform the actual checking
      * Must be implemented by derived classes
      * 
-     * @param transaction The transaction to check
+     * @param expected_transaction A shared ptr to the expected transaction
+     * @param actual_transaction A shared ptr to the actual transaction
      * @return true if check passed, false otherwise
      */
-    virtual bool perform_check(const TRANSACTION_TYPE& expected_transaction, const TRANSACTION_TYPE& actual_transaction) = 0;
+    virtual bool perform_check(std::shared_ptr<TRANSACTION_TYPE> expected_transaction, std::shared_ptr<TRANSACTION_TYPE> actual_transaction) = 0;
 
     /**
      * @brief Add a custom check function

@@ -111,7 +111,7 @@ public:
 
     // Overridden virtual methods from BaseChecker
     uint32_t check_cycle() override;
-    bool perform_check(const AdderTransaction& expected_transaction, const AdderTransaction& actual_transaction) override;
+    bool perform_check(std::shared_ptr<AdderTransaction> expected_transaction, std::shared_ptr<AdderTransaction> actual_transaction) override;
 
     // Configuration management
     void update_config(const AdderCheckerConfig& new_config);
