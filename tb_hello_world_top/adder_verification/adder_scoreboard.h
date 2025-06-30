@@ -32,9 +32,7 @@ public:
       */
     virtual ~AdderScoreboard();
 
-    void push_expected(AdderTransactionPtr txn);
-    void push_actual(AdderTransactionPtr txn);
-    bool validate_scoreboard_config(const AdderScoreboardConfig& config, std::string& error_msg);
+    bool validate_scoreboard_config(const AdderScoreboardConfig& config, std::string& error_msg) const;
     void print_report() const override;
     void print_summary() const override;
 

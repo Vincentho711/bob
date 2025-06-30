@@ -222,6 +222,11 @@ public:
      * @brief Print summary report
      */
     virtual void print_summary() const;
+    
+    /**
+      * @brief Validate the scoreboard config 
+      */ 
+    bool validate_scoreboard_config(const ScoreboardConfig& config, std::string& error_msg) const;
 
 protected:
     // Logging methods
@@ -262,7 +267,6 @@ private:
         }
     }
 
-    bool validate_scoreboard_config(const ScoreboardConfig& config, std::string& error_msg);
 };
 
 // ============================================================================
@@ -462,7 +466,7 @@ void BaseScoreboard<DUT_TYPE, TXN_TYPE>::handle_timeout(const PendingTransaction
 }
 
 template<typename DUT_TYPE, typename TXN_TYPE>
-bool BaseScoreboard<DUT_TYPE, TXN_TYPE>::validate_scoreboard_config(const ScoreboardConfig& config, std::string& error_msg) {
+bool BaseScoreboard<DUT_TYPE, TXN_TYPE>::validate_scoreboard_config(const ScoreboardConfig& config, std::string& error_msg) const {
     if (config.max_latency_cycles == 0) {
         error_msg = "max_latency_cycles must be greater than 0";
         return false;
