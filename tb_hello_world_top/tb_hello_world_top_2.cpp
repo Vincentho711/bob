@@ -16,6 +16,7 @@
 #include "adder_verification/adder_driver.h"
 #include "adder_verification/adder_checker.h"
 #include "adder_verification/adder_simulation_context.h"
+#include "adder_verification/adder_scoreboard.h"
 
 constexpr int TRACE_DEPTH = 5;
 constexpr uint32_t PIPELINE_DEPTH = 2;
@@ -145,7 +146,8 @@ private:
     std::shared_ptr<AdderSimulationContext> ctx_;
     std::unique_ptr<AdderDriver> driver_;
     std::unique_ptr<AdderMonitor> monitor_;
-    std::unique_ptr<AdderChecker<Vhello_world_top>> checker_;
+    std::shared_ptr<AdderChecker<Vhello_world_top>> checker_;
+    std::unique_ptr<AdderScoreboard> scoreboard_;
 
     /**
      * @brief Setup waveform tracing
@@ -196,9 +198,17 @@ private:
         checker_config.enable_value_logging = true;
 
         // Create checker
-        checker_ = std::make_unique<AdderChecker<Vhello_world_top>>("main_adder_checker", dut_, ctx_, checker_config);
+        checker_ = std::make_shared<AdderChecker<Vhello_world_top>>("main_adder_checker", dut_, ctx_, checker_config);
 
-        std::cout << "Verification components initialized" << std::endl;
+        // Configure scoreboard
+        AdderScoreboardConfig scoreboard_config;
+        scoreboard_config.max_latency_cycles = 10;
+        scoreboard_config.max_pending_transactions = 500;
+
+        // Create scoreboard
+        scoreboard_ = std::make_unique<AdderScoreboard>("main_adder_scoreboard", dut_, ctx_, scoreboard_config, checker_);
+
+        std::cout << "Verification components initialised" << std::endl;
     }
 
     /**
@@ -254,11 +264,15 @@ private:
      * @brief Process a single clock cycle
      */
     void process_clock_cycle() {
-        // Drive inputs using the driver
+        // Drive inputs using the driver, and register expected txn with scoreboard
         drive_inputs();
 
         // Check outputs using the checker (accounts for pipeline delay)
         check_outputs();
+
+        // Conduct checks with scoreboard
+        bool checks_passed = false;
+        checks_passed = conduct_checks();
 
         // Log current state for debugging
         log_cycle_state();
@@ -278,8 +292,7 @@ private:
                 driver_->drive_next();
                 // Sample the input with monitor
                 auto expected_txn = monitor_->sample_input();
-                // Add transaction to checker. expect_transaction accounts for the pipeline depth
-                checker_->expect_transaction(expected_txn);
+                scoreboard_->add_expected(expected_txn, current_cycle + PIPELINE_DEPTH);
             } else {
                 // Drive idle values when no more transactions
                 driver_->drive_idle_cycles(1);
@@ -298,11 +311,23 @@ private:
         // It will only check when appropriate transactions are available
         try {
             if (current_cycle >= PIPELINE_DEPTH) {
-                checker_->check_cycle();
+                // Sample the output of DUT with monitor
+                auto actual_txn = monitor_->sample_output();
+                // Register the actual transaction with scoreboard
+                scoreboard_->add_actual(actual_txn, current_cycle);
             }
         } catch (const std::exception& e) {
-            std::cerr << "Checker error at cycle " << current_cycle << ": " << e.what() << std::endl;
+            std::cerr << "check_outputs() error at cycle " << current_cycle << ": " << e.what() << std::endl;
         }
+    }
+
+    /**
+     * @brief Conduct checks with scoreboard and checker
+     *
+     * @return true if all checks passed, false otherwise
+     */
+    bool conduct_checks() {
+        return scoreboard_->process_transactions();
     }
 
     /**
