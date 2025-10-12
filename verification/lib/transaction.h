@@ -6,6 +6,7 @@
 #include <sstream>
 #include <typeinfo>
 #include <iostream>
+#include <cstdint>
 
 /**
  * Base transaction class following UVM-style patterns
@@ -54,8 +55,8 @@ public:
     friend std::ostream& operator<<(std::ostream& os, const Transaction& txn);
 
 protected:
-    std::string name_;
     Kind kind_;
+    std::string name_;
     std::uint64_t transaction_id_;
 
 private:

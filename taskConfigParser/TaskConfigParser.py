@@ -111,24 +111,18 @@ class TaskConfigParser:
 
             output_task = match.group(1)
             files_spec = match.group(2)
-            print(f"output_task={output_task}, files_spec={files_spec}")
 
             if output_task not in self.task_configs:
                 raise ValueError(f"Referenced task '{output_task}' not found in task_configs.")
 
             output_dir = self.task_configs[output_task].get("output_dir", None)
-            print(f"output_dir={output_dir}")
             if output_dir is None:
-                print(f"output_dir is None")
                 raise ValueError(f"task_configs['{output_task}'] doesn't contain a 'output_dir' attribute. Please ensure a output dir is registered with task '{output_task}' first.")
-            elif not output_dir.exists():
-                print(f"output_dir does not exist.")
+            elif not Path(output_dir).exists():
                 raise FileNotFoundError(f"Output_dir of task '{output_task}' does not exist. Please ensure it exists first.")
 
-            print(f"Calling _resolve_files_spec()")
             self.logger.debug(f"Calling _resolve_files_spec() with target_dir='{output_dir}', files_spec='{files_spec}'")
             resolved_output_reference = self._resolve_files_spec(Path(output_dir), files_spec)
-            print(f"resolved_output_reference={resolved_output_reference}")
             return resolved_output_reference
 
         except yaml.YAMLError as ye:
@@ -156,15 +150,13 @@ class TaskConfigParser:
 
             input_task = match.group(1)
             files_spec = match.group(2)
-            print(f"input_task = {input_task}")
-            print(f"files_spec = {files_spec}")
             if input_task not in self.task_configs:
                 raise ValueError(f"Referenced task '{input_task}' not found in task_configs.")
 
             task_dir = self.task_configs[input_task].get("task_dir", None)
             if task_dir is None:
                 raise ValueError(f"task_configs['{input_task}'] doesn't contain a 'task_dir' attribute. Please ensure a output dir is registered with task '{input_task}' first.")
-            elif not task_dir.exists():
+            elif not Path(task_dir).exists():
                 raise FileNotFoundError(f"Task_dir of task '{input_task}' does not exist. Please ensure it exists first.")
 
             self.logger.debug(f"Calling _resolve_files_spec() with target_dir='{task_dir}', files_spec='{files_spec}'")
@@ -199,7 +191,6 @@ class TaskConfigParser:
 
             # Check if value matches output reference pattern
             if re.match(r"\{@output:([^:\[\]]+):(\*|\[.*\]|[^:\[\}]+)\}", value):
-                print(f"matched output")
                 resolved_type = "output"
                 resolved_value = self._resolve_output_reference(value)
             # Check if value matches input reference pattern

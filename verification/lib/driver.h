@@ -5,6 +5,8 @@
 #include <chrono>
 #include <iostream>
 #include <stdexcept>
+#include <cstdint>
+#include <functional>
 #include <type_traits>
 #include "transaction.h"
 #include "simulation_context.h"
@@ -89,8 +91,8 @@ public:
      * @brief Get driver statistics
      */
     struct DriverStats {
-        uint64_t transactions_driven = 0;
-        uint64_t cycles_active = 0;
+        std::uint64_t transactions_driven = 0;
+        std::uint64_t cycles_active = 0;
         std::chrono::steady_clock::time_point start_time;
         std::chrono::steady_clock::time_point last_activity;
     };
@@ -191,7 +193,7 @@ typename BaseDriver<DUT_TYPE, TXN_TYPE>::TransactionPtr BaseDriver<DUT_TYPE, TXN
 
 template<typename DUT_TYPE, typename TXN_TYPE>
 bool BaseDriver<DUT_TYPE, TXN_TYPE>::drive_next() {
-    uint64_t current_cycle = ctx_->current_cycle();
+    std::uint64_t current_cycle = ctx_->current_cycle();
     if (transaction_queue_.empty()) {
         return false;
     }

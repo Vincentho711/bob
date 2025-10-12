@@ -623,7 +623,7 @@ def test_ensure_dotbob_dir_at_proj_root_missing_task_configs():
 @patch.object(Path, "exists", side_effect=[False, True]) # checksum.json doesn't exist initially, then it does when _save_dotbob_checksum_file() is called
 @patch("pathlib.Path.mkdir")
 def test_ensure_dotbob_dir_at_proj_root_non_existent_dotbob_dir(mock_mkdir, tmp_path: Path):
-    """Test the successful creation of dotbob dir and checksum file when non of them exist"""
+    """Test the successful creation of dotbob dir and checksum file when none of them exist"""
     os.environ["PROJ_ROOT"] = str(tmp_path)
     mock_logger = MagicMock()
     bob_instance = Bob(mock_logger)
@@ -957,9 +957,10 @@ def test_save_dotbob_checksum_file_valid(mock_path_open, tmp_path: Path):
 
     assert json.loads(written_data) == checksum_file_dict
 
-@patch.object(Path, "exists", return_value=False)
-def test_save_dotbob_checksum_file_non_existent_checksum_file(tmp_path: Path):
-    """Test that it returns the correct error msg when self.dotbob_checksum_file does not exist"""
+@patch.object(Path, "exists", return_value=False) # Mock 'exists' to return False
+@patch.object(Path, "touch") # Mock 'touch' so no file is actually created
+def test_save_dotbob_checksum_file_non_existent_checksum_file(mock_touch, mock_exists, tmp_path: Path):
+    """Test that it creates the .checksum file when self.dotbob_checksum_file does not exist"""
     os.environ["PROJ_ROOT"] = str(tmp_path)
     mock_logger = MagicMock()
     bob_instance = Bob(mock_logger)
@@ -970,7 +971,8 @@ def test_save_dotbob_checksum_file_non_existent_checksum_file(tmp_path: Path):
     }
 
     bob_instance._save_dotbob_checksum_file(checksum_file_dict)
-    bob_instance.logger.error.assert_called_once_with("No checksum.json within .bob dir found.")
+    mock_touch.assert_called_once()
+    bob_instance.logger.info.assert_called_once_with(f"Created missing checksum file at : {bob_instance.dotbob_checksum_file}")
 
 @patch.object(Path, "exists", return_value=True) # checksum.json exists
 @patch("pathlib.Path.open", new_callable=mock_open)

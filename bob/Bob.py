@@ -437,9 +437,10 @@ class Bob:
             # Check checksums is not empty
             if not checksums:
                 raise ValueError(f"Chechsums is an empty dict, cannot set checksum.json to empty.")
+            # Check if there is an existing .checksum file, if not, create it
             if not self.dotbob_checksum_file.exists():
-                self.logger.error(f"No checksum.json within .bob dir found.")
-                return None
+                self.dotbob_checksum_file.touch()
+                self.logger.info(f"Created missing checksum file at : {self.dotbob_checksum_file}")
             # Check that task names are unique
             task_names = list(checksums.keys())
             if len(task_names) != len(set(task_names)): # It is not possible for checksums to have duplicate keys, hence redundant

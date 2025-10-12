@@ -12,15 +12,16 @@
 #include <iostream>
 #include <sstream>
 #include <iomanip>
+#include <cstdint>
 
 /**
  * @brief Base statistics structure for checker operations
  */
 struct CheckerStats {
-    uint64_t transactions_checked = 0;
-    uint64_t checks_passed = 0;
-    uint64_t checks_failed = 0;
-    uint64_t cycles_active = 0;
+    std::uint64_t transactions_checked = 0;
+    std::uint64_t checks_passed = 0;
+    std::uint64_t checks_failed = 0;
+    std::uint64_t cycles_active = 0;
     std::chrono::steady_clock::time_point start_time;
     std::chrono::steady_clock::time_point last_activity;
 
@@ -46,7 +47,7 @@ struct CheckerConfig {
     bool enable_detailed_logging = true;
     bool stop_on_first_error = false;
     bool enable_timeout_checking = true;
-    uint32_t timeout_cycles = 1000;
+    std::uint32_t timeout_cycles = 1000;
     CheckerLogLevel log_level = CheckerLogLevel::INFO;
     bool enable_statistics = true;
 
@@ -76,10 +77,10 @@ public:
      */
     struct PendingTransaction {
         TransactionPtr transaction;
-        uint64_t expected_cycle;
-        uint64_t submitted_cycle;
+        std::uint64_t expected_cycle;
+        std::uint64_t submitted_cycle;
 
-        PendingTransaction(TransactionPtr txn, uint64_t exp_cycle, uint64_t sub_cycle)
+        PendingTransaction(TransactionPtr txn, std::uint64_t exp_cycle, std::uint64_t sub_cycle)
             : transaction(txn), expected_cycle(exp_cycle), submitted_cycle(sub_cycle) {}
     };
 
@@ -141,9 +142,9 @@ public:
      * 
      * @return Number of checks performed
      */
-    virtual uint32_t check_cycle() {
-        uint64_t current_cycle = ctx_->current_cycle();
-        uint32_t checks_performed = 0;
+    virtual std::uint32_t check_cycle() {
+        std::uint64_t current_cycle = ctx_->current_cycle();
+        std::uint32_t checks_performed = 0;
         stats_.last_activity = std::chrono::steady_clock::now();
 
         // Process all transactions ready for checking
@@ -215,7 +216,7 @@ public:
     const std::string& get_name() const { return name_; }
     const CheckerStats& get_stats() const { return stats_; }
     const CheckerConfig& get_config() const { return config_; }
-    uint64_t get_current_cycle() const { return ctx_->current_cycle(); }
+    std::uint64_t get_current_cycle() const { return ctx_->current_cycle(); }
     size_t pending_count() const { return pending_transactions_.size(); }
     bool has_failures() const { return stats_.checks_failed > 0; }
     double get_pass_rate() const { 
@@ -280,7 +281,7 @@ protected:
      * @param pending The pending transaction that timed out
      */
     virtual void handle_timeout(const PendingTransaction& pending) {
-        uint64_t current_cycle = ctx_->current_cycle();
+        std::uint64_t current_cycle = ctx_->current_cycle();
         log_error("Transaction timed out: " + pending.transaction->convert2string() +
                  " (waited " + std::to_string(current_cycle - pending.submitted_cycle) + " cycles)");
         stats_.checks_failed++;
@@ -356,7 +357,7 @@ protected:
 
 private:
     void log_message(const std::string& level, const std::string& message) const {
-        uint64_t current_cycle = ctx_->current_cycle();
+        std::uint64_t current_cycle = ctx_->current_cycle();
         if (config_.enable_detailed_logging) {
             std::cout << "[" << level << "] [" << name_ << "] [Cycle " 
                       << current_cycle << "] " << message << std::endl;

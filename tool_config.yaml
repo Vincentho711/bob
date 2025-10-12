@@ -7,7 +7,7 @@ g++:
   default_flags : ["-Wall", "-Wextra", "-std=c++17"]
 
 verilator:
-  path: /opt/homebrew/bin/verilator
+  path: /usr/bin/verilator
   default_flags : []
 
 ar:

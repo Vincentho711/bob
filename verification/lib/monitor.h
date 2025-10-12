@@ -2,6 +2,7 @@
 #define MONITOR_H
 
 #include <iostream>
+#include <chrono>
 #include "transaction.h"
 #include "simulation_context.h"
 
