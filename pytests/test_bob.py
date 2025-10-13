@@ -357,25 +357,86 @@ def test_setup_build_dirs_oserror(mock_mkdir, bob_instance, create_valid_task_co
 
     bob_instance.logger.critical.assert_called_once()
 
-@patch("shutil.rmtree")
-def test_remove_task_build_dirs(mock_rmtree):
-    """Test that all the task build dirs have been removed"""
-    # Create a mock Bob instance and logger
+@patch("pathlib.Path.is_dir", return_value = False) # build dir does not exist
+def test_remove_task_output_dir_no_build_dir(mock_is_dir):
+    """Test that attempting to remove a particular task's output dir would return False when the `build` dir does not exist"""
     logger = MagicMock()
     bob_instance = Bob(logger)
     bob_instance.proj_root = "/mock/proj_root"
     bob_instance.task_configs = {"task1":"", "task2":""}
 
+    result = bob_instance.remove_task_output_dir("task1")
+    assert result == False
+    bob_instance.logger.info.assert_any_call("Build directory does not exist, hence the output dir of task1 does not exist too.")
+
+@patch("pathlib.Path.is_dir", return_value = True) # build dir does exist
+def test_remove_task_output_dir_non_existent_task(mock_is_dir):
+    """Test that attempting to remove a particular task's output dir would return False when it is an invalid task_name"""
+    logger = MagicMock()
+    bob_instance = Bob(logger)
+    bob_instance.proj_root = "/mock/proj_root"
+    bob_instance.task_configs = {"task1":"", "task2":""}
+
+    task_name = "non-existent-task"
+    result = bob_instance.remove_task_output_dir(task_name)
+    assert result == False
+    bob_instance.logger.warning.assert_any_call(f"Task {task_name} does not exist in task_configs, so its output dir cannot be deleted.")
+
+@patch("shutil.rmtree")
+@patch("pathlib.Path.is_dir", return_value = True) # build dir does exist, and task output dir exists too
+def test_remove_task_output_dir_valid_task(mock_is_dir, mock_rmtree):
+    """Test that attempting to remove a particular task's output dir would return True when it is a valid task_name"""
+    logger = MagicMock()
+    bob_instance = Bob(logger)
+    bob_instance.proj_root = "/mock/proj_root"
+    bob_instance.task_configs = {"task1":"", "task2":""}
+    bob_instance.mark_task_as_dirty_in_dotbob_checksum_file = MagicMock()
+
+    task_name = "task1"
+    result = bob_instance.remove_task_output_dir(task_name)
+    assert result == True
+    assert mock_rmtree.call_count == 1
+    bob_instance.mark_task_as_dirty_in_dotbob_checksum_file.assert_called_once()
+
+@patch("shutil.rmtree")
+def test_remove_output_dirs_multiple_tasks(mock_rmtree):
+    """Test that multiple task output dirs have been removed"""
+    # Create a mock Bob instance and logger
+    logger = MagicMock()
+    bob_instance = Bob(logger)
+    bob_instance.proj_root = "/mock/proj_root"
+    bob_instance.task_configs = {"task1":"", "task2":""}
+    bob_instance.mark_task_as_dirty_in_dotbob_checksum_file = MagicMock()
+
+    # Mock self.dotbob_dir as a Path and patch is_dir to return True
+    mock_dotbob_dir = MagicMock(spec=Path)
+    mock_dotbob_dir.is_dir.return_value = True
+    bob_instance.dotbob_dir = mock_dotbob_dir
+
     # Patch the methods that check for file existence and directory type
-    with patch.object(Path, "exists") as mock_exists, patch.object(Path, "is_dir") as mock_is_dir:
-        mock_exists.return_value = True
-        mock_is_dir.return_value = True
+    with patch.object(Path, "exists", return_value=True) as mock_exists, patch.object(Path, "is_dir", return_value=True) as mock_is_dir:
         # Case 1: All tasks exist and directories are valid
-        deleted_count = bob_instance.remove_task_build_dirs(["task1", "task2", "task3"])
+        deleted_count = bob_instance.remove_task_output_dirs(["task1", "task2", "task3"])
         assert deleted_count == 2  # task1 and task2 should be deleted
         assert mock_rmtree.call_count == 2
-        bob_instance.logger.info.assert_any_call("Deleted build directory: /mock/proj_root/build/task1")
-        bob_instance.logger.info.assert_any_call("Deleted build directory: /mock/proj_root/build/task2")
+        bob_instance.mark_task_as_dirty_in_dotbob_checksum_file.call_count == 2
+
+@patch("pathlib.Path.is_dir", return_value = True) # build dir and dotbob dir both exist
+@patch("shutil.rmtree")
+def test_remove_build_dir(mock_rmtree, mock_is_dir):
+    """Test that the entire build directory has been removed"""
+    logger = MagicMock()
+    bob_instance = Bob(logger)
+    bob_instance.proj_root = "/mock/proj_root"
+    bob_instance.dotbob_dir = "/mock/proj_root/.bob"
+    bob_instance.task_configs = {"task1":"", "task2":""}
+
+    build_dir = Path(bob_instance.proj_root) / "build"
+    result = bob_instance.remove_build_dir()
+    assert result
+    assert mock_rmtree.call_count == 2 # Verify that both the build dir and .bob dir has been removed
+    bob_instance.logger.info.assert_any_call(f"Deleted build directory: {str(build_dir)}")
+    bob_instance.logger.info.assert_any_call(f"Deleted .bob directory.")
 
 def test_create_all_task_env_valid_tasks(create_multiple_valid_task_config):
     """Test the creation of new env based on the global env for all tasks defined"""

@@ -226,27 +226,61 @@ class Bob:
             self.logger.critical(f"Unexpected  error during setup_build_dirs(): {e}", exc_info=True)
             sys.exit(1)
 
-    def remove_task_build_dirs(self, task_names: list[str]) -> int:
-        """Remove the build dirs for multiple tasks, return the number of task build dirs deleted"""
+    def remove_task_output_dir(self, task_name:str) -> bool:
+        """Remove a single task output dir and mark the task as dirty, return whether the task's output dir has been removed"""
         deleted_count = 0
         try:
-            build_root = Path(self.proj_root) / "build"
-            invalid_tasks = [task for task in task_names if task not in self.task_configs]
-            if invalid_tasks:
-                self.logger.warning(f"The following tasks do no exist in task_configs and will not be deleted: {invalid_tasks}")
-            for task_name in task_names:
-                if task_name in self.task_configs:
-                    self.logger.info(f"Found {task_name}")
-                    build_dir = build_root / task_name
-                    if build_dir.exists() and build_dir.is_dir():
-                        shutil.rmtree(build_dir)
-                        deleted_count += 1
-                        self.logger.info(f"Deleted build directory: {build_dir}")
-                    else:
-                        self.logger.warning(f"Build directory not found: {build_dir}")
+            build_dir = Path(self.proj_root) / "build"
+            if not build_dir.is_dir():
+                self.logger.info(f"Build directory does not exist, hence the output dir of {task_name} does not exist too.")
+                return False
+            else:
+                if task_name not in self.task_configs:
+                    self.logger.warning(f"Task {task_name} does not exist in task_configs, so its output dir cannot be deleted.")
+                    return False
+                task_output_dir = build_dir / task_name
+                if not task_output_dir.is_dir():
+                    self.logger.info(f"{task_output_dir} does not exist, hence it has been deleted already.")
+                    return False
+                shutil.rmtree(task_output_dir)
+                self.logger.info(f"Deleted {task_output_dir} for task {task_name}.")
+                self.mark_task_as_dirty_in_dotbob_checksum_file(task_name)
+                return True
+
         except Exception as e:
-            self.logger.critical(f"Unexpected error during remove_task_build_dirs(): {e}", exc_info=True)
+            self.logger.critical(f"Unexpected error during remove_task_build_dir(): {e}", exc_info=True)
+
+    def remove_task_output_dirs(self, task_names: list[str]) -> int:
+        """Remove multiple task output dirs and mark the tasks as dirty, return the number of output dir removed"""
+        deleted_count = 0
+        build_root = Path(self.proj_root) / "build"
+        invalid_tasks = [task for task in task_names if task not in self.task_configs]
+        if invalid_tasks:
+            self.logger.warning(f"The following tasks do no exist in task_configs and will not be deleted: {invalid_tasks}")
+        for task_name in task_names:
+            if self.remove_task_output_dir(task_name):
+                deleted_count+=1
         return deleted_count
+
+    def remove_build_dir(self) -> bool:
+        """Remove the entire `build/` and `.bob/`, return the number of task output dirs deleted"""
+        try:
+            build_dir = Path(self.proj_root) / "build"
+            if not build_dir.is_dir():
+                self.logger.warning(f"Build directory not found: {build_dir}")
+                return False
+            shutil.rmtree(build_dir)
+            self.logger.info(f"Deleted build directory: {build_dir}")
+            dotbob_dir = Path(self.dotbob_dir)
+
+            if dotbob_dir.is_dir():
+                shutil.rmtree(self.dotbob_dir)
+                self.logger.info(f"Deleted .bob directory.")
+
+            return True
+
+        except Exception as e:
+            self.logger.critical(f"Unexpected error during remove_all_task_build_dirs(): {e}", exc_info=True)
 
     def create_all_task_env(self) -> None:
         """ Create a separate task environment for each task defined in self.task_config based on the global environment"""
