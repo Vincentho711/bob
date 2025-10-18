@@ -1,7 +1,7 @@
 from io import TextIOWrapper
 from pathlib import Path
 from typing import Any, Dict
-from networkx import DiGraph, topological_sort, is_directed_acyclic_graph
+from networkx import DiGraph, topological_sort, is_directed_acyclic_graph, ancestors
 from toolConfigParser.ToolConfigParser import ToolConfigParser
 from ipConfigParser.IpConfigParser import IpConfigParser
 from taskConfigParser.TaskConfigParser import TaskConfigParser
@@ -1193,7 +1193,7 @@ class Bob:
         """Filter dependency_graph based on whether tasks need to be rebuilt. Schedules tasks dynamically while respecting dependencies"""
         try:
             if self.dependency_graph is None:
-                raise ValueError(f"self.dependency_graph = None. Please ensure build_task_dependency is run, and Bob's attribute has been updated.")
+                raise ValueError(f"self.dependency_graph = None. Please ensure build_task_dependency_graph of self.ip_config_parser is run, and Bob's attribute has been updated.")
 
             filtered_dependency_graph = self.filter_tasks_to_rebuild()
             self.logger.debug(f"Filtered tasks to rebuild. filtered_dependency_graph = {filtered_dependency_graph}")
@@ -1280,6 +1280,46 @@ class Bob:
         except Exception as e:
             self.logger.critical(f"Unexpected error during visualise_dependency_graph(): {e}")
             return None
+
+    def get_dependencies_for_task(self, task_name:str) -> list[str]:
+        """Given a task_name, obtain all nodes having a path to that task, i.e. all dependencies for that task"""
+        try:
+            if self.dependency_graph is None:
+                raise ValueError(f"self.dependency_graph = None. Please ensure build_task_dependency_graph of self.ip_config_parser is run, and Bob's attribute has been updated.")
+            if task_name not in self.task_configs:
+                self.logger.warning(f"Task {task_name} does not exist in task_configs, so its output dir and its dependencies cannot be deleted.")
+                return []
+            if task_name not in self.dependency_graph:
+                self.logger.warning(f"Task {task_name} does not exist in dependency_graph so its output dir and its dependencies cannot be deleted.")
+                return []
+            # Get all the ancestor nodes (dependencies) of the task
+            dependencies = ancestors(self.dependency_graph, task_name)
+
+            # Return in topological order for proper execution sequence
+            topo_sorted = list(topological_sort(self.dependency_graph))
+            ordered_dependencies = [task for task in topo_sorted if task in dependencies]
+
+            return ordered_dependencies
+
+        except Exception as e:
+            self.logger.critical(f"Unexpected error during get_dependencies_for_task(): {e}")
+
+    def remove_task_output_dir_until(self, task_name:str) -> None:
+        """Remove all the output dirs leading up to and including the task"""
+        try:
+            # Assume that self.dependency_graph has been updated
+            if  self.dependency_graph is None:
+                raise ValueError(f"self.dependency_graph = None. Please ensure build_task_dependency_graph of self.ip_config_parser is run, and Bob's attribute has been updated.")
+            if task_name not in self.task_configs:
+                self.logger.warning(f"Task {task_name} does not exist in task_configs, so its output dir and it dependencies cannot be deleted.")
+                return
+            # Get a list of all the dependencies
+            ordered_dependencies = self.get_dependencies_for_task(task_name)
+            tasks_to_remove = ordered_dependencies + [task_name]
+            self.remove_task_output_dirs(tasks_to_remove)
+
+        except Exception as e:
+            self.logger.critical(f"Unexpected error during remove_task_output_dir_until(): {e}")
 
     def setup_task_logger(self, log_file_path: Path) -> TextIOWrapper| None:
         """Redirect stdout and stderr to a file for a subprocess (per-task logging)."""

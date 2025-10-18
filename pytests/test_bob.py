@@ -112,7 +112,7 @@ def create_multiple_valid_task_config(monkeypatch) -> tuple[Bob, list[Path]]:
     with patch.object(Path, "rglob", return_value=mock_paths):
         # Ensure the paths exist in the test mock
         bob_instance.task_configs = {}  # Initialize an empty dictionary
-        
+
         # Mock the open function with side_effect to return specific content based on file path
         def mock_open_side_effect(filepath, *args, **kwargs):
             # Use the file path to return the correct content
@@ -1473,6 +1473,57 @@ def test_visualise_dependency_graph(bob_with_sample_dependency_graph_for_visuali
     assert " [deploy]" in output_lines[6]
     assert " [compile_b]" in output_lines[7]
     assert "* [test]" in output_lines[8]
+
+def test_get_dependencies_for_task_single_dependency(bob_with_graph):
+    """Test that get_dependencies_for_task() return a single dependency"""
+    target_task = "hello_world_c_compile"
+    bob_with_graph.task_configs[target_task] = {"output_dir": "/path/to/output_dir"}
+    ordered_dependencies = bob_with_graph.get_dependencies_for_task(target_task)
+    assert ordered_dependencies == ["arith_c_compile"]
+
+def test_get_dependencies_for_task_multiple_dependencies(bob_with_graph):
+    """Test that get_dependencies_for_task() return multiple dependencies"""
+    target_task = "hello_world_2"
+    bob_with_graph.task_configs[target_task] = {"output_dir": "/path/to/output_dir"}
+    ordered_dependencies = bob_with_graph.get_dependencies_for_task(target_task)
+    expected_deps = [
+        "hello_world_4",
+        "hello_world_5",
+        "hello_world_6",
+        "hello_world_3",
+    ]
+    assert ordered_dependencies == expected_deps
+
+def test_get_dependencies_for_task_no_dependency(bob_with_graph):
+    """Test that get_dependencies_for_task() return an empty list if a task does not have any dependencies"""
+    target_task = "arith_c_compile"
+    bob_with_graph.task_configs[target_task] = {"output_dir": "/path/to/output_dir"}
+    ordered_dependencies = bob_with_graph.get_dependencies_for_task(target_task)
+    assert ordered_dependencies == []
+
+@patch.object(Bob,"remove_task_output_dir")
+def test_remove_task_output_dir_until_multiple_dependencies(mock_remove_task_output_dir, bob_with_graph, tmp_path):
+    """Test that remove_task_output_dir_until() calls remove_task_output_dirs multiple times for a task with dependencies"""
+    target_task = "hello_world_2"
+    bob_with_graph.proj_root = tmp_path
+    bob_with_graph.task_configs[target_task] = {"output_dir" : "/path/to/output_dir"}
+    bob_with_graph.task_configs["hello_world_4"] = {"output_dir" : "/path/to/hello_world_4/output_dir"}
+    bob_with_graph.task_configs["hello_world_5"] = {"output_dir" : "/path/to/hello_world_5/output_dir"}
+    bob_with_graph.task_configs["hello_world_6"] = {"output_dir" : "/path/to/hello_world_6/output_dir"}
+    bob_with_graph.task_configs["hello_world_3"] = {"output_dir" : "/path/to/hello_world_3/output_dir"}
+    bob_with_graph.remove_task_output_dir_until(target_task)
+
+    assert mock_remove_task_output_dir.call_count == 5
+
+@patch.object(Bob,"remove_task_output_dir")
+def test_remove_task_output_dir_until_no_dependencies(mock_remove_task_output_dir, bob_with_graph, tmp_path):
+    """Test that remove_task_output_dir_until() calls remove_task_output_dirs only once for a task without dependencies"""
+    target_task = "arith_c_compile"
+    bob_with_graph.proj_root = tmp_path
+    bob_with_graph.task_configs[target_task] = {"output_dir" : "/path/to/output_dir"}
+    bob_with_graph.remove_task_output_dir_until(target_task)
+
+    assert mock_remove_task_output_dir.call_count == 1
 
 @patch("subprocess.Popen")
 @patch("pathlib.Path.is_dir", return_value = True)
