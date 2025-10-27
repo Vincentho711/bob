@@ -1337,32 +1337,32 @@ def bob_with_graph(sample_dependency_graph):
 def test_filter_tasks_to_rebuild_no_rebuild_required(bob_with_graph):
     """All tasks are up-to-date, no rebuids should be required"""
     with patch.object(bob_with_graph, "should_rebuild_task", return_value=False):
-        result_graph = bob_with_graph.filter_tasks_to_rebuild()
+        result_graph = bob_with_graph.filter_tasks_to_rebuild(bob_with_graph.dependency_graph)
         assert len(result_graph.nodes) == 0, "Graph should be empty if no rebuilds are needed"
 
 def test_filter_tasks_to_rebuild_single_task_rebuild(bob_with_graph):
     """Only 'arith_c_compile' requires rebuilding, but since 'hello_world_c_compile' depends on it, it also needs rebuilding"""
     with patch.object(bob_with_graph, "should_rebuild_task", side_effect=lambda task: task == "arith_c_compile"):
-        result_graph = bob_with_graph.filter_tasks_to_rebuild()
+        result_graph = bob_with_graph.filter_tasks_to_rebuild(bob_with_graph.dependency_graph)
         assert set(result_graph.nodes) == {"arith_c_compile", "hello_world_c_compile"}, "Only arith_c_compile and its dependent should be rebuilt"
 
 def test_filter_tasks_to_rebuild_all_tasks_required(bob_with_graph):
     """Every tasks requires rebuilding"""
     with patch.object(bob_with_graph, "should_rebuild_task", return_value=True):
-        result_graph = bob_with_graph.filter_tasks_to_rebuild()
+        result_graph = bob_with_graph.filter_tasks_to_rebuild(bob_with_graph.dependency_graph)
         assert set(result_graph.nodes) == set(bob_with_graph.dependency_graph.nodes), "All tasks should be in the rebuild graph"
 
 def test_filter_tasks_to_rebuild_deep_dependency_rebuild(bob_with_graph):
     """A deeply ensted dependency should cause all downstream tasks to rebuild"""
     with patch.object(bob_with_graph, "should_rebuild_task", side_effect=lambda task: task == "hello_world_4"):
-        result_graph = bob_with_graph.filter_tasks_to_rebuild()
+        result_graph = bob_with_graph.filter_tasks_to_rebuild(bob_with_graph.dependency_graph)
         expected_rebuild_tasks = {"hello_world_4", "hello_world_3", "hello_world_2"}
         assert set(result_graph.nodes) == expected_rebuild_tasks, "All dependent tasks should be marked for rebuild"
 
 def test_filter_tasks_to_rebuild_branching_dependency(bob_with_graph):
     """If a task with multiple dependecies is affected, ensure all upstream dependencies are correctly handled"""
     with patch.object(bob_with_graph, "should_rebuild_task", side_effect=lambda task: task in ["hello_world_5", "hello_world_6"]):
-        result_graph = bob_with_graph.filter_tasks_to_rebuild()
+        result_graph = bob_with_graph.filter_tasks_to_rebuild(bob_with_graph.dependency_graph)
         expected_rebuild_tasks = {"hello_world_5", "hello_world_3", "hello_world_2", "hello_world_6"}
         assert set(result_graph.nodes) == expected_rebuild_tasks, "Tasks dependent on multiple rebuild sources must also rebuild"
 
@@ -1386,19 +1386,19 @@ def bob_with_complex_graph(bob_with_graph):
 def test_filter_tasks_to_rebuild_deep_dependency_chain(bob_with_complex_graph):
     """Tests if rebuild correctly propagates through long chains A → B → C."""
     with patch.object(bob_with_complex_graph, "should_rebuild_task", side_effect=lambda task: task == "A"):
-        result_graph = bob_with_complex_graph.filter_tasks_to_rebuild()
+        result_graph = bob_with_complex_graph.filter_tasks_to_rebuild(bob_with_complex_graph.dependency_graph)
         assert set(result_graph.nodes) == {"A", "B", "C"}, "C should be rebuilt due to dependency on A."
 
 def test_filter_tasks_to_rebuild_multiple_independent_chains(bob_with_complex_graph):
     """Ensure independent chains do not trigger unnecessary rebuilds."""
     with patch.object(bob_with_complex_graph, "should_rebuild_task", side_effect=lambda task: task == "F"):
-        result_graph = bob_with_complex_graph.filter_tasks_to_rebuild()
+        result_graph = bob_with_complex_graph.filter_tasks_to_rebuild(bob_with_complex_graph.dependency_graph)
         assert set(result_graph.nodes) == {"F", "G"}, "Only F and G should be rebuilt."
 
 def test_filter_tasks_to_rebuild_diamond_dependency_structure(bob_with_complex_graph):
     """Tests if rebuild propagates correctly in a diamond structure."""
     with patch.object(bob_with_complex_graph, "should_rebuild_task", side_effect=lambda task: task == "D"):
-        result_graph = bob_with_complex_graph.filter_tasks_to_rebuild()
+        result_graph = bob_with_complex_graph.filter_tasks_to_rebuild(bob_with_complex_graph.dependency_graph)
         assert set(result_graph.nodes) == {"D", "E", "C"}, "C should rebuild since E depends on D."
 
 def test_filter_tasks_to_rebuild_cyclic_dependency_handling(bob_with_complex_graph):
@@ -1407,13 +1407,13 @@ def test_filter_tasks_to_rebuild_cyclic_dependency_handling(bob_with_complex_gra
     bob_with_complex_graph.dependency_graph.add_edge("C", "A")
 
     with patch.object(bob_with_complex_graph, "should_rebuild_task", return_value=True):
-        result_graph = bob_with_complex_graph.filter_tasks_to_rebuild()
+        result_graph = bob_with_complex_graph.filter_tasks_to_rebuild(bob_with_complex_graph.dependency_graph)
         assert len(result_graph.nodes) == len(bob_with_complex_graph.dependency_graph.nodes), "All nodes should be rebuilt due to a cycle."
 
 def test_filter_tasks_to_rebuild_mixed_rebuild_scenarios(bob_with_complex_graph):
     """Complex case where different nodes need rebuilding selectively."""
     with patch.object(bob_with_complex_graph, "should_rebuild_task", side_effect=lambda task: task in ["B", "D"]):
-        result_graph = bob_with_complex_graph.filter_tasks_to_rebuild()
+        result_graph = bob_with_complex_graph.filter_tasks_to_rebuild(bob_with_complex_graph.dependency_graph)
         assert set(result_graph.nodes) == {"B", "C", "D", "E"}, "C and E should be rebuilt due to dependencies on B and D."
 
 @pytest.fixture
@@ -1442,7 +1442,7 @@ def test_visualise_dependency_graph(bob_with_sample_dependency_graph_for_visuali
     captured_output = StringIO()
     sys.stdout = captured_output
 
-    bob_with_sample_dependency_graph_for_visualisation.visualise_dependency_graph()
+    bob_with_sample_dependency_graph_for_visualisation.visualise_dependency_graph(bob_with_sample_dependency_graph_for_visualisation.dependency_graph)
 
     # Reset stdout
     sys.stdout = sys.__stdout__
@@ -1673,3 +1673,70 @@ def test_build_command_generates_output_file(mock_is_dir, mock_popen):
 
         # Now check that the expected file "exists" after the build (via mock)
         assert output_file.exists()
+
+@pytest.fixture
+def sample_bob_instance_for_task_names_regex_find():
+    """Fixture providing a Bob object with sample task_configs, for using regex to find tasks"""
+    mock_logger = MagicMock()
+    bob_instance = Bob(mock_logger)
+    bob_instance.task_configs = {
+        "build_app" : {},
+        "test_app" : {},
+        "deploy_prod": {},
+        "cleanup" : {},
+        "integration_tests": {},
+        "test_runner": {},
+    }
+    return bob_instance
+
+def test_get_task_names_by_regex_single_literal_string(sample_bob_instance_for_task_names_regex_find):
+    """Test that it returns task names with literal strings"""
+    result = sample_bob_instance_for_task_names_regex_find.get_task_names_by_regex(["build_app"])
+    assert result == {"build_app"}
+
+def test_get_task_names_by_regex_multiple_start_regex_strings(sample_bob_instance_for_task_names_regex_find):
+    """ Test that it returns muliple task_names which all start with the same pattern"""
+    result = sample_bob_instance_for_task_names_regex_find.get_task_names_by_regex(["^test"])
+    assert result == {"test_app", "test_runner"}
+
+def test_get_task_names_by_regex_multiple_end_regex_strings(sample_bob_instance_for_task_names_regex_find):
+    """ Test that it returns muliple task_names which all end with the same pattern"""
+    result = sample_bob_instance_for_task_names_regex_find.get_task_names_by_regex(["app$"])
+    assert result == {"build_app", "test_app"}
+
+def test_get_task_names_by_regex_invalid_regex_as_literal(sample_bob_instance_for_task_names_regex_find):
+    """Test that invalid regex are treated as literal strings"""
+    result = sample_bob_instance_for_task_names_regex_find.get_task_names_by_regex(["("])
+    assert result == set()
+
+def test_get_task_names_by_regex_no_matches(sample_bob_instance_for_task_names_regex_find):
+    """Test that it returns empty set when there is no match of a literal string"""
+    result = sample_bob_instance_for_task_names_regex_find.get_task_names_by_regex(["nonexistent_task"])
+    assert result == set()
+    sample_bob_instance_for_task_names_regex_find.logger.info.assert_called_once_with("No tasks matched for pattern or literal: 'nonexistent_task'")
+
+def test_get_task_names_by_regex_mix_literals_and_regex(sample_bob_instance_for_task_names_regex_find):
+    """Test that it returns correct task_names when there is a mix of literal and regex matches"""
+    result = sample_bob_instance_for_task_names_regex_find.get_task_names_by_regex(["cleanup", "^build", "nomatch"])
+    assert result == {"cleanup", "build_app"}
+
+def test_get_task_names_by_regex_multiple_matches(sample_bob_instance_for_task_names_regex_find):
+    """Test regex matches substrings within task names"""
+    result = sample_bob_instance_for_task_names_regex_find.get_task_names_by_regex(["test"])
+    assert result == {"test_app", "integration_tests", "test_runner"}
+    result = sample_bob_instance_for_task_names_regex_find.get_task_names_by_regex(["app"])
+    assert result == {"build_app", "test_app"}
+    result = sample_bob_instance_for_task_names_regex_find.get_task_names_by_regex(["app", "^test"])
+    assert result == {"build_app", "test_runner", "test_app"}
+
+def test_get_task_names_by_regex_blank_string_pattern(sample_bob_instance_for_task_names_regex_find):
+    """Test that empty str is handled without returning all task_names"""
+    result = sample_bob_instance_for_task_names_regex_find.get_task_names_by_regex([""])
+    # None of the task names are an empty string
+    assert result == set()
+
+def test_get_task_names_by_regex_overlapping_regex_patterns(sample_bob_instance_for_task_names_regex_find):
+    """Test that overlapping regex patterns only return entries once"""
+    result = sample_bob_instance_for_task_names_regex_find.get_task_names_by_regex(["test", "runner"])
+    # 'test_runner' matches both, but should appear only once
+    assert result == {"test_app", "integration_tests", "test_runner"}

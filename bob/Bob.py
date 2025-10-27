@@ -7,6 +7,7 @@ from ipConfigParser.IpConfigParser import IpConfigParser
 from taskConfigParser.TaskConfigParser import TaskConfigParser
 import os
 import sys
+import re
 import yaml
 import subprocess
 import multiprocessing
@@ -225,6 +226,40 @@ class Bob:
         except Exception as e:
             self.logger.critical(f"Unexpected  error during setup_build_dirs(): {e}", exc_info=True)
             sys.exit(1)
+
+    def get_task_names_by_regex(self, regex_task_names: list[str]) -> set[str]:
+        """Check whether each regex_task_names is a valid regex pattern or str, then return a set of all the matched patterns within the all_task_names dict using regex"""
+        if not self.task_configs:
+            self.logger.debug(f"Task configs dict is empty")
+            return set()
+
+        all_task_names = self.task_configs.keys()
+        matched_tasks = set()
+
+        for regex_name in regex_task_names:
+            if not isinstance(regex_name, str):
+                raise TypeError(f"Each regex_task_name must be a string, got regex_name={regex_name} which is a {type(regex_name)}.")
+            # Handle empty str explicitly
+            if regex_name.strip() == "":
+                self.logger.info("Empty or whitespace-only pattern provided — skipping.")
+                continue
+            # try compiling the regex
+            try:
+                pattern = re.compile(regex_name)
+                # If regex compiles, use it directly
+                matches = {task for task in all_task_names if pattern.search(task)}
+            except re.error:
+                # Treat invalid regex as a literal str
+                matches = {task for task in all_task_names if regex_name == task}
+
+            if matches:
+                self.logger.debug(f"Regex '{regex_name}' matched tasks: {matches}")
+                matched_tasks.update(matches)
+            else:
+                self.logger.info(f"No tasks matched for pattern or literal: '{regex_name}'")
+
+        return matched_tasks
+
 
     def remove_task_output_dir(self, task_name:str) -> bool:
         """Remove a single task output dir and mark the task as dirty, return whether the task's output dir has been removed"""
@@ -1141,7 +1176,7 @@ class Bob:
             self.logger.critical(f"Unexpected error during execute_verilator_tb_compile() : {e}", exc_info=True)
             return False
 
-    def filter_tasks_to_rebuild(self) -> DiGraph:
+    def filter_tasks_to_rebuild(self, dependency_graph: DiGraph) -> DiGraph:
         """Returns a filtered dependency graph with only tasks that need to be rebuilt."""
         # A task must be rebuilt if:
         # - It explicitly needs rebuilding (should_rebuild_task is True)
@@ -1164,7 +1199,7 @@ class Bob:
                     return True
 
                 # If any dependency needs a rebuild, this task must also rebuild
-                for dependency in self.dependency_graph.predecessors(task):
+                for dependency in dependency_graph.predecessors(task):
                     if should_rebuild_recursive(dependency):
                         tasks_to_rebuild.add(task)
                         return True
@@ -1172,13 +1207,13 @@ class Bob:
                 return False
 
             # Iterate over all tasks and determine rebuild requirements
-            for task in self.dependency_graph.nodes:
+            for task in dependency_graph.nodes:
                 should_rebuild_recursive(task)
 
             # Construct the rebuild graph with only required tasks
             for task in tasks_to_rebuild:
                 rebuild_graph.add_node(task)
-                for successor in self.dependency_graph.successors(task):
+                for successor in dependency_graph.successors(task):
                     if successor in tasks_to_rebuild:
                         rebuild_graph.add_edge(task, successor)
 
@@ -1189,25 +1224,26 @@ class Bob:
             self.logger.critical(f"Unexpected error in filter_tasks_to_rebuild(): {e}", exc_info=True)
             return DiGraph()  # Return empty graph on failure
 
-    def schedule_tasks(self, dependency_count, ready_queue):
+    def schedule_all_tasks(self, dependency_count, ready_queue):
         """Filter dependency_graph based on whether tasks need to be rebuilt. Schedules tasks dynamically while respecting dependencies"""
         try:
             if self.dependency_graph is None:
                 raise ValueError(f"self.dependency_graph = None. Please ensure build_task_dependency_graph of self.ip_config_parser is run, and Bob's attribute has been updated.")
 
-            filtered_dependency_graph = self.filter_tasks_to_rebuild()
+            # Filter from self.dependency_graph to configure out what needs to be rebuilt
+            filtered_dependency_graph = self.filter_tasks_to_rebuild(self.dependency_graph)
             self.logger.debug(f"Filtered tasks to rebuild. filtered_dependency_graph = {filtered_dependency_graph}")
             self.dependency_graph = filtered_dependency_graph
 
             # Show visualisation of the filtered dependency graph if there are tasks to be built
             if self.dependency_graph.number_of_nodes():
-                self.visualise_dependency_graph()
+                self.visualise_dependency_graph(self.dependency_graph)
 
             # Track number of dependencies (indegree) for each task
             for task in self.dependency_graph.nodes:
                 dependency_count[task] = self.dependency_graph.in_degree(task)
 
-            # Populate queue within initial tasks (indegree = 0)
+            # Populate queue with initial tasks (indegree = 0)
             for task, count in dependency_count.items():
                 if count == 0:
                     ready_queue.put(task)
@@ -1215,12 +1251,71 @@ class Bob:
             return dependency_count, ready_queue
 
         except Exception as e:
-            self.logger.critical(f"Unexpected error during schedule_tasks(): {e}", exc_info=True)
+            self.logger.critical(f"Unexpected error during schedule_all_tasks(): {e}", exc_info=True)
 
-    def visualise_dependency_graph(self) -> None:
+    def schedule_selected_tasks(self, task_names: set[str], dependency_count, ready_queue):
+        """Schedule only the given tasks and all their dependencies.
+
+        Args:
+            dependency_count : Show the number of dependencies for each selected tasks in a dict
+            ready_queue : A queue object to store initial tasks to build
+            task_names: A list of tasks to be built
+
+        Returns:
+            A (dependency_count, ready_queue) tuple
+
+        Raises:
+            ValueError: If self.dependency_graph is not initialised, throw ValueError.
+        """
+        try:
+            if self.dependency_graph is None:
+                raise ValueError(f"self.dependency_graph = None. Please ensure build_task_dependency_graph of self.ip_config_parser is run, and Bob's attribute has been updated.")
+
+            # Validate the requested task names
+            missing = [t for t in task_names if t not in self.dependency_graph]
+            if missing:
+                self.logger.warning(f"Some requested tasks not found in dependency_graph: {missing}")
+
+            # Gather all tasks, target + their ancestors (dependencies)
+            tasks_to_include = set()
+            for task in task_names:
+                if task in self.dependency_graph:
+                    tasks_to_include.add(task)
+                    tasks_to_include.update(ancestors(self.dependency_graph, task))
+
+            if not tasks_to_include:
+                self.logger.info("No valid tasks found to schedule.")
+                return dependency_count, ready_queue
+
+            # Extract the relevent subgraph
+            subgraph = self.dependency_graph.subgraph(tasks_to_include).copy()
+
+            # Filter out tasks that don't have to be rebuilt
+            filtered_dependency_subgraph = self.filter_tasks_to_rebuild(subgraph)
+            self.logger.debug(f"Scheduling subgraph with {len(filtered_dependency_subgraph)} tasks.")
+
+            if filtered_dependency_subgraph.number_of_nodes():
+                self.visualise_dependency_graph(filtered_dependency_subgraph)
+
+            # Track number of dependencies (indegree) for each task
+            for task in filtered_dependency_subgraph.nodes:
+                dependency_count[task] = filtered_dependency_subgraph.in_degree(task)
+
+            # Populate queue with initial tasks (indegree = 0)
+            for task, count in dependency_count.items():
+                if count == 0:
+                    ready_queue.put(task)
+            self.logger.debug(f"Initial ready queue: {ready_queue.qsize()}")
+            return dependency_count, ready_queue
+
+        except Exception as e:
+            self.logger.critical(f"Unexpected error during schedule_selected_tasks(): {e}", exc_info=True)
+
+
+
+    def visualise_dependency_graph(self, dependency_graph: DiGraph) -> None:
         """Visualise a directed acyclic graph (DAG) in the terminal using ASCII characters."""
         try:
-            dependency_graph = self.dependency_graph
             if not isinstance(dependency_graph, DiGraph):
                 raise TypeError(f"Dependency graph must be a directed graph (nx.DiGraph).")
 
@@ -1329,7 +1424,7 @@ class Bob:
         sys.stderr = log_file
         return log_file
 
-    def execute_tasks(self):
+    def execute_tasks(self, build_all_tasks: bool, selected_tasks: list[str]):
         """Executes tasks with dynamic scheduling and parallel execution"""
         try:
             if self.tool_config_parser is None:
@@ -1342,7 +1437,10 @@ class Bob:
                 failure_event = manager.Event()
                 failure_info = manager.dict()
 
-                dependency_count, ready_queue = self.schedule_tasks(dependency_count, ready_queue)
+                if build_all_tasks:
+                    dependency_count, ready_queue = self.schedule_all_tasks(dependency_count, ready_queue)
+                else:
+                    dependency_graph, ready_queue = self.schedule_selected_tasks(set(selected_tasks), dependency_count, ready_queue)
                 self.logger.debug(f"dependency_count={dependency_count}")
 
                 process_pool = [] # Store active process handles
