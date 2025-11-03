@@ -209,6 +209,24 @@ class Bob:
             self.logger.critical(f"Unexpected error during discover_tasks(): {e}", exc_info=True)
             sys.exit(1)
 
+    def list_tasks(self, list_all_tasks: bool, regex_task_names: list[str]) -> None:
+        if not self.task_configs:
+            raise ValueError(f"Task configs is empty. Please ensure that it is populated first.")
+        all_task_names = self.task_configs.keys()
+        tasks_to_be_shown = []
+        if list_all_tasks:
+            tasks_to_be_shown = all_task_names
+        else:
+            tasks_to_be_shown = self.get_task_names_by_regex(regex_task_names)
+
+        if len(tasks_to_be_shown):
+            print(f"Tasks:\n  " + "\n  ".join(tasks_to_be_shown))
+        else:
+            if list_all_tasks:
+                print(f"No tasks defined.")
+            else:
+                print(f"No matched tasks with regex task name patterns: {regex_task_names}.")
+
     def setup_build_dirs(self) -> None:
         """Create a dedicated build directory for each task under proj_root/build/."""
         try:
@@ -257,7 +275,12 @@ class Bob:
                 matched_tasks.update(matches)
             else:
                 self.logger.info(f"No tasks matched for pattern or literal: '{regex_name}'")
-
+        if matched_tasks:
+            self.logger.debug(f"Matched tasks:\n  " + "\n  ".join(matched_tasks))
+        else:
+            self.logger.warning(f"Could not match any valid tasks with regex patterns={regex_task_names}.")
+            valid_tasks = list(self.task_configs.keys())
+            self.logger.warning("Valid tasks:\n  " + "\n  ".join(valid_tasks))
         return matched_tasks
 
 
@@ -315,7 +338,7 @@ class Bob:
             return True
 
         except Exception as e:
-            self.logger.critical(f"Unexpected error during remove_all_task_build_dirs(): {e}", exc_info=True)
+            self.logger.critical(f"Unexpected error during remove_build_dir(): {e}", exc_info=True)
 
     def create_all_task_env(self) -> None:
         """ Create a separate task environment for each task defined in self.task_config based on the global environment"""
@@ -1402,11 +1425,14 @@ class Bob:
     def remove_task_output_dir_until(self, task_name:str) -> None:
         """Remove all the output dirs leading up to and including the task"""
         try:
+            print(f"In remove_task_outpuut_dir_until, task_name={task_name}")
             # Assume that self.dependency_graph has been updated
             if  self.dependency_graph is None:
                 raise ValueError(f"self.dependency_graph = None. Please ensure build_task_dependency_graph of self.ip_config_parser is run, and Bob's attribute has been updated.")
             if task_name not in self.task_configs:
                 self.logger.warning(f"Task {task_name} does not exist in task_configs, so its output dir and it dependencies cannot be deleted.")
+                valid_tasks = list(self.task_configs.keys())
+                self.logger.warning("Valid tasks:\n  " + "\n  ".join(valid_tasks))
                 return
             # Get a list of all the dependencies
             ordered_dependencies = self.get_dependencies_for_task(task_name)
@@ -1440,8 +1466,13 @@ class Bob:
                 if build_all_tasks:
                     dependency_count, ready_queue = self.schedule_all_tasks(dependency_count, ready_queue)
                 else:
+                    # selected_tasks allow regex patterns, resolve actual task names first
+                    selected_tasks = self.get_task_names_by_regex(selected_tasks)
                     dependency_graph, ready_queue = self.schedule_selected_tasks(set(selected_tasks), dependency_count, ready_queue)
                 self.logger.debug(f"dependency_count={dependency_count}")
+                tasks_to_be_built = dependency_count.keys()
+                number_of_tasks_to_be_built = len(tasks_to_be_built)
+                self.logger.debug(f"Number of tasks to be built = {number_of_tasks_to_be_built}")
 
                 process_pool = [] # Store active process handles
                 # Prevent spawning too many process all at once and spending too much time in context switching
@@ -1478,7 +1509,8 @@ class Bob:
                     log_path = failure_info.get("log_file_path", "Unknown Log Path")
                     self.logger.error(f"Build failed at task '{failed_task}'. Check log: {log_path}")
                 else:
-                    self.logger.info(f"Successfully built {self.dependency_graph.number_of_nodes()} tasks.")
+                    self.logger.info(f"Successfully built {number_of_tasks_to_be_built} task(s).")
+                    self.logger.info(f"Built tasks:\n  " + "\n  ".join(tasks_to_be_built))
 
                 self.logger.debug(f"At the end of execute_tasks(): dependency_count={dependency_count}")
                 self.logger.debug(f"At the end of execute_tasks(): ready_queue.qsize()={ready_queue.qsize()}")
@@ -1530,9 +1562,11 @@ class Bob:
                     # Mark task as clean and update hash_sha256 if it runs successfully
                     self.mark_task_as_clean_in_dotbob_checksum_file(task_name)
                     for dependent in dependency_graph.successors(task_name):
-                        dependency_count[dependent] -= 1
-                        if dependency_count[dependent] == 0:
-                            ready_queue.put(dependent)
+                        # Only decrement the dependency_count if the parent task needs to be built, indicated by being in the dict
+                        if dependent in dependency_count:
+                            dependency_count[dependent] -= 1
+                            if dependency_count[dependent] == 0:
+                                ready_queue.put(dependent)
             else:
                 failure_info["task_name"] = task_name
                 failure_info["log_file_path"] = str(task_config.get("output_dir") / f"{task_name}.log")

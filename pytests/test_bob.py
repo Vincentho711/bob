@@ -1740,3 +1740,101 @@ def test_get_task_names_by_regex_overlapping_regex_patterns(sample_bob_instance_
     result = sample_bob_instance_for_task_names_regex_find.get_task_names_by_regex(["test", "runner"])
     # 'test_runner' matches both, but should appear only once
     assert result == {"test_app", "integration_tests", "test_runner"}
+
+def test_list_tasks_all_tasks(sample_bob_instance_for_task_names_regex_find, capsys):
+    """Test that it prints all tasks onto the terminal when list_all_tasks=True"""
+    sample_bob_instance_for_task_names_regex_find.list_tasks(True, [])
+
+    # Capture printed output
+    captured = capsys.readouterr()
+
+    # Extract stdout
+    output = captured.out.strip()
+
+    # Verify that header and all task names appear in the output
+    assert output.startswith("Tasks:")
+    for task_name in sample_bob_instance_for_task_names_regex_find.task_configs.keys():
+        assert task_name in output, f"Expected task '{task_name}' to appear in output"
+
+    # Optionally ensure there are no unexpected missing or extra lines
+    lines = [line.strip() for line in output.splitlines() if line.strip()]
+    # First line should be "Tasks:"
+    assert lines[0] == "Tasks:"
+    # The rest should match exactly the task names
+    assert set(lines[1:]) == set(sample_bob_instance_for_task_names_regex_find.task_configs.keys())
+
+def test_list_tasks_regex_filter(sample_bob_instance_for_task_names_regex_find, capsys):
+    """Test that list_tasks prints only regex-matched tasks when list_all_tasks=False"""
+    bob_instance = sample_bob_instance_for_task_names_regex_find
+
+    # Mock get_task_names_by_regex to simulate regex filtering
+    mocked_task_list = ["test_app", "test_runner"]
+    bob_instance.get_task_names_by_regex = MagicMock(return_value=mocked_task_list)
+
+    # Call list_tasks with list_all_tasks=False
+    bob_instance.list_tasks(False, [".*_test.*"])
+
+    # Capture printed output
+    captured = capsys.readouterr()
+    output = captured.out.strip()
+
+    # Assert get_task_names_by_regex was called correctly
+    bob_instance.get_task_names_by_regex.assert_called_once_with([ ".*_test.*" ])
+
+    # Check that the output contains only the mocked tasks
+    assert output.startswith("Tasks:")
+    for task_name in mocked_task_list:
+        assert task_name in output, f"Expected task '{task_name}' to appear in output"
+
+    # Ensure non-matching tasks are NOT in the output
+    non_matching_tasks = set(bob_instance.task_configs.keys()) - set(mocked_task_list)
+    for task_name in non_matching_tasks:
+        assert task_name not in output, f"Unexpected task '{task_name}' found in output"
+
+def test_list_tasks_exact_task_name(sample_bob_instance_for_task_names_regex_find, capsys):
+    """Test that list_tasks prints exactly the given task when list_all_tasks=False and exact name is provided"""
+    bob_instance = sample_bob_instance_for_task_names_regex_find
+
+    # Pretend user asked for an exact match: "cleanup"
+    requested_task = "cleanup"
+
+    # Mock get_task_names_by_regex to return exactly that task
+    bob_instance.get_task_names_by_regex = MagicMock(return_value=[requested_task])
+
+    # Call list_tasks with list_all_tasks=False
+    bob_instance.list_tasks(False, [requested_task])
+
+    # Capture printed output
+    captured = capsys.readouterr()
+    output = captured.out.strip()
+
+    # Verify get_task_names_by_regex was called correctly
+    bob_instance.get_task_names_by_regex.assert_called_once_with([requested_task])
+
+    # Output should include only that task
+    assert output.startswith("Tasks:")
+    assert requested_task in output
+    # Ensure no other tasks are printed
+    other_tasks = set(bob_instance.task_configs.keys()) - {requested_task}
+    for other in other_tasks:
+        assert other not in output, f"Unexpected task '{other}' found in output"
+
+def test_list_tasks_empty_regex_list(sample_bob_instance_for_task_names_regex_find, capsys):
+    """Test that list_tasks handles an empty regex_task_names list correctly when list_all_tasks=False"""
+    bob_instance = sample_bob_instance_for_task_names_regex_find
+
+    # Mock get_task_names_by_regex to return an empty list
+    bob_instance.get_task_names_by_regex = MagicMock(return_value=[])
+
+    # Call list_tasks with list_all_tasks=False and an empty regex list
+    bob_instance.list_tasks(False, [])
+
+    # Capture printed output
+    captured = capsys.readouterr()
+    output = captured.out.strip()
+
+    # Verify the mock was called with an empty list
+    bob_instance.get_task_names_by_regex.assert_called_once_with([])
+
+    # Output should include "Tasks:" header but no task names
+    assert output.startswith("No matched tasks with regex task name patterns: [].")

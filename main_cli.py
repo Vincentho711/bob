@@ -61,6 +61,27 @@ Examples:
     )
     subparsers = parser.add_subparsers(dest="mode", required=True, help="Operating mode")
 
+    # ListTasks subparser
+    list_task_subparser = subparsers.add_parser(
+        "list-task",
+        parents=[common_parser],
+        help="List defined tasks",
+    )
+
+    # In list_task subparser, 'all' and '-t' are mutually exclusive
+    list_task_subparser_exclusive_group = list_task_subparser.add_mutually_exclusive_group(required=True)
+    list_task_subparser_exclusive_group.add_argument(
+        "-a", "--all",
+        action="store_true",
+        default=False,
+        help="List all tasks"
+    )
+    list_task_subparser_exclusive_group.add_argument(
+        "-t", "--tasks",
+        nargs="+",
+        help="Specific task names to list, regex pattern enabled"
+    )
+
     # Build subparser
     build_subparser = subparsers.add_parser(
         "build",
@@ -71,9 +92,8 @@ Examples:
     # In build subparser, 'all' and '-t' are mutually exclusive
     build_subparser_exclusive_group = build_subparser.add_mutually_exclusive_group(required=True)
     build_subparser_exclusive_group.add_argument(
-        "all",
-        nargs="?",
-        const=True,
+        "-a", "--all",
+        action="store_true",
         default=False,
         help="Build all tasks"
     )
@@ -91,9 +111,8 @@ Examples:
     )
     clean_subparser_exclusive_group = clean_subparser.add_mutually_exclusive_group(required=True)
     clean_subparser_exclusive_group.add_argument(
-        "all",
-        nargs="?",
-        const=True,
+        "-a", "--all",
+        action="store_true",
         default=False,
         help="Clean all tasks"
     )
@@ -114,6 +133,65 @@ def main() -> int:
     parser = create_parser()
     args = parser.parse_args()
     print(args)
+    try:
+        # Set up PROJ_ROOT first, which bob will use as proj_root
+        cwd = os.getcwd()
+        os.environ["PROJ_ROOT"] = str(cwd)
+
+        # Instantiate Bob object
+        bob = Bob(logger)
+        print(f"proj_root = {bob.get_proj_root()}")
+
+        # Load tool_config.yaml and set up tool paths
+        bob.instantiate_and_associate_tool_config_parser()
+
+        # Load ip_config.yaml and build unfiltered dependency_graph
+        bob.instantiate_and_associate_ip_config_parser()
+        bob.setup_with_ip_config_parser()
+
+        # Discover tasks and populate bob.task_configs
+        bob.discover_tasks()
+        print(bob.task_configs)
+
+        # Set up build dirs for each tasks
+        bob.setup_build_dirs()
+
+        # Create task envs from global env
+        bob.create_all_task_env()
+
+        # Ensure that the dotbob dir exists, and checksum.yaml exists
+        bob.ensure_dotbob_dir_at_proj_root()
+
+        # Instantiate TaskConfigParser to parse all the tasks
+        bob.instantiate_and_associate_task_config_parser()
+        # Parse existing task_configs from Bob to TaskConfigParser
+        bob.task_config_parser.inherit_task_configs(bob.task_configs)
+        # Parse all tasks with task_config_parser's parse_all_tasks_in_task_configs()
+        bob.task_config_parser.parse_all_tasks_in_task_configs()
+        print(args)
+        if args.mode == "list-task":
+            if args.all:
+                bob.list_tasks(True, [])
+            else:
+                bob.list_tasks(False, args.tasks)
+        elif args.mode == "build":
+            if args.all:
+                # Execute build for all tasks
+                bob.execute_tasks(True, [])
+            else:
+                bob.execute_tasks(False, args.tasks)
+        elif args.mode == "clean":
+            if args.all:
+                bob.remove_build_dir()
+            else:
+                bob.remove_task_output_dir_until(args.until)
+        else:
+            raise ValueError(f"Unknown mode = {args.mode}.")
+
+    except Exception as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 1
+
     # try:
     #     # Set up PROJ_ROOT first, which bob will use as proj_root
     #     cwd = os.getcwd()
