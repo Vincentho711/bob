@@ -164,7 +164,7 @@ private:
 
 template<typename DUT_TYPE, typename TXN_TYPE>
 BaseDriver<DUT_TYPE, TXN_TYPE>::BaseDriver(const std::string& name, DutPtr dut, SimulationContextPtr ctx)
-    : name_(name), dut_(dut), ctx_(ctx), debug_enabled_(false) {
+    : name_(name), dut_(dut), ctx_(ctx), debug_enabled_(true) {
     if (!dut_) {
         throw std::invalid_argument("DUT pointer cannot be null");
     }

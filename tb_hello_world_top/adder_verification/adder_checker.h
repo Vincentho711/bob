@@ -18,6 +18,7 @@ struct AdderCheckerConfig {
     bool strict_mode = false;                    ///< Fail on any discrepancy
     uint32_t pipeline_depth = 2;                 ///< Expected pipeline depth of DUT
     uint32_t max_pending_transactions = 1000;    ///< Maximum transactions in pipeline
+    CheckerLogLevel log_level = CheckerLogLevel::DEBUG; ///< Set debug log level
     
     // Timing constraints
     uint32_t max_response_cycles = 10;           ///< Maximum cycles for response

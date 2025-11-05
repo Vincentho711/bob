@@ -9,7 +9,7 @@
 #include <random>
 
 /**
- * @brief Specialized driver for adder DUT
+ * @brief Specialised driver for adder DUT
  * 
  * This driver handles:
  * - Adder-specific input driving (a_i, b_i)

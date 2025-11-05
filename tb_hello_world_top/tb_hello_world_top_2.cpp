@@ -9,7 +9,6 @@
 #include <verilated.h>
 #include <verilated_vcd_c.h>
 #include <Vhello_world_top.h>
-
 #include "adder_verification/adder_monitor.h"
 #include "command_line_parser.h"
 #include "adder_verification/adder_transaction.h"
@@ -194,6 +193,7 @@ private:
         checker_config.max_pending_transactions = static_cast<uint32_t>(max_cycles_);
         checker_config.min_pass_rate = 0.95; // 95% pass rate required
         checker_config.enable_value_logging = true;
+        checker_config.log_level = CheckerLogLevel::DEBUG;
 
         // Create checker
         checker_ = std::make_unique<AdderChecker<Vhello_world_top>>("main_adder_checker", dut_, ctx_, checker_config);
