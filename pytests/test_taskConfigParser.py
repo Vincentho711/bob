@@ -688,6 +688,85 @@ def test_resolve_reference_direct_reference_valid(tmp_path):
     expected_files = str(task_1_dir / files_spec)
     assert resolved_value == expected_files
 
+def test_resolve_reference_with_function_call_get_task_dir_direct(tmp_path):
+    """Test that $(get_task_dir(...)) is correctly substituted before resolution"""
+    task_name = "task_1"
+    referenced_task = "util_task"
+    value = f"$(get_task_dir({referenced_task}))/include"
+
+    mock_logger = MagicMock()
+    task_config_parser = TaskConfigParser(mock_logger, str(tmp_path))
+
+    task_config_parser.task_configs[task_name] = {"task_dir": Path("/path/to/task_1")}
+    task_config_parser.task_configs[referenced_task] = {"task_dir": "/abs/path/to/util_task"}
+
+    # Mock the function registry so that get_task_dir returns expected path
+    task_config_parser.function_registry = {"get_task_dir": lambda task: task_config_parser.task_configs[task]["task_dir"]}
+
+    resolved_value, resolved_type = task_config_parser.resolve_reference(task_name, value)
+
+    expected = str(Path("/abs/path/to/util_task/include").resolve())
+    assert resolved_type == "function"
+    assert resolved_value == expected
+
+def test_resolve_reference_with_function_call_get_task_dir_relative_path(tmp_path):
+    """Test that $(...) substitution followed by relative path resolves correctly."""
+    task_name = "task_1"
+    value = "$(get_task_dir(helpers))/scripts/run.sh"
+
+    mock_logger = MagicMock()
+    task_config_parser = TaskConfigParser(mock_logger, str(tmp_path))
+    task_config_parser.task_configs[task_name] = {"task_dir": Path("/path/to/task_1")}
+    task_config_parser.task_configs["helpers"] = {"task_dir": "/projects/helpers"}
+
+    task_config_parser.function_registry = {"get_task_dir": lambda task: task_config_parser.task_configs[task]["task_dir"]}
+
+    resolved_value, resolved_type = task_config_parser.resolve_reference(task_name, value)
+
+    expected = str(Path("/projects/helpers/scripts/run.sh").resolve())
+    assert resolved_type == "function"
+    assert resolved_value == expected
+
+def test_resolve_reference_with_function_call_get_output_dir_direct(tmp_path):
+    """Test that $(get_output_dir(...)) is correctly substituted before resolution"""
+    task_name = "task_1"
+    referenced_task = "util_task"
+    value = f"$(get_output_dir({referenced_task}))/include"
+
+    mock_logger = MagicMock()
+    task_config_parser = TaskConfigParser(mock_logger, str(tmp_path))
+
+    task_config_parser.task_configs[task_name] = {"task_dir": Path("/path/to/task_1")}
+    task_config_parser.task_configs[referenced_task] = {"task_dir": "/abs/path/to/util_task", "output_dir": "/abs/path/output_dir"}
+
+    # Mock the function registry so that get_task_dir returns expected path
+    task_config_parser.function_registry = {"get_output_dir": lambda task: task_config_parser.task_configs[task]["output_dir"]}
+
+    resolved_value, resolved_type = task_config_parser.resolve_reference(task_name, value)
+
+    expected = str(Path("/abs/path/output_dir/include").resolve())
+    assert resolved_type == "function"
+    assert resolved_value == expected
+
+def test_resolve_reference_with_unknown_function(tmp_path):
+    """Test that an unknown $(...) function raises ValueError."""
+    task_name = "task_1"
+    value = "$(nonexistent_func(task_2))/path"
+
+    mock_logger = MagicMock()
+    task_config_parser = TaskConfigParser(mock_logger, str(tmp_path))
+    task_config_parser.task_configs[task_name] = {"task_dir": Path("/some/task")}
+
+    # Empty registry — so function should not exist
+    task_config_parser.function_registry = {}
+
+    result = task_config_parser.resolve_reference(task_name, value)
+
+    mock_logger.error.assert_any_call(
+        "ValueError: Unknown function 'nonexistent_func'"
+    )
+    assert result is None
+
 def test_update_task_env_invalid_task_name(tmp_path: Path):
     """Test updating the task env of an invalid task"""
     task_name = 'invalid_task'

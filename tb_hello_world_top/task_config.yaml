@@ -1,9 +1,10 @@
 task_name: tb_hello_world_top
 task_type: verilator_tb_compile
 top_module: hello_world_top
-include_headers_from_tasks:
-  - "verification_utils"
-  - "verification_lib"
+include_header_dirs:
+  - "$(get_task_dir(verification_lib))/core"
+  - "$(get_task_dir(verification_lib))/coverage"
+  - "$(get_task_dir(verification_utils))"
   # - "tb_verification_framework"
 rtl_src_files:
   - "{@input:hello_world_top_verilate:*}"
