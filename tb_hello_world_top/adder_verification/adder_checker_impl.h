@@ -42,7 +42,7 @@ void AdderChecker<DUT_TYPE>::update_config(const AdderCheckerConfig& new_config)
 }
 
 template<typename DUT_TYPE>
-void AdderChecker<DUT_TYPE>::expect_transaction(TransactionPtr txn) {
+void AdderChecker<DUT_TYPE>::expect_transaction(AdderTransactionPtr txn) {
     uint64_t current_cycle = ctx_->current_cycle();
     if (!txn) {
         this->log_error("Cannot expect null transaction");
@@ -83,20 +83,13 @@ uint32_t AdderChecker<DUT_TYPE>::check_cycle() {
 }
 
 template<typename DUT_TYPE>
-bool AdderChecker<DUT_TYPE>::perform_check(const AdderTransaction& txn) {
-    // Read result from DUT
-    uint16_t actual_result = read_dut_output();
+bool AdderChecker<DUT_TYPE>::perform_check(AdderTransactionPtr expected_ptr, AdderTransactionPtr actual_ptr) {
 
     // Run all check stages
     bool passed = true;
-    passed &= check_arithmetic(txn, actual_result);
-    passed &= check_overflow_handling(txn, actual_result);
+    passed &= check_arithmetic(expected_ptr, actual_ptr);
+    passed &= check_overflow_handling(expected_ptr, actual_ptr);
 
-    // Possibly add more validation
-    update_statistics(txn, actual_result, passed);
-    if (!passed) {
-        log_mismatch(txn, txn.get_result(), actual_result);
-    }
     return passed;
 }
 
@@ -143,19 +136,17 @@ void AdderChecker<DUT_TYPE>::reset_statistics() {
 }
 
 template<typename DUT_TYPE>
-bool AdderChecker<DUT_TYPE>::check_arithmetic(const AdderTransaction& txn, uint16_t actual_result) {
-    uint16_t expected = txn.get_result();
+bool AdderChecker<DUT_TYPE>::check_arithmetic(AdderTransactionPtr expected_txn, AdderTransactionPtr actual_txn) {
+    uint16_t expected_result = static_cast<uint16_t>(expected_txn->get_a()) + static_cast<uint16_t>(expected_txn->get_b());
+    uint16_t actual_result = actual_txn->get_result();
 
-    if (actual_result != expected) {
-        log_mismatch(txn, expected, actual_result);
+    if (actual_result != expected_result) {
+        this->log_debug("check_arithmetic() failed. expected_result=" + std::to_string(expected_result) + " actual_result=" + 
+                  std::to_string(actual_result));
         return false;
     }
 
-    if (adder_config_.enable_value_logging) {
-        this->log_debug("Arithmetic check passed: " + std::to_string(txn.get_a()) + 
-                       " + " + std::to_string(txn.get_b()) + " = " + std::to_string(actual_result));
-    }
-
+    this->log_debug("check_arithmetic() passed. expected_result=actual_result=" + std::to_string(actual_result));
     return true;
 }
 

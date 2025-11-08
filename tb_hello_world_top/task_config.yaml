@@ -14,14 +14,16 @@ tb_cpp_src_files:
   - adder_verification/adder_driver.cpp
   - adder_verification/adder_simulation_context.cpp
   - adder_verification/adder_monitor.cpp
+  - adder_verification/adder_scoreboard.cpp
   - tb_hello_world_top_2.cpp
 tb_header_src_files: # Although not used in verilator.mk, we need to register them as source files to work out whether to rebuild
   - adder_verification/adder_transaction.h
   - adder_verification/adder_checker.h
   - adder_verification/adder_checker_impl.h
   - adder_verification/adder_driver.h
-  - adder_verification/adder_monitor.h
   - adder_verification/adder_simulation_context.h
+  - adder_verification/adder_monitor.h
+  - adder_verification/adder_scoreboard.h
 external_objects:
   - "{@output:verification_lib:lib_verification_lib.a}"
   - "{@output:verification_utils:command_line_parser.o}"

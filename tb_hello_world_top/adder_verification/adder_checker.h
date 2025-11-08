@@ -92,7 +92,7 @@ class AdderChecker : public BaseChecker<DUT_TYPE, AdderTransaction> {
 public:
     using DutPtr = std::shared_ptr<DUT_TYPE>;
     using Base = BaseChecker<DUT_TYPE, AdderTransaction>;
-    using TransactionPtr = std::shared_ptr<AdderTransaction>;
+    using AdderTransactionPtr = std::shared_ptr<AdderTransaction>;
     using AdderSimulationContextPtr = std::shared_ptr<AdderSimulationContext>;
 
     /**
@@ -112,14 +112,14 @@ public:
 
     // Overridden virtual methods from BaseChecker
     uint32_t check_cycle() override;
-    bool perform_check(const AdderTransaction& txn) override;
+    bool perform_check(AdderTransactionPtr expected_txn, AdderTransactionPtr actual_txn) override;
 
     // Configuration management
     void update_config(const AdderCheckerConfig& new_config);
     const AdderCheckerConfig& get_adder_config() const { return adder_config_; }
 
     // Transaction tracking
-    void expect_transaction(TransactionPtr txn);
+    void expect_transaction(AdderTransactionPtr txn);
     // void expect_transaction(const AdderTransaction& txn, uint64_t cycle);
 
     // Verification control
@@ -139,7 +139,7 @@ public:
 protected:
     void reset() override;
     // Additional virtual methods for extensibility
-    virtual bool check_arithmetic(const AdderTransaction& txn, uint16_t actual_result);
+    virtual bool check_arithmetic(AdderTransactionPtr expected_txn, AdderTransactionPtr actual_txn);
     virtual bool check_overflow_handling(const AdderTransaction& txn, uint16_t actual_result);
     virtual bool check_timing(const PendingTransaction& pending_txn);
     virtual void log_mismatch(const AdderTransaction& txn, uint16_t expected, uint16_t actual);

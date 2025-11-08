@@ -143,6 +143,7 @@ public:
      * @return Number of checks performed
      */
     virtual std::uint32_t check_cycle() {
+        /*
         std::uint64_t current_cycle = ctx_->current_cycle();
         std::uint32_t checks_performed = 0;
         stats_.last_activity = std::chrono::steady_clock::now();
@@ -175,6 +176,8 @@ public:
         stats_.cycles_active++;
 
         return checks_performed;
+        */
+        return 0U;
     }
 
     /**
@@ -187,6 +190,16 @@ public:
         stats_ = CheckerStats{};
         log_info("Checker '" + name_ + "' reset");
     }
+
+    /**
+     * @brief Pure virtual function to perform the actual checking
+     * Must be implemented by derived classes
+     * 
+     * @param expected_txn A pointer to the expected transaction object
+     * @param actual_txn A pointer to the actual transaction object
+     * @return true if check passed, false otherwise
+     */
+    virtual bool perform_check(TransactionPtr expected_txn, TransactionPtr actual_txn) = 0;
 
     /**
      * @brief Add a custom check function
@@ -265,15 +278,6 @@ protected:
      * @brief Get the DUT pointer (for derived classes)
      */
     DutPtr get_dut() const { return dut_; }
-
-    /**
-     * @brief Pure virtual function to perform the actual checking
-     * Must be implemented by derived classes
-     * 
-     * @param transaction The transaction to check
-     * @return true if check passed, false otherwise
-     */
-    virtual bool perform_check(const TRANSACTION_TYPE& transaction) = 0;
 
     /**
      * @brief Handle timeout situations

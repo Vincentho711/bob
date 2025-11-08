@@ -4,6 +4,7 @@
 #include "scoreboard.h"
 #include "adder_transaction.h"
 #include "adder_simulation_context.h"
+#include "adder_checker.h"
 #include "covergroup.h"
 #include "Vhello_world_top.h"
 #include <memory>
@@ -26,6 +27,11 @@ struct AdderScoreboardConfig : public ScoreboardConfig {
     }
 };
 
+/**
+ * @class AdderScoreboardStats
+ * @brief An object to store coverage data in the scoreboard
+ *
+ */
 struct AdderScoreboardStats : public ScoreboardStats {
     Covergroup cg;
 
@@ -49,13 +55,30 @@ struct AdderScoreboardStats : public ScoreboardStats {
     }
 };
 
+/**
+ * @class AdderScoreboard
+ * @brief Specialised scoreboard for adder DUT
+ *
+ */
 class AdderScoreboard : public BaseScoreboard<Vhello_world_top, AdderTransaction> {
 public:
     using Base = BaseScoreboard<Vhello_world_top, AdderTransaction>;
     using DutPtr = Base::DutPtr;
     using AdderSimulationContextPtr = std::shared_ptr<AdderSimulationContext>;
+    using AdderCheckerPtr = std::shared_ptr<AdderChecker<Vhello_world_top>>;
+    using AdderTransactionPtr = std::shared_ptr<AdderTransaction>;
 
     explicit AdderScoreboard(const std::string& name, DutPtr dut,
                              AdderScoreboardConfig config, AdderSimulationContextPtr ctx, AdderCheckerPtr checker);
+
+    void add_expected_transaction(AdderTransactionPtr transaction_ptr, uint64_t expected_cycle) override;
+    std::uint32_t check_current_cycle(AdderTransactionPtr actual_ptr) override;
+    void reset() override;
+
+private:
+    AdderSimulationContextPtr ctx_;
+    AdderScoreboardConfig adder_config_;
+    AdderScoreboardStats adder_stats_;
+
 };
 #endif
