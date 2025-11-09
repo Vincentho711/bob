@@ -19,3 +19,5 @@ src_files:
   - "coverage/coverpoint.h"
   - "coverage/covergroup.cpp"
   - "coverage/covergroup.h"
+  - "coverage/cross_coverpoint.h"
+  - "coverage/cross_coverpoint.cpp"

@@ -26,7 +26,7 @@ public:
     /**
      * @brief Configuration for the AdderDriver
      */
-    struct Config {
+    struct AdderDriverConfig {
         bool enable_input_validation = true;
         bool enable_pipeline_tracking = true;
         uint32_t pipeline_depth = 2;
@@ -50,7 +50,7 @@ public:
      * @param ctx Adder-specific simulation context for tracking global state
      * @param config Driver configuration
      */
-    explicit AdderDriver(const std::string& name, DutPtr dut, AdderSimulationContextPtr ctx, const Config& config);
+    explicit AdderDriver(const std::string& name, DutPtr dut, AdderSimulationContextPtr ctx, const AdderDriverConfig& config);
 
     /**
      * @brief Generate and add a set of corner case transactions
@@ -100,17 +100,19 @@ public:
     /**
      * @brief Get configuration
      */
-    const Config& get_config() const { return config_; }
+    const AdderDriverConfig& get_config() const { return config_; }
 
     /**
      * @brief Update configuration (some settings may require reset)
      */
-    void update_config(const Config& new_config);
+    void update_config(const AdderDriverConfig& new_config);
 
     /**
      * @brief Reset driver and DUT inputs to known state
      */
     void reset() override;
+
+
 
 protected:
     /**
@@ -130,7 +132,7 @@ protected:
 
 private:
     AdderSimulationContextPtr ctx_;
-    Config config_;
+    AdderDriverConfig config_;
     CurrentInputs current_inputs_;
 
     // Statistics and tracking

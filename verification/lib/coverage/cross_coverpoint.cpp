@@ -1,6 +1,6 @@
 #include "cross_coverpoint.h"
 
-void CrossCoverpoint::sample(const std::vector<int>& values) {
+void CrossCoverpoint::sample(const std::vector<uint32_t>& values) {
     ++total_samples_;
     std::string key = make_key(values);
     ++bin_hits_[key];
@@ -13,7 +13,7 @@ double CrossCoverpoint::coverage() const {
     return 100.0; // Full coverage can't be computed without defined domain
 }
 
-std::string CrossCoverpoint::make_key(const std::vector<int>& values) {
+std::string CrossCoverpoint::make_key(const std::vector<uint32_t>& values) {
     std::ostringstream oss;
     for (size_t i = 0; i < values.size(); ++i) {
         if (i > 0) oss << ",";

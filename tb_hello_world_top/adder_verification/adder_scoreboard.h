@@ -65,7 +65,7 @@ public:
     using Base = BaseScoreboard<Vhello_world_top, AdderTransaction>;
     using DutPtr = Base::DutPtr;
     using AdderSimulationContextPtr = std::shared_ptr<AdderSimulationContext>;
-    using AdderCheckerPtr = std::shared_ptr<AdderChecker<Vhello_world_top>>;
+    using AdderCheckerPtr = std::shared_ptr<AdderChecker>;
     using AdderTransactionPtr = std::shared_ptr<AdderTransaction>;
 
     explicit AdderScoreboard(const std::string& name, DutPtr dut,

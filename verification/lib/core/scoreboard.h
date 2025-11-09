@@ -4,6 +4,7 @@
 #include "simulation_context.h"
 #include "transaction.h"
 #include "checker.h"
+#include <iomanip>
 #include <iostream>
 #include <stdexcept>
 
@@ -176,6 +177,25 @@ public:
         log_info("Scoreboard '" + name_ + "' reset");
     }
 
+    /**
+     * @brief Obtain the overall pass rate
+     *
+     * @return Pass rate in %
+     */
+    double get_pass_rate() const {
+        return calculate_pass_rate();
+    }
+
+    /**
+     * @brief Display the result using data from ScoreboardStats
+     *
+     * @param os output stream
+     */
+    void display_results(std::ostream& os) const {
+        print_scoreboard_stats(os);
+        diplay_pass_rate(os);
+    }
+
 protected:
     /**
      * @brief Get the DUT pointer (for derived classes)
@@ -249,6 +269,29 @@ private:
             std::cout << "[" << level << "] [" << name_ << "] [Cycle " 
                       << current_cycle << "] " << message << std::endl;
         }
+    }
+
+    void print_scoreboard_stats(std::ostream &os) const {
+        os << "Scoreboard Stats:" << std::endl;
+        os << " Total Expected: " << stats_.total_expected << std::endl;
+        os << "  Total Actual:   " << stats_.total_actual << std::endl;
+        os << "  Matched:        " << stats_.matched << std::endl;
+        os << "  Mismatch:       " << stats_.mismatch << std::endl;
+        os << "  Timed Out:      " << stats_.timed_out << std::endl;
+        os << "  Check Passed:   " << stats_.check_passed << std::endl;
+        os << "  Check Failed:   " << stats_.check_failed << std::endl;
+    }
+    void diplay_pass_rate(std::ostream &os) const {
+        double pass_rate  = calculate_pass_rate();
+        os << "Pass Rate: " << std::fixed << std::setprecision(2) << pass_rate << "%" << std::endl;
+    }
+
+    double calculate_pass_rate() const {
+        uint64_t total_checks = stats_.check_passed + stats_.check_failed + stats_.mismatch + stats_.timed_out;
+        if (total_checks == 0.0) {
+            return 0.0;
+        }
+        return (static_cast<double>(stats_.check_passed) / total_checks) * 100.0;
     }
 
 };
