@@ -55,6 +55,9 @@ struct AdderScoreboardStats : public ScoreboardStats {
     }
 };
 
+// Define the shared pointer alias
+using AdderScoreboardStatsPtr = std::shared_ptr<AdderScoreboardStats>;
+
 /**
  * @class AdderScoreboard
  * @brief Specialised scoreboard for adder DUT
@@ -74,6 +77,8 @@ public:
     void add_expected_transaction(AdderTransactionPtr transaction_ptr, uint64_t expected_cycle) override;
     std::uint32_t check_current_cycle(AdderTransactionPtr actual_ptr) override;
     void reset() override;
+
+    AdderScoreboardStatsPtr get_stats_ptr();
 
 private:
     AdderSimulationContextPtr ctx_;

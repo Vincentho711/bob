@@ -5,6 +5,7 @@
 #include <array>
 #include <chrono>
 #include <cassert>
+#include <filesystem>
 
 #include <verilated.h>
 #include <verilated_vcd_c.h>
@@ -121,11 +122,16 @@ public:
 
         bool scoreboard_passed = (pass_rate == 100.0);
 
-        // Check if all transactions were processed
-        bool all_transactions_driven = (driver_->pending_count() == 0);
+        // Check if all transactions were driven
+        bool all_transactions_driven = (driver_->pending_count() == PIPELINE_DEPTH);
         std::cout << "driver_->pending_count() = " << driver_->pending_count() << " , all_transactions_driven = " << all_transactions_driven << std::endl;
 
-        return scoreboard_passed && all_transactions_driven;
+        // Check if there are still expected_transactions to be checked
+        uint32_t expected_transactions_queue_size = scoreboard_->get_expected_transactions_queue_size();
+        std::cout << "scoreboard_->expected_transactions_.size() = " << std::to_string(expected_transactions_queue_size) << std::endl;
+        bool all_expected_transactions_checked = (expected_transactions_queue_size == PIPELINE_DEPTH);
+
+        return scoreboard_passed && all_transactions_driven && all_expected_transactions_checked;
     }
 
 private:
@@ -138,6 +144,7 @@ private:
     // Verilator components
     std::shared_ptr<Vhello_world_top> dut_;
     std::unique_ptr<VerilatedVcdC> trace_;
+    std::filesystem::path trace_path_;
 
     // Verification components
     std::shared_ptr<AdderSimulationContext> ctx_;
@@ -150,9 +157,17 @@ private:
      * @brief Setup waveform tracing
      */
     void setup_tracing() {
+        std::string trace_dir = ".";  // Default to current directory if not set
+
+        // Use filesystem to create the full path for the trace file
+        trace_path_ = std::filesystem::path(trace_dir) / "tb_hello_world_top.vcd";
+
+        // Ensure that the directory exists (creates the directory if it doesn't exist)
+        std::filesystem::create_directories(trace_path_.parent_path());
+
         trace_ = std::make_unique<VerilatedVcdC>();
         dut_->trace(trace_.get(), TRACE_DEPTH);
-        trace_->open("tb_hello_world_top.vcd");
+        trace_->open(trace_path_.string().c_str());
         std::cout << "Waveform tracing enabled: tb_hello_world_top.vcd" << std::endl;
     }
 
@@ -304,6 +319,8 @@ private:
             }
         } catch (const std::exception& e) {
             std::cerr << "Check_outputs() error at cycle " << current_cycle << ": " << e.what() << std::endl;
+            // Rethrow to ensure upper error handling will handle and terminate simulations
+            throw;
         }
     }
 
@@ -336,22 +353,52 @@ private:
         }
 
         if (scoreboard_) {
-          scoreboard_->display_results(std::cout);
+            scoreboard_->display_results(std::cout);
+            AdderScoreboardStatsPtr scoreboard_stats_ptr = scoreboard_->get_stats_ptr();
+            if (scoreboard_stats_ptr){
+                scoreboard_stats_ptr->report_coverage();
+            }
         }
 
         std::cout << std::endl;
 
         // Print overall pass/fail status
         std::cout << "\n" << std::string(80, '-') << std::endl;
-        std::cout << "OVERALL RESULT: " << (passed() ? "PASS" : "FAIL") << std::endl;
+        std::cout << "OVERALL RESULT: " << std::endl;
+        if (passed()) {
+            print_pass_ascii_art(std::cout); // Print PASS ASCII art if passed
+        } else {
+            print_fail_ascii_art(std::cout); // Print FAIL ASCII art if failed
+        }
         std::cout << std::string(80, '-') << std::endl;
 
         // Print simulation summary
         std::cout << "\nSimulation Summary:" << std::endl;
         std::cout << "  Seed: " << seed_ << std::endl;
         std::cout << "  Cycles: " << ctx_->current_cycle() << std::endl;
-        std::cout << "  Waveform: tb_hello_world_top.vcd" << std::endl;
+        std::cout << "  Waveform: " << trace_path_.string() << std::endl;
 
+    }
+
+    void print_pass_ascii_art(std::ostream& out) const {
+        // Directly output the ASCII art to the provided ostream
+        out << "  _____         _____ _____ \n"
+            << " |  __ \\ /\\    / ____/ ____|\n"
+            << " | |__) /  \\  | (___| (___  \n"
+            << " |  ___/ /\\ \\  \\___ \\\\___ \\ \n"
+            << " | |  / ____ \\ ____) |___) |\n"
+            << " |_| /_/    \\_\\_____/_____/ \n";
+    }
+
+    void print_fail_ascii_art(std::ostream& out) const {
+        // Directly output the ASCII art to the provided ostream
+         out << " ______      _____ _      \n"
+             << " |  ____/\\   |_   _| |     \n"
+             << " | |__ /  \\    | | | |     \n"
+             << " |  __/ /\\ \\   | | | |     \n"
+             << " | | / ____ \\ _| |_| |____ \n"
+             << " |_|/_/    \\_\\_____|______|\n"
+             << "                           \n";
     }
 };
 

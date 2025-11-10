@@ -57,6 +57,7 @@ public:
   using TransactionPtr = std::shared_ptr<TRANSACTION_TYPE>;
   using SimulationContextPtr = std::shared_ptr<SimulationContext>;
   using CheckerPtr = std::shared_ptr<BaseChecker<DUT_TYPE, TRANSACTION_TYPE>>;
+  using ScoreboardStatsPtr = std::shared_ptr<ScoreboardStats>;
 
   /**
     * @brief Structure to hold pending transactions with metadata
@@ -178,6 +179,15 @@ public:
     }
 
     /**
+     * @brief Get a shared pointer to the ScoreboardStats object
+     *
+     * @return A shared pointer to the ScoreboardStats object
+     */
+    ScoreboardStatsPtr get_stats_ptr() {
+        return std::make_shared<ScoreboardStats>(stats_);
+    }
+
+    /**
      * @brief Obtain the overall pass rate
      *
      * @return Pass rate in %
@@ -194,6 +204,15 @@ public:
     void display_results(std::ostream& os) const {
         print_scoreboard_stats(os);
         diplay_pass_rate(os);
+    }
+
+    /**
+     * @brief Get the number of expected transactions in the queue
+     *
+     * @return The number of expected transactions in the queue
+     */
+    uint32_t get_expected_transactions_queue_size() const {
+        return expected_transactions_.size();
     }
 
 protected:
