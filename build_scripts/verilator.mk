@@ -5,7 +5,8 @@ all : $(TASK_OUTDIR)/${OUTPUT_EXECUTABLE}
 # Variables passed in via environment
 VERILATOR ?= verilator
 CXX ?= g++
-CXXFLAGS ?= -O2 -Wall -Werror -Wno-unused
+CXXFLAGS ?= -O2 -Wall -Werror -Wno-unused -fsanitize=address,undefined
+LINKERFLAGS ?= -fsanitize=address,undefined
 # Verilator trace to allow waveform to be dumped, can be --trace or --trace-fst
 VERILATOR_TRACE_ARGS ?= --trace
 # Extra args, like assigning random values to 'x' values to catch uninitialised behaviour
@@ -37,7 +38,7 @@ $(TASK_OUTDIR)/V$(TOP_MODULE): $(RTL_SRC_FILES) $(TB_CPP_SRC_FILES) $(TB_HEADER_
 		--Mdir $(TASK_OUTDIR) \
 		$(VERILATOR_TRACE_ARGS) \
 		-CFLAGS "$(CXXFLAGS) $(INCLUDE_FLAGS)" \
-		-LDFLAGS "$(EXTERNAL_OBJECTS)"
+		-LDFLAGS "$(EXTERNAL_OBJECTS) $(LINKERFLAGS)"
 
 # Optional renaming of executable
 $(TASK_OUTDIR)/$(OUTPUT_EXECUTABLE): $(TASK_OUTDIR)/V$(TOP_MODULE)
