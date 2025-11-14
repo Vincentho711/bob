@@ -805,25 +805,25 @@ class TaskConfigParser:
             resolved_tb_cpp_src_files_list = [file for files in resolved_tb_cpp_src_files.values() for file in files]
             self.update_task_env(task_name, "TB_CPP_SRC_FILES", resolved_tb_cpp_src_files_list)
 
-            # Fetch Mandatory key 'tb_header_src_files'
+            # Fetch optional key 'tb_header_src_files'
             unresolved_tb_header_src_files = task_config_dict.get("tb_header_src_files", None)
 
             if unresolved_tb_header_src_files is None:
-                raise KeyError(f"{task_config_file_path} which is a 'verilator_tb_compile' build does not contain a mandatory field 'unresolved_tb_header_src_files'. ")
+                self.logger.debug(f"{task_config_file_path} which is a 'verilator_tb_compile' build does not contain an optional field 'unresolved_tb_header_src_files'. ")
             elif not isinstance(unresolved_tb_header_src_files, (str, list)):
                 raise TypeError(f"{task_config_file_path} mandatory field 'tb_header_src_files' should be either a str or a list. Current type = {type(unresolved_tb_header_src_files)}.")
+            else:
+                unresolved_tb_header_src_files = [unresolved_tb_header_src_files] if isinstance(unresolved_tb_header_src_files, str) else unresolved_tb_header_src_files
 
-            unresolved_tb_header_src_files = [unresolved_tb_header_src_files] if isinstance(unresolved_tb_header_src_files, str) else unresolved_tb_header_src_files
+                # Resolve every tb header src file reference
+                resolved_tb_header_src_files = self.resolve_src_files(task_name, unresolved_tb_header_src_files)
+                internal_src_files.extend(resolved_tb_header_src_files["internal_src_files"])
+                external_src_files.extend(resolved_tb_header_src_files["external_src_files"])
+                output_src_files.extend(resolved_tb_header_src_files["output_src_files"])
 
-            # Resolve every tb header src file reference
-            resolved_tb_header_src_files = self.resolve_src_files(task_name, unresolved_tb_header_src_files)
-            internal_src_files.extend(resolved_tb_header_src_files["internal_src_files"])
-            external_src_files.extend(resolved_tb_header_src_files["external_src_files"])
-            output_src_files.extend(resolved_tb_header_src_files["output_src_files"])
-
-            # Update the task env var such that all the cpp src files can be referred to in Make script
-            resolved_tb_header_src_files = [file for files in resolved_tb_header_src_files.values() for file in files]
-            self.update_task_env(task_name, "TB_HEADER_SRC_FILES", resolved_tb_header_src_files)
+                # Update the task env var such that all the cpp src files can be referred to in Make script
+                resolved_tb_header_src_files = [file for files in resolved_tb_header_src_files.values() for file in files]
+                self.update_task_env(task_name, "TB_HEADER_SRC_FILES", resolved_tb_header_src_files)
 
             # Fetch the 'top_module' from task_config.yaml and set it to task env var 'TOP_MODULE'
             top_module = task_config_dict.get("top_module", None)

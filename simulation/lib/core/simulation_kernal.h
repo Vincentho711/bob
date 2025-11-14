@@ -5,13 +5,14 @@
 #include "simulation_clock.h"
 
 namespace simulation {
+
+    template <typename DutType, typename TraceType>
     class SimulationKernal {
     public:
         uint64_t time = 0U;
-        std::vector<std::unqiue_ptr<simulation::Clock>> clocks;
-        std::function<void()> eval_dut;
+        std::vector<std::shared_ptr<simulation::Clock<DutType, TraceType>>> clocks;
 
-        void register_clock(std::unique_ptr<simulation::Clock> clk) {
+        void register_clock(std::shared_ptr<simulation::Clock<DutType, TraceType>> clk) {
             clocks.push_back(clk);
         }
 
@@ -28,3 +29,5 @@ namespace simulation {
     };
 
 }
+
+#endif // SIMULATION_KERNAL_H

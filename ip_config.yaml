@@ -36,11 +36,18 @@ tasks:
   verification_utils:
     depends_on: []
 
+  simulation_lib:
+    depends_on: []
+
   tb_hello_world_top:
     depends_on:
       - verification_lib
       - verification_utils
       - tb_verification_framework
+
+  tb_coroutine_sim_test:
+    depends_on:
+      - simulation_lib
 
   # hello_world:
   #   # script: build_scripts/fpga_build.tcl

@@ -5,7 +5,7 @@ all : $(TASK_OUTDIR)/${OUTPUT_EXECUTABLE}
 # Variables passed in via environment
 VERILATOR ?= verilator
 CXX ?= g++
-CXXFLAGS ?= -O2 -Wall -Werror -Wno-unused -fsanitize=address,undefined
+CXXFLAGS ?= -O2 -Wall -Werror -Wno-unused -fsanitize=address,undefined -std=c++20
 LINKERFLAGS ?= -fsanitize=address,undefined
 # Verilator trace to allow waveform to be dumped, can be --trace or --trace-fst
 VERILATOR_TRACE_ARGS ?= --trace

@@ -3,6 +3,8 @@
 #include <cassert>
 #include <coroutine>
 #include <vector>
+#include <cstdint>
+#include <array>
 
 namespace simulation {
     enum class Phase : uint8_t {
@@ -10,65 +12,35 @@ namespace simulation {
         Drive = 1U,
         Monitor = 2U,
         PostMonitor = 3U,
-        Count
     };
 
-    constexpr std::size_t PHASE_COUNT = static_cast<std::size_t>(Phase::Count);
+    constexpr std::size_t PHASE_COUNT = 4;
 
     class PhaseEvent {
     public:
+        using handle_t = std::coroutine_handle<>;
         struct Awaiter {
             PhaseEvent &event;
             Phase phase;
 
             constexpr bool await_ready() const noexcept { return false; }
-            void await_suspend(std::coroutine_handle<> h) noexcept {
-                auto idx = static_cast<std::size_t>(phase);
-                assert(idx < PHASE_COUNT);
-                event.waiters_[idx].push_back(h);
-            }
+            void await_suspend(std::coroutine_handle<> h) noexcept;
             constexpr void await_resume() const noexcept {}
 
         };
 
-        /**
-         * @brief Return an Awaiter object for a given phase
-         *
-         * @param phase An enum phase
-         * @return An Awaiter object of the phase
-         */
-        Awaiter operator()(Phase phase) noexcept {
-            return Awaiter{*this, phase};
-        }
+        Awaiter operator()(Phase phase) noexcept;
 
-        void trigger() noexcept {
-            // Execute coroutines in strict phase order
-            for (std::size_t i = 0 ; i < PHASE_COUNT ; ++i) {
-                auto &phase_vector = waiters_[i];
-                for (auto h : phase_vector) {
-                    assert(h);
-                    h.resume();
-                }
-                phase_vector.clear();
-            }
-        }
+        void trigger() noexcept;
 
-        void clear() noexcept {
-            for (auto &v : waiters_) {
-                v.clear();
-            }
-        }
+        void clear() noexcept;
 
-        bool empty() const noexcept {
-            for (auto &v : waiters_) {
-                if (!v.empty()) return false;
-            }
-            return true;
-        }
+        bool empty() const noexcept;
+
     private:
-        std::array<std::vector<std::coroutine_handle<>>, PHASE_COUNT> waiters_{};
+        std::array<std::vector<handle_t>, static_cast<size_t>(PHASE_COUNT)> waiters_;
     };
 
-};
+}; // namespace simulation
 #endif // SIMULATION_PHASE_EVENT_H
 
