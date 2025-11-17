@@ -14,6 +14,15 @@ VERILATOR_EXTRA_ARGS ?= --x-assign unique --x-initial unique
 EXTERNAL_OBJECTS ?=
 INCLUDE_DIRS ?=
 
+# PROFILE_BUILD variable to enabling profiling with gprof
+PROFILE_BUILD ?= 1
+
+# Conditionally append profiling options
+ifeq ($(PROFILE_BUILD), 1)
+    VERILATOR_EXTRA_ARGS += --prof-cfuncs
+    LINKERFLAGS += -pg
+endif
+
 $(info $$RTL_SRC_FILES is [${RTL_SRC_FILES}])
 $(info $$TB_CPP_SRC_FILES is [${TB_CPP_SRC_FILES}])
 $(info $$TB_HEADER_SRC_FILES is [${TB_HEADER_SRC_FILES}])

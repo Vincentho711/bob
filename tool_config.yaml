@@ -4,7 +4,7 @@ gcc:
 
 g++:
   path: /usr/bin/g++
-  default_flags : ["-Wall", "-Wextra", "-std=c++20", "-fsanitize=address"]
+  default_flags : ["-Wall", "-Wextra", "-std=c++20", "-fsanitize=address", "-pg"]
 
 verilator:
   path: /usr/bin/verilator

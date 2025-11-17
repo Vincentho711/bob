@@ -10,9 +10,12 @@ namespace simulation {
     class SimulationKernal {
     public:
         uint64_t time = 0U;
-        std::vector<std::shared_ptr<simulation::Clock<DutType, TraceType>>> clocks;
+        std::vector<std::shared_ptr<simulation::Clock<DutType>>> clocks;
 
-        void register_clock(std::shared_ptr<simulation::Clock<DutType, TraceType>> clk) {
+        SimulationKernal(std::shared_ptr<DutType> dut, std::shared_ptr<TraceType> trace) :
+            dut_(dut), trace_(trace) {};
+
+        void register_clock(std::shared_ptr<simulation::Clock<DutType>> clk) {
             clocks.push_back(clk);
         }
 
@@ -21,11 +24,17 @@ namespace simulation {
                 for (auto &clk : clocks) {
                     clk->tick(time);
                 }
+                // Dump waveform
+                if (trace_) {
+                    trace_->dump(time);
+                }
                 // Advance time only after all triggered coroutines yield
                 time++;
             }
         }
-
+    private:
+        std::shared_ptr<DutType> dut_;
+        std::shared_ptr<TraceType> trace_;
     };
 
 }
