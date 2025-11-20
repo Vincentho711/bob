@@ -19,6 +19,12 @@ namespace simulation {
     class PhaseEvent {
     public:
         using handle_t = std::coroutine_handle<>;
+        PhaseEvent() {
+            // Reserve space for awaiters within each phases upfront
+            for (auto &phase_vector : waiters_) {
+                phase_vector.reserve(8);
+            }
+        }
         struct Awaiter {
             PhaseEvent &event;
             Phase phase;

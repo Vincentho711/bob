@@ -21,11 +21,12 @@ namespace simulation {
 
         void run(uint64_t max_time) {
             while (time < max_time) {
+                bool clk_ticked = false;
                 for (auto &clk : clocks) {
-                    clk->tick(time);
+                    clk_ticked |= clk->tick(time);
                 }
                 // Dump waveform
-                if (trace_) {
+                if (clk_ticked && trace_) {
                     trace_->dump(time);
                 }
                 // Advance time only after all triggered coroutines yield

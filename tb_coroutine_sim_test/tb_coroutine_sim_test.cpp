@@ -59,7 +59,7 @@ public:
         // Set up waveform tracing
         trace_= std::make_shared<VerilatedVcdC>();
         dut_->trace(trace_.get(), TRACE_DEPTH);
-        trace_->open("tb_coroutine_sim_test_ref.vcd");
+        trace_->open("tb_coroutine_sim_test.vcd");
 
         // Initialise clocking components
         std::function<void(bool)> wr_clk_drive_fn = [this](bool level) {

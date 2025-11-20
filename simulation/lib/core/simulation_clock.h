@@ -33,7 +33,7 @@ namespace simulation {
         Clock(const std::string &n, const uint64_t ps, std::shared_ptr<DutType> dut, std::function<void(bool)> clk_drive_fn)
             : name(n), period_ps(ps), dut(dut), drive_clk_signal_fn(clk_drive_fn) {}
 
-        void tick(uint64_t time) {
+        bool tick(uint64_t time) {
             if (time >= next_event_time) {
                 // Give Verilator to settle any combinational logic that might have changed since the last clock
                 dut->eval();
@@ -71,7 +71,9 @@ namespace simulation {
                 dut->eval();
                 step = static_cast<ClockStep>((static_cast<unsigned>(step) + 1U) % static_cast<unsigned>(CLOCK_STEP_COUNT));
                 next_event_time = time + period_ps / CLOCK_STEP_COUNT;
+                return true;
             }
+            return false;
         }
     };
 }
