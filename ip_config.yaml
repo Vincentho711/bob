@@ -30,6 +30,9 @@ tasks:
   hello_world_top_verilate:
     depends_on: []
 
+  dual_port_ram_verilate:
+    depends_on: []
+
   verification_lib:
     depends_on: []
 

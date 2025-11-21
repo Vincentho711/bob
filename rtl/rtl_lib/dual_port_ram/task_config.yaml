@@ -1,0 +1,5 @@
+task_name: dual_port_ram_verilate
+task_type: verilator_verilate
+src_files:
+  - "dual_port_ram.sv"
+top_module: dual_port_ram
