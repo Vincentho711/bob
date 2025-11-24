@@ -15,6 +15,8 @@ src_files:
   - "core/simulation_context.cpp"
   - "core/scoreboard.h"
   - "core/scoreboard.cpp"
+  - "core/sequencer.h"
+  - "core/sequencer.cpp"
   - "coverage/coverpoint.cpp"
   - "coverage/coverpoint.h"
   - "coverage/covergroup.cpp"

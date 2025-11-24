@@ -52,6 +52,11 @@ tasks:
     depends_on:
       - simulation_lib
 
+  tb_dual_port_ram:
+    depends_on:
+      - simulation_lib
+      - dual_port_ram_verilate
+
   # hello_world:
   #   # script: build_scripts/fpga_build.tcl
   #   # output_dir: ${directories.build_dir}/fpga

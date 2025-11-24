@@ -1,0 +1,20 @@
+task_name: tb_dual_port_ram
+task_type: verilator_tb_compile
+top_module: dual_port_ram
+include_header_dirs:
+  - "$(get_task_dir(simulation_lib))/core"
+  - "$(get_task_dir(verification_lib))/core"
+rtl_src_files:
+  - "{@input:dual_port_ram_verilate:*}"
+tb_cpp_src_files:
+  # - "dual_port_ram_verification/dual_port_ram_sequencer.cpp"
+  # - "dual_port_ram_verification/dual_port_ram_write_transaction.cpp"
+  # - "dual_port_ram_verification/write_transaction_done_event.cpp"
+  - "tb_dual_port_ram.cpp"
+# tb_header_src_iles:
+#   - "dual_port_ram_verification/dual_port_ram_sequencer.h"
+#   - "dual_port_ram_verification/dual_port_ram_write_transaction.h"
+#   - "dual_port_ram_verification/write_transaction_done_event.h"
+external_objects:
+  - "{@output:simulation_lib:lib_simulation_lib.a}"
+output_executable: tb_dual_port_ram.out
