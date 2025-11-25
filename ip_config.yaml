@@ -34,7 +34,8 @@ tasks:
     depends_on: []
 
   verification_lib:
-    depends_on: []
+    depends_on:
+      - simulation_lib
 
   verification_utils:
     depends_on: []

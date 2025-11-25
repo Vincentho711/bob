@@ -17,9 +17,13 @@ src_files:
   - "core/scoreboard.cpp"
   - "core/sequencer.h"
   - "core/sequencer.cpp"
+  - "core/sequence.h"
+  - "core/sequence.cpp"
   - "coverage/coverpoint.cpp"
   - "coverage/coverpoint.h"
   - "coverage/covergroup.cpp"
   - "coverage/covergroup.h"
   - "coverage/cross_coverpoint.h"
   - "coverage/cross_coverpoint.cpp"
+include_header_dirs:
+  - "$(get_task_dir(simulation_lib))/core"
