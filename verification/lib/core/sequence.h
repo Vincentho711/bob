@@ -9,23 +9,22 @@ public:
     using TxnType = BaseTransaction<PayloadT>;
     using TxnPtr = std::shared_ptr<TxnType>;
     using SequencerType = ConcreteSequencerT;
-    using SeqPtr = std::shared_ptr<SequencerType>;
 
-    SeqPtr seq_ptr = nullptr;
+    std::shared_ptr<ConcreteSequencerT> p_sequencer = nullptr;
 
     virtual ~BaseSequence() = default;
     virtual simulation::Task body() = 0;
 
     [[nodiscard]]
     TxnPtr create_transaction() {
-        return seq_ptr->pool.acquire();
+        return p_sequencer->pool.acquire();
     }
 
     simulation::Task wait_for_txn_done(TxnPtr txn) {
         co_await txn->done_event;
     }
 
-    simulation::wait_all(std::vector<TxnPtr> txns) {
+    simulation::Task wait_all(std::vector<TxnPtr> txns) {
         for (auto &t : txns) {
             co_await wait_for_txn_done(t);
         }

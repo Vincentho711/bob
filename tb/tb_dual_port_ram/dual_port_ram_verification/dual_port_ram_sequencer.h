@@ -2,9 +2,10 @@
 #define DUAL_PORT_RAM_SEQUENCER_H
 #include "sequencer.h"
 
-class DualPortRamSequencer : public BaseSequencer<Vdual_port_ram> {
+class DualPortRamSequencer : public BaseSequencer<DualPortRamPayload> {
 public:
-    using DutPtr = std::shared_ptr<Vdual_port_ram>;
-}
+    std::deque<TxnPtr> write_queue;
+    std::deque<TxnPtr> read_queue;
+};
 
 #endif // DUAL_PORT_RAM_SEQUENCER_H

@@ -1,5 +1,5 @@
-#ifndef MONITOR_H
-#define MONITOR_H
+#ifndef MONITOR_2_H
+#define MONITOR_2_H
 
 #include <iostream>
 #include <chrono>
