@@ -7,10 +7,10 @@
 #include <iostream>
 #include <memory>
 
-template <typename PayloadT>
-class BaseSequencer : public std::enable_shared_from_this<BaseSequencer<PayloadT>>{
+template <typename TransactionT>
+class BaseSequencer : public std::enable_shared_from_this<BaseSequencer<TransactionT>>{
 public:
-    using TxnType = BaseTransaction<PayloadT>;
+    using TxnType = TransactionT;
     using TxnPtr = std::shared_ptr<TxnType>;
 
     simulation::SharedObjectPool<TxnType> pool;
@@ -18,7 +18,7 @@ public:
     virtual ~BaseSequencer() = default;
 
     template<typename SeqType>
-    simulation::Task start_sequence(std::shared_ptr<SeqType> seq) {
+    simulation::Task start_sequence(std::unique_ptr<SeqType> seq) {
         // Get a shared_ptr to the current BaseSequencer
         // Warning: This throws std::bad_weak_ptr if 'this' wasn't created via make_shared
         auto base_sequencer_ptr = this->shared_from_this();
@@ -154,4 +154,4 @@ public:
 //                   << message << std::endl;
 //     }
 // };
-// #endif // SEQUENCER_H
+#endif // SEQUENCER_H

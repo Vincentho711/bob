@@ -49,7 +49,7 @@ public:
         // Set up waveform tracing
         trace_= std::make_shared<VerilatedVcdC>();
         dut_->trace(trace_.get(), TRACE_DEPTH);
-        trace_->open("tb_dual_port_ram.vcd");
+        trace_->open("tb_dual_port_ram_2.vcd");
 
         // Initialise clocking components
         std::function<void(bool)> wr_clk_drive_fn = [this](bool level) {
@@ -64,18 +64,10 @@ public:
         sim_kernal_->register_clock(wr_clk_);
 
         // Set up verification components
-        sequencer_ = std::make_shared<DualPortRamSequencer>();
-        top_sequence_ = std::make_unique<DualPortRamTopSequence>();
-        driver_ = std::make_shared<DualPortRamDriver>(sequencer_, dut_, wr_clk_);
         checker_ = std::make_shared<BaseChecker>(wr_clk_);
 
         // Set up task components
-        coro_tasks.emplace_back(
-            checker_->print_at_wr_clk_edges(),
-            sequencer_->start_sequence(top_sequence_),
-            driver_ ->wr_driver_run(),
-            driver_->rd_driver_run()
-        );
+        coro_tasks.push_back(checker_->print_at_wr_clk_edges());
 
     }
 
@@ -107,11 +99,6 @@ private:
 
     // Verification components
     std::shared_ptr<BaseChecker> checker_;
-    std::shared_ptr<DualPortRamSequencer> sequencer_;
-    std::shared_ptr<DualPortRamDriver> driver_;
-
-    // Sequence components
-    std::unique_ptr<DualPortRamTopSequence> top_seq_;
 
     // Task componenets
     std::vector<simulation::Task> coro_tasks;

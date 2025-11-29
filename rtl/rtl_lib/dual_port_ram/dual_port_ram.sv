@@ -1,6 +1,6 @@
 module dual_port_ram
-  #(parameter int DATA_WIDTH = 32,
-    parameter int ADDR_WIDTH = 3
+  #(parameter int DATA_WIDTH /*verilator public*/ = 32,
+    parameter int ADDR_WIDTH /*verilator public*/ = 3
   ) (
     input wire       wr_clk_i,
     input wire       wr_en_i,
