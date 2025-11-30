@@ -1,4 +1,4 @@
-#idndef DUAL_PORT_RAM_DIRECTED_TESTCASES_H
+#ifndef DUAL_PORT_RAM_DIRECTED_TESTCASES_H
 #define DUAL_PORT_RAM_DIRECTED_TESTCASES_H
 #include <cstdint>
 #include <coroutine>

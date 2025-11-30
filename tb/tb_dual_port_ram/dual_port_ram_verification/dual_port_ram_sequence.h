@@ -11,6 +11,8 @@ public:
     using TxnType = DualPortRamTransaction;
     using TxnPtr = std::shared_ptr<TxnType>;
 
+    explicit DualPortRamBaseSequence(const std::string& name, const bool enabled_debug);
+
     [[nodiscard]]
     TxnPtr dispatch_write(uint32_t addr, uint32_t data);
 

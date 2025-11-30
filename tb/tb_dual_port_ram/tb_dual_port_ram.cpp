@@ -8,6 +8,8 @@
 #include "simulation_phase_event.h"
 #include "simulation_task.h"
 
+#include "testcases/directed/dual_port_ram_directed_testcases.h"
+
 #include <verilated.h>
 #include <verilated_vcd_c.h>
 
@@ -65,9 +67,12 @@ public:
 
         // Set up verification components
         sequencer_ = std::make_shared<DualPortRamSequencer>();
-        top_sequence_ = std::make_unique<DualPortRamTopSequence>();
+        // top_sequence_ = std::make_unique<DualPortRamTopSequence>();
         driver_ = std::make_shared<DualPortRamDriver>(sequencer_, dut_, wr_clk_);
         checker_ = std::make_shared<BaseChecker>(wr_clk_);
+
+        // Set up sequence to execute
+        std::make_unique<
 
         // Set up task components
         coro_tasks.emplace_back(

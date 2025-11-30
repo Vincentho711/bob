@@ -4,9 +4,10 @@
 #include "dual_port_ram_transaction.h"
 #include "sequencer.h"
 
-class DualPortRamSequencer : public BaseSequencer<DualPortRamPayload> {
+class DualPortRamSequencer : public BaseSequencer<DualPortRamTransaction> {
 public:
-    using TxnType = DualPortRamTransaction;
+    using TransactionType = DualPortRamTransaction;
+    using TxnPtr = std::shared_ptr<TransactionType>;
     std::deque<TxnPtr> write_queue;
     std::deque<TxnPtr> read_queue;
 };

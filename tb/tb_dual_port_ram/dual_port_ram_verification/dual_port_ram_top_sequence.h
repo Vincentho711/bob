@@ -8,7 +8,7 @@ public:
     DualPortRamTopSequence(const std::string &name = "DualPortRamTopSequence", const bool enabled_debug = true) :
         DualPortRamBaseSequence(name, enabled_debug) {};
 
-    simulation::Task body() override;
+    // simulation::Task body() override;
 
 };
 #endif // DUAL_PORT_RAM_TOP_SEQUENCE_H

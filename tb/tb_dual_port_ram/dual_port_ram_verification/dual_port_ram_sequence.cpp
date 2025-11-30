@@ -1,6 +1,9 @@
 #include "dual_port_ram_sequence.h"
 #include "dual_port_ram_payload.h"
 
+DualPortRamBaseSequence::DualPortRamBaseSequence(const std::string& name, const bool enabled_debug)
+    : BaseSequence(name, enabled_debug) {}
+
 [[nodiscard]]
 DualPortRamBaseSequence::TxnPtr DualPortRamBaseSequence::dispatch_write(uint32_t addr, uint32_t data) {
     auto txn = create_transaction();
@@ -32,7 +35,7 @@ simulation::Task DualPortRamBaseSequence::write(uint32_t addr, uint32_t data) {
     co_await wait_for_txn_done(t);
 }
 
-simulation::Task DualPortRamBaseSequence::write(uint32_t addr) {
+simulation::Task DualPortRamBaseSequence::read(uint32_t addr) {
     auto t = dispatch_read(addr);
     co_await wait_for_txn_done(t);
 }

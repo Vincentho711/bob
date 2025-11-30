@@ -3,7 +3,7 @@
 DualPortRamDriver::DualPortRamDriver(
     std::shared_ptr<DualPortRamSequencer> sequencer,
     std::shared_ptr<Vdual_port_ram> dut, std::shared_ptr<clock_t> wr_clk)
-    : BaseDriver(sequencer, dut), p_sequencer(sequencer) {}
+    : BaseDriver(sequencer, dut), wr_clk(wr_clk) {}
 
 simulation::Task DualPortRamDriver::run() {
     co_return;

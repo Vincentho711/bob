@@ -4,9 +4,9 @@
 #include "dual_port_ram_payload.h"
 
 class DualPortRamTransaction : public BaseTransaction<DualPortRamPayload> {
+public:
     explicit DualPortRamTransaction() {}
 
     virtual ~DualPortRamTransaction() = default;
-
 };
 #endif // DUAL_PORT_RAM_TRANSACTION_H

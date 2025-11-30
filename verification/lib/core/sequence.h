@@ -1,6 +1,7 @@
 #ifndef SEQUENCE_H
 #define SEQUENCE_H
 #include "simulation_task.h"
+#include "simulation_event.h"
 #include <memory>
 #include <iostream>
 
@@ -10,6 +11,7 @@ public:
     using TxnType = TransactionT;
     using TxnPtr = std::shared_ptr<TxnType>;
     using SequencerType = ConcreteSequencerT;
+    using TxnDoneAwaiter = simulation::Event::Awaiter;
 
     std::shared_ptr<ConcreteSequencerT> p_sequencer = nullptr;
 
@@ -24,8 +26,9 @@ public:
         return std::static_pointer_cast<TransactionT>(p_sequencer->pool.acquire());
     }
 
-    simulation::Task wait_for_txn_done(TxnPtr txn) {
-        co_await txn->done_event;
+    TxnDoneAwaiter wait_for_txn_done(TxnPtr txn) {
+        // Return the Awaiter object created by the Event's operator co_await()
+        return txn->done_event.operator co_await();
     }
 
     simulation::Task wait_all(std::vector<TxnPtr> txns) {
