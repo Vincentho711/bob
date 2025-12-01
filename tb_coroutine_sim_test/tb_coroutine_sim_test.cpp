@@ -6,7 +6,7 @@
 #include "simulation_kernal.h"
 #include "simulation_clock.h"
 #include "simulation_phase_event.h"
-#include "simulation_task.h"
+#include "simulation_task_symmetric_transfer.h"
 
 #include <verilated.h>
 #include <verilated_vcd_c.h>
@@ -23,9 +23,11 @@ class BaseChecker {
         simulation::Task print_at_wr_clk_edges() {
             while (true) {
                 co_await wr_clk->rising_edge(simulation::Phase::Drive);
-                std::cout << "Resuming after wr_clk rising_edge is seen." << std::endl;
-                co_await wr_clk->falling_edge(simulation::Phase::Drive);
-                std::cout << "Resuming after wr_clk falling_edge is seen." << std::endl;
+                std::cout << "Resuming after wr_clk rising_edge 1 is seen." << std::endl;
+                co_await wr_clk->rising_edge(simulation::Phase::Drive);
+                std::cout << "Resuming after wr_clk rising_edge 2 is seen." << std::endl;
+                co_await wr_clk->rising_edge(simulation::Phase::Drive);
+                std::cout << "Resuming after wr_clk rising_edge 3 is seen." << std::endl;
             }
         }
 
@@ -84,8 +86,8 @@ public:
         checker_ = std::make_shared<BaseChecker>(wr_clk_, rd_clk_);
 
         // Set up task components
-        coro_tasks.push_back(checker_->print_at_wr_clk_edges());
-        coro_tasks.push_back(checker_->print_at_rd_clk_edges());
+        coro_tasks.push_back(primary_checker_wr_task());
+        coro_tasks.push_back(primary_checker_rd_task());
 
     }
 
@@ -96,6 +98,9 @@ public:
     }
 
     void start_sim_kernal() {
+        for (simulation::Task &task: coro_tasks) {
+            task.start();
+        }
         sim_kernal_->run(max_time_);
     }
 
@@ -121,6 +126,15 @@ private:
 
     // Task componenets
     std::vector<simulation::Task> coro_tasks;
+
+    // Set up root tasks that might trigger other tasks,testing wrapping of task within a task
+    simulation::Task primary_checker_wr_task() {
+        co_await checker_->print_at_wr_clk_edges();
+    }
+
+    simulation::Task primary_checker_rd_task() {
+        co_await checker_->print_at_rd_clk_edges();
+    }
 };
 
 int main() {

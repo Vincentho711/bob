@@ -1,7 +1,7 @@
 #ifndef SEQUENCER_H
 #define SEQUENCER_H
 #include "simulation_object_pool.h"
-#include "simulation_task.h"
+#include "simulation_task_symmetric_transfer.h"
 #include "transaction.h"
 #include <string>
 #include <iostream>

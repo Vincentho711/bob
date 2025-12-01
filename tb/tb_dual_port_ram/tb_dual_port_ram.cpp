@@ -91,6 +91,10 @@ public:
     }
 
     void start_sim_kernal() {
+        // Resume all root level coroutines as they are not started upon creation
+        for (simulation::Task &task : coro_tasks) {
+            task.resume();
+        }
         sim_kernal_->run(max_time_);
     }
 

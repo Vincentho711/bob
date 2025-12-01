@@ -1,6 +1,6 @@
 #ifndef DUAL_PORT_RAM_TOP_SEQUENCE_H
 #define DUAL_PORT_RAM_TOP_SEQUENCE_H
-#include "simulation_task.h"
+#include "simulation_task_symmetric_transfer.h"
 #include "dual_port_ram_sequence.h"
 
 class DualPortRamTopSequence : public DualPortRamBaseSequence {

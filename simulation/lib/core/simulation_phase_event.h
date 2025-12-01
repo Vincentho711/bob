@@ -21,8 +21,9 @@ namespace simulation {
         using handle_t = std::coroutine_handle<>;
         PhaseEvent() {
             // Reserve space for awaiters within each phases upfront
-            for (auto &phase_vector : waiters_) {
-                phase_vector.reserve(8);
+            for (std::size_t i = 0 ; i < PHASE_COUNT ; ++i) {
+                current_waiters_[i].reserve(8);
+                next_waiters_[i].reserve(8);
             }
         }
         struct Awaiter {
@@ -44,7 +45,8 @@ namespace simulation {
         bool empty() const noexcept;
 
     private:
-        std::array<std::vector<handle_t>, static_cast<size_t>(PHASE_COUNT)> waiters_;
+        std::vector<handle_t> current_waiters_[PHASE_COUNT];
+        std::vector<handle_t> next_waiters_[PHASE_COUNT];
     };
 
 }; // namespace simulation

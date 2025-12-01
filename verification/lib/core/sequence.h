@@ -1,6 +1,6 @@
 #ifndef SEQUENCE_H
 #define SEQUENCE_H
-#include "simulation_task.h"
+#include "simulation_task_symmetric_transfer.h"
 #include "simulation_event.h"
 #include <memory>
 #include <iostream>

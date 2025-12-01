@@ -3,7 +3,7 @@
 #include "dual_port_ram_sequencer.h"
 #include "dual_port_ram_payload.h"
 #include "simulation_clock.h"
-#include "simulation_task.h"
+#include "simulation_task_symmetric_transfer.h"
 #include "driver.h"
 #include <coroutine>
 #include <memory>

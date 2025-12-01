@@ -3,7 +3,7 @@
 #include "dual_port_ram_transaction.h"
 #include "dual_port_ram_sequencer.h"
 #include "sequence.h"
-#include "simulation_task.h"
+#include "simulation_task_symmetric_transfer.h"
 #include <memory>
 
 class DualPortRamBaseSequence : public BaseSequence<DualPortRamTransaction, DualPortRamSequencer> {
