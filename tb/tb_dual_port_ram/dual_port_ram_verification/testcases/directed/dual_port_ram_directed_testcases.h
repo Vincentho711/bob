@@ -4,7 +4,7 @@
 #include <coroutine>
 #include <string>
 #include "dual_port_ram_sequence.h"
-#include "simulation_task.h"
+#include "simulation_task_symmetric_transfer.h"
 
 class Seq_Directed_WriteRead_All_Address : public DualPortRamBaseSequence {
 private:

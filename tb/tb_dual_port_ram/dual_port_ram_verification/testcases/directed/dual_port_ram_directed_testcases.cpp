@@ -1,6 +1,6 @@
 #include "dual_port_ram_directed_testcases.h"
 
-simulation::Task Seq_Directed_WriteRead_All_Address::body() override {
+simulation::Task Seq_Directed_WriteRead_All_Address::body() {
     log_info("Starting Seq_Directed_WriteRead_All_Address sequence.");
     for (uint32_t i = 0; i < (2 << addr_width); ++i) {
         uint32_t addr = i;

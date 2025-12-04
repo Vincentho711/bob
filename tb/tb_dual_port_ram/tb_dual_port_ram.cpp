@@ -6,14 +6,18 @@
 #include "simulation_kernal.h"
 #include "simulation_clock.h"
 #include "simulation_phase_event.h"
-#include "simulation_task.h"
+#include "simulation_task_symmetric_transfer.h"
 
+#include "dual_port_ram_driver.h"
+#include "dual_port_ram_top_sequence.h"
+#include "dual_port_ram_sequencer.h"
 #include "testcases/directed/dual_port_ram_directed_testcases.h"
 
 #include <verilated.h>
 #include <verilated_vcd_c.h>
 
 #include <Vdual_port_ram.h>
+#include "Vdual_port_ram_dual_port_ram.h"
 
 class BaseChecker {
     public:
@@ -71,16 +75,16 @@ public:
         driver_ = std::make_shared<DualPortRamDriver>(sequencer_, dut_, wr_clk_);
         checker_ = std::make_shared<BaseChecker>(wr_clk_);
 
-        // Set up sequence to execute
-        std::make_unique<
+        // Set up top sequence to execute
+        const auto dual_port_ram_module_addr_width = Vdual_port_ram_dual_port_ram::ADDR_WIDTH;
+        const uint32_t addr_width_arg = static_cast<uint32_t>(dual_port_ram_module_addr_width);
+        top_seq_ = std::make_unique<DualPortRamTopSequence>(addr_width_arg);
 
         // Set up task components
-        coro_tasks.emplace_back(
-            checker_->print_at_wr_clk_edges(),
-            sequencer_->start_sequence(top_sequence_),
-            driver_ ->wr_driver_run(),
-            driver_->rd_driver_run()
-        );
+        coro_tasks.emplace_back(checker_->print_at_wr_clk_edges());
+        coro_tasks.emplace_back(sequencer_->start_sequence(std::move(top_seq_)));
+        coro_tasks.emplace_back(driver_->wr_driver_run());
+        coro_tasks.emplace_back(driver_->rd_driver_run());
 
     }
 
@@ -93,7 +97,7 @@ public:
     void start_sim_kernal() {
         // Resume all root level coroutines as they are not started upon creation
         for (simulation::Task &task : coro_tasks) {
-            task.resume();
+            task.start();
         }
         sim_kernal_->run(max_time_);
     }

@@ -3,6 +3,7 @@
 
 #include <utility>
 #include <coroutine>
+#include <exception>
 
 namespace simulation {
     class Task {
