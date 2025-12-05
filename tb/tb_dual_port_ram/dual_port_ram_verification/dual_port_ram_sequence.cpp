@@ -1,8 +1,8 @@
 #include "dual_port_ram_sequence.h"
 #include "dual_port_ram_payload.h"
 
-DualPortRamBaseSequence::DualPortRamBaseSequence(const std::string& name, const bool enabled_debug)
-    : BaseSequence(name, enabled_debug) {}
+DualPortRamBaseSequence::DualPortRamBaseSequence(const std::string& name, const bool enabled_debug, uint32_t wr_addr_width, uint32_t wr_data_width)
+    : BaseSequence(name, enabled_debug), wr_addr_width_(wr_addr_width), wr_data_width_(wr_data_width) {}
 
 [[nodiscard]]
 DualPortRamBaseSequence::TxnPtr DualPortRamBaseSequence::dispatch_write(uint32_t addr, uint32_t data) {

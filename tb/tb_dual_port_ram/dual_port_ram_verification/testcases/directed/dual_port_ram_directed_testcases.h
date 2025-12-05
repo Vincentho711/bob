@@ -10,8 +10,8 @@ class Seq_Directed_WriteRead_All_Address : public DualPortRamBaseSequence {
 private:
     uint32_t addr_width;
 public:
-    Seq_Directed_WriteRead_All_Address(uint32_t addr_width, const std::string &name = "Seq_Directed_WriteRead_All_Address")
-        : DualPortRamBaseSequence(name, true), addr_width(addr_width) {};
+    Seq_Directed_WriteRead_All_Address(uint32_t addr_width, uint32_t data_width, const std::string &name = "Seq_Directed_WriteRead_All_Address")
+        : DualPortRamBaseSequence(name, true, addr_width, data_width) {};
 
     simulation::Task body() override;
 

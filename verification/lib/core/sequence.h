@@ -23,7 +23,10 @@ public:
 
     [[nodiscard]]
     TxnPtr create_transaction() {
-        return std::static_pointer_cast<TransactionT>(p_sequencer->pool.acquire());
+        auto ptr = std::static_pointer_cast<TransactionT>(p_sequencer->pool.acquire());
+        // txn might have returned to the object pool, with triggered_ flag set to true, hence reset to allow it to be co_awaited.
+        ptr->reset();
+        return ptr;
     }
 
     TxnDoneAwaiter wait_for_txn_done(TxnPtr txn) {
@@ -47,7 +50,7 @@ public:
 
     void log_debug(const std::string& message) const {
         if (debug_enabled) {
-            std::cout << "[Sequence:" << name << "] ERROR : " << message << "\n";
+            std::cout << "[Sequence:" << name << "] DEBUG : " << message << "\n";
         }
     }
 private:
