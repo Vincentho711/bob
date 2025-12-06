@@ -39,3 +39,17 @@ simulation::Task DualPortRamBaseSequence::read(uint32_t addr) {
     auto t = dispatch_read(addr);
     co_await wait_for_txn_done(t);
 }
+
+simulation::Task DualPortRamBaseSequence::wait_wr_cycles(uint32_t n) {
+    if (!p_sequencer) {
+        log_error("Sequencer not connected. Cannot wait for clock.");
+        co_return;
+    }
+
+    // Access clk via p_sequencer
+    auto clk = p_sequencer->wr_clk;
+
+    for (uint32_t i = 0; i < n ; ++i) {
+        co_await clk->rising_edge(simulation::Phase::Drive);
+    }
+}

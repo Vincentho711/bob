@@ -13,21 +13,9 @@ tb_cpp_src_files:
   - "dual_port_ram_verification/dual_port_ram_sequence.cpp"
   - "dual_port_ram_verification/dual_port_ram_sequencer.cpp"
   - "dual_port_ram_verification/dual_port_ram_top_sequence.cpp"
-  # - "dual_port_ram_verification/dual_port_ram_sequencer.cpp"
-  # - "dual_port_ram_verification/dual_port_ram_write_transaction.cpp"
-  # - "dual_port_ram_verification/write_transaction_done_event.cpp"
   - "tb_dual_port_ram.cpp"
-tb_header_src_iles:
+tb_header_src_files:
     - "dual_port_ram_verification/testcases/directed/dual_port_ram_directed_testcases.h"
-    - "dual_port_ram_verification/dual_port_ram_driver.h"
-    - "dual_port_ram_verification/dual_port_ram_payload.h"
-    - "dual_port_ram_verification/dual_port_ram_sequence.h"
-    - "dual_port_ram_verification/dual_port_ram_sequencer.h"
-    - "dual_port_ram_verification/dual_port_ram_top_sequence.h"
-    - "dual_port_ram_verification/dual_port_ram_transaction.h"
-#   - "dual_port_ram_verification/dual_port_ram_sequencer.h"
-    # - "dual_port_ram_verification/dual_port_ram_write_transaction.h"
-#   - "dual_port_ram_verification/write_transaction_done_event.h"
 external_objects:
   - "{@output:simulation_lib:lib_simulation_lib.a}"
 output_executable: tb_dual_port_ram.out

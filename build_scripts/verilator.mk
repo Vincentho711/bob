@@ -14,6 +14,12 @@ VERILATOR_EXTRA_ARGS ?= --x-assign unique --x-initial unique
 EXTERNAL_OBJECTS ?=
 INCLUDE_DIRS ?=
 
+# Automatically find all header files in the include header directories
+INCLUDE_DIRS_HEADERS := $(foreach dir,$(INCLUDE_DIRS),$(wildcard $(dir)/*.h $(dir)/*.hpp))
+$(info $$INCLUDE_DIRS_HEADERS is [${INCLUDE_DIRS_HEADERS}])
+# Append the INCLUDE_DIRS_HEADERS to TB_HEADER_SRC_FILES such that changes within INCLUDE_DIRS_HEADERS also cause rebuild
+TB_HEADER_SRC_FILES += $(INCLUDE_DIRS_HEADERS)
+
 # PROFILE_BUILD variable to enabling profiling with gprof
 PROFILE_BUILD ?= 1
 

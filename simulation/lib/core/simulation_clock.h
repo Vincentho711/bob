@@ -42,6 +42,7 @@ namespace simulation {
                         level = true;
                         if (drive_clk_signal_fn) {
                             drive_clk_signal_fn(level);
+                            dut->eval();
                         }
                         rising_edge.trigger();
                         break;
@@ -49,6 +50,7 @@ namespace simulation {
                         level = true;
                         if (drive_clk_signal_fn) {
                             drive_clk_signal_fn(level);
+                            dut->eval();
                         }
                         positive_mid.trigger();
                         break;
@@ -56,6 +58,7 @@ namespace simulation {
                         level = false;
                         if (drive_clk_signal_fn) {
                             drive_clk_signal_fn(level);
+                            dut->eval();
                         }
                         falling_edge.trigger();
                         break;
@@ -63,6 +66,7 @@ namespace simulation {
                         level = false;
                         if (drive_clk_signal_fn) {
                             drive_clk_signal_fn(level);
+                            dut->eval();
                         }
                         negative_mid.trigger();
                         break;

@@ -23,6 +23,8 @@ public:
 
     simulation::Task read(uint32_t addr);
 
+    simulation::Task wait_wr_cycles(uint32_t n);
+
 protected:
     uint32_t wr_addr_width_;
     uint32_t wr_data_width_;

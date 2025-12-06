@@ -70,7 +70,7 @@ public:
         sim_kernal_->register_clock(wr_clk_);
 
         // Set up verification components
-        sequencer_ = std::make_shared<DualPortRamSequencer>();
+        sequencer_ = std::make_shared<DualPortRamSequencer>(wr_clk_);
         // top_sequence_ = std::make_unique<DualPortRamTopSequence>();
         driver_ = std::make_shared<DualPortRamDriver>(sequencer_, dut_, wr_clk_);
         checker_ = std::make_shared<BaseChecker>(wr_clk_);
@@ -134,7 +134,7 @@ private:
 
 int main() {
     try {
-        SimulationEnvironment sim_env(123U, 100000U);
+        SimulationEnvironment sim_env(123U, 500000U);
         sim_env.start_sim_kernal();
         return 0;
     } catch (const std::exception &e) {

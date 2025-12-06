@@ -1,6 +1,17 @@
 #include "dual_port_ram_directed_testcases.h"
 #include <algorithm>
 
+simulation::Task Init_Reset_Sequence::body() {
+    std::vector<TxnPtr> wr_txns;
+    for (uint32_t i = 0; i < 5; ++i) {
+        uint32_t addr = 0U;
+        uint32_t data = 0U;
+        TxnPtr wr_txn = dispatch_write(addr, data);
+        wr_txns.emplace_back(wr_txn);
+    }
+    co_await wait_all(wr_txns);
+}
+
 simulation::Task Seq_Directed_WriteRead_All_Address::body() {
     log_info("Starting Seq_Directed_WriteRead_All_Address sequence.");
     for (uint32_t i = 0; i < (1U << wr_addr_width_); ++i) {
