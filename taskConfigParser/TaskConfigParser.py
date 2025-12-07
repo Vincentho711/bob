@@ -587,7 +587,7 @@ class TaskConfigParser:
                     raise ValueError(f"external object must have resolved_type=output.")
                 external_objects.append(resolved_reference)
 
-            # Fetch 'include_header_dir' if it exists. If it does, add them to the -I option during GCC compilation
+            # Fetch 'include_header_dirs' if it exists. If it does, add them to the -I option during GCC compilation
             include_header_directories = task_config_dict.get("include_header_dirs", [])
             if not include_header_directories:
                 self.logger.debug(f"{task_config_file_path} which is a 'cpp_compile' build does not contain a 'include_header_dirs' field. Will not include header dirs during linking.")

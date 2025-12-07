@@ -11,6 +11,7 @@
 #include "dual_port_ram_driver.h"
 #include "dual_port_ram_top_sequence.h"
 #include "dual_port_ram_sequencer.h"
+#include "dual_port_ram_tlm_queue.h"
 #include "testcases/directed/dual_port_ram_directed_testcases.h"
 
 #include <verilated.h>
@@ -70,6 +71,8 @@ public:
         sim_kernal_->register_clock(wr_clk_);
 
         // Set up verification components
+        tlm_wr_queue_ = std::make_shared<DualPortRamTLMWrQueue>();
+        tlm_rd_queue_ = std::make_shared<DualPortRamTLMRdQueue>();
         sequencer_ = std::make_shared<DualPortRamSequencer>(wr_clk_);
         // top_sequence_ = std::make_unique<DualPortRamTopSequence>();
         driver_ = std::make_shared<DualPortRamDriver>(sequencer_, dut_, wr_clk_);
@@ -121,6 +124,8 @@ private:
     std::shared_ptr<simulation::Clock<Vdual_port_ram>> wr_clk_;
 
     // Verification components
+    std::shared_ptr<DualPortRamTLMWrQueue> tlm_wr_queue_;
+    std::shared_ptr<DualPortRamTLMRdQueue> tlm_rd_queue_;
     std::shared_ptr<BaseChecker> checker_;
     std::shared_ptr<DualPortRamSequencer> sequencer_;
     std::shared_ptr<DualPortRamDriver> driver_;

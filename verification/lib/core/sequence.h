@@ -24,8 +24,6 @@ public:
     [[nodiscard]]
     TxnPtr create_transaction() {
         auto ptr = std::static_pointer_cast<TransactionT>(p_sequencer->pool.acquire());
-        // txn might have returned to the object pool, with triggered_ flag set to true, hence reset to allow it to be co_awaited.
-        ptr->reset();
         return ptr;
     }
 
