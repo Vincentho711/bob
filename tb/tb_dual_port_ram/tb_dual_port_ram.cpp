@@ -12,6 +12,7 @@
 #include "dual_port_ram_top_sequence.h"
 #include "dual_port_ram_sequencer.h"
 #include "dual_port_ram_tlm_queue.h"
+#include "dual_port_ram_monitor.h"
 #include "testcases/directed/dual_port_ram_directed_testcases.h"
 
 #include <verilated.h>
@@ -63,19 +64,23 @@ public:
             dut_->wr_clk_i = level;  // Set the clk_i input of the DUT based on the clock level
         };
         wr_clk_ = std::make_shared<simulation::Clock<Vdual_port_ram>>("wr_clk", 5000U, dut_, wr_clk_drive_fn);
+        // rd clk doesn't have to drive DUT clock signal, used for verification only.
+        rd_clk_ = std::make_shared<simulation::Clock<Vdual_port_ram>>("rd_clk", 5000U, dut_, std::function<void(bool)>{});
 
         // Set up simulation components
         sim_kernal_ = std::make_unique<simulation::SimulationKernal<Vdual_port_ram, VerilatedVcdC>>(dut_, trace_);
 
         // Register clocking componenets with simulation kernal
         sim_kernal_->register_clock(wr_clk_);
+        sim_kernal_->register_clock(rd_clk_);
 
         // Set up verification components
         tlm_wr_queue_ = std::make_shared<DualPortRamTLMWrQueue>();
         tlm_rd_queue_ = std::make_shared<DualPortRamTLMRdQueue>();
-        sequencer_ = std::make_shared<DualPortRamSequencer>(wr_clk_);
+        sequencer_ = std::make_shared<DualPortRamSequencer>(wr_clk_, rd_clk_);
         // top_sequence_ = std::make_unique<DualPortRamTopSequence>();
-        driver_ = std::make_shared<DualPortRamDriver>(sequencer_, dut_, wr_clk_);
+        driver_ = std::make_shared<DualPortRamDriver>(sequencer_, dut_, wr_clk_, rd_clk_);
+        monitor_ = std::make_shared<DualPortRamMonitor>(dut_, wr_clk_, rd_clk_, tlm_wr_queue_, tlm_rd_queue_);
         checker_ = std::make_shared<BaseChecker>(wr_clk_);
 
         // Set up top sequence to execute
@@ -122,6 +127,7 @@ private:
 
     // Clocking components
     std::shared_ptr<simulation::Clock<Vdual_port_ram>> wr_clk_;
+    std::shared_ptr<simulation::Clock<Vdual_port_ram>> rd_clk_;
 
     // Verification components
     std::shared_ptr<DualPortRamTLMWrQueue> tlm_wr_queue_;
@@ -129,6 +135,7 @@ private:
     std::shared_ptr<BaseChecker> checker_;
     std::shared_ptr<DualPortRamSequencer> sequencer_;
     std::shared_ptr<DualPortRamDriver> driver_;
+    std::shared_ptr<DualPortRamMonitor> monitor_;
 
     // Sequence components
     std::unique_ptr<DualPortRamTopSequence> top_seq_;

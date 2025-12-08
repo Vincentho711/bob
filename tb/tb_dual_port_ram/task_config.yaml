@@ -14,6 +14,7 @@ tb_cpp_src_files:
   - "dual_port_ram_verification/dual_port_ram_sequencer.cpp"
   - "dual_port_ram_verification/dual_port_ram_top_sequence.cpp"
   - "dual_port_ram_verification/dual_port_ram_tlm_queue.cpp"
+  - "dual_port_ram_verification/dual_port_ram_monitor.cpp"
   - "tb_dual_port_ram.cpp"
 tb_header_src_files:
     - "dual_port_ram_verification/testcases/directed/dual_port_ram_directed_testcases.h"

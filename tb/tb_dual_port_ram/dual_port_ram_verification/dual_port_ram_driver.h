@@ -16,6 +16,7 @@ public:
     explicit DualPortRamDriver(std::shared_ptr<DualPortRamSequencer> sequencer,
                              std::shared_ptr<Vdual_port_ram> dut,
                              std::shared_ptr<clock_t> wr_clk,
+                             std::shared_ptr<clock_t> rd_clk,
                              const std::string &name = "DualPortRamDriver",
                              bool debug_enabled = true);
 
@@ -25,5 +26,6 @@ public:
 
 private:
     std::shared_ptr<clock_t> wr_clk;
+    std::shared_ptr<clock_t> rd_clk;
 };
 #endif // DUAL_PORT_RAM_DRIVER_H

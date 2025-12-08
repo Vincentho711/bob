@@ -17,9 +17,10 @@ public:
 
     // Resources available to all sequences running on this sequencer
     std::shared_ptr<ClockT> wr_clk;
+    std::shared_ptr<ClockT> rd_clk;
 
-    DualPortRamSequencer(std::shared_ptr<ClockT> wr_clk)
-        : wr_clk(wr_clk) {}
+    DualPortRamSequencer(std::shared_ptr<ClockT> wr_clk, std::shared_ptr<ClockT> rd_clk)
+        : wr_clk(wr_clk), rd_clk(rd_clk) {}
 };
 
 #endif // DUAL_PORT_RAM_SEQUENCER_H

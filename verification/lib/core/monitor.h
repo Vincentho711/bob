@@ -16,8 +16,6 @@ public:
 
     virtual simulation::Task run() = 0;
 
-    virtual simulation::Task send_transaction(TxnPtr txn) = 0;
-
     void log_info(const std::string& message) const {
         std::cout << "[Monitor:" << name << "] INFO : " << message << "\n";
     }

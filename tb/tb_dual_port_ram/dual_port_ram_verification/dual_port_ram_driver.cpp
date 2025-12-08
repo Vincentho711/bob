@@ -3,9 +3,10 @@
 DualPortRamDriver::DualPortRamDriver(
     std::shared_ptr<DualPortRamSequencer> sequencer,
     std::shared_ptr<Vdual_port_ram> dut, std::shared_ptr<clock_t> wr_clk,
+    std::shared_ptr<clock_t> rd_clk,
     const std::string &name,
     bool debug_enabled)
-    : BaseDriver(sequencer, dut, name, debug_enabled), wr_clk(wr_clk) {}
+    : BaseDriver(sequencer, dut, name, debug_enabled), wr_clk(wr_clk), rd_clk(rd_clk) {}
 
 simulation::Task DualPortRamDriver::run() {
     co_return;
@@ -49,7 +50,7 @@ simulation::Task DualPortRamDriver::wr_driver_run() {
 simulation::Task DualPortRamDriver::rd_driver_run() {
     while (true) {
         // Wait for wr_clk's rising edge
-        co_await wr_clk->rising_edge(simulation::Phase::Drive);
+        co_await rd_clk->rising_edge(simulation::Phase::Drive);
         TxnPtr active_rd = nullptr;
 
         if (!p_sequencer->read_queue.empty()) {
@@ -58,7 +59,7 @@ simulation::Task DualPortRamDriver::rd_driver_run() {
             dut->rd_addr_i = active_rd->payload.addr;
         }
 
-        co_await wr_clk->rising_edge(simulation::Phase::Monitor);
+        co_await rd_clk->rising_edge(simulation::Phase::Monitor);
 
         if (active_rd) {
             active_rd->done_event.trigger();
