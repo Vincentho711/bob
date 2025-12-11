@@ -10,6 +10,6 @@ src_files:
   - "core/simulation_phase_event.h"
   - "core/simulation_phase_event.cpp"
   - "core/simulation_object_pool.h"
-  - "core/simulation_task.h"
+  # - "core/simulation_task.h"
   - "core/simulation_task_symmetric_transfer.h"
   - "core/simulation_tlm_queue.h"

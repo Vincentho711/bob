@@ -1,16 +1,16 @@
 #ifndef SCOREBOARD_H
 #define SCOREBOARD_H
-#include "simulation_task.h"
+#include "simulation_task_symmetric_transfer.h"
 #include <iostream>
 #include <memory>
 #include <string>
 
-template <TransactionT>
+template <typename TransactionT>
 class BaseScoreboard {
 public:
     using TxnPtr = std::shared_ptr<TransactionT>;
 
-    explicit BaseScoreboard(const string &name, bool debug_enabled)
+    explicit BaseScoreboard(const std::string &name, bool debug_enabled)
         : name(name), debug_enabled(debug_enabled) {}
 
     virtual simulation::Task run() = 0;
