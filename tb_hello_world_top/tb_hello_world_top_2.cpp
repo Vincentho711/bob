@@ -5,16 +5,17 @@
 #include <array>
 #include <chrono>
 #include <cassert>
+#include <filesystem>
 
 #include <verilated.h>
 #include <verilated_vcd_c.h>
 #include <Vhello_world_top.h>
-
 #include "adder_verification/adder_monitor.h"
 #include "command_line_parser.h"
 #include "adder_verification/adder_transaction.h"
 #include "adder_verification/adder_driver.h"
 #include "adder_verification/adder_checker.h"
+#include "adder_verification/adder_scoreboard.h"
 #include "adder_verification/adder_simulation_context.h"
 #include "adder_verification/adder_scoreboard.h"
 
@@ -26,41 +27,43 @@ constexpr uint32_t PIPELINE_DEPTH = 2;
  */
 class VerilatorSim {
 public:
+    using AdderTransactionPtr = std::shared_ptr<AdderTransaction>;
+
     /**
-     * @brief Constructor - Initialize simulation and verification components
+     * @brief Constructor - Initialise simulation and verification components
      */
     VerilatorSim(uint32_t seed, uint64_t max_cycles) 
         : seed_(seed)
         , max_cycles_(max_cycles)
         , sim_time_(0)
         , rng_(seed) {
-        
-        // Initialize Verilator
+
+        // Initialise Verilator
         Verilated::traceEverOn(true);
         Verilated::randSeed(seed);
-        
+
         // Create DUT as shared pointer
         dut_ = std::make_shared<Vhello_world_top>();
-        
+
         // Setup waveform tracing
         setup_tracing();
-        
-        // Initialize DUT
+
+        // Initialise DUT
         reset_dut();
-        
+
         // Create verification components
         setup_verification_components();
-        
+
         // Generate test stimulus
         generate_test_stimulus();
-        
+
         std::cout << "=== Modern Adder Testbench Initialized ===" << std::endl;
         std::cout << "Seed: " << seed_ << std::endl;
         std::cout << "Max Cycles: " << max_cycles_ << std::endl;
         std::cout << "Pipeline Depth: " << PIPELINE_DEPTH << std::endl;
         std::cout << "Transactions Generated: " << driver_->pending_count() << std::endl;
     }
-    
+
     /**
      * @brief Destructor - Clean up resources
      */
@@ -68,67 +71,68 @@ public:
         if (trace_) {
             trace_->close();
         }
-        
+
         // Print final reports
         print_final_reports();
     }
-    
+
     /**
      * @brief Run the simulation
      */
     void run() {
         std::cout << "\n=== Starting Simulation ===" << std::endl;
-        
+
         auto start_time = std::chrono::high_resolution_clock::now();
-        
+
         while (sim_time_ < (max_cycles_ * 2) && !Verilated::gotFinish()) {
             // Toggle clock
             dut_->clk_i = !dut_->clk_i;
-            
+
             // Process positive clock edge
             if (dut_->clk_i == 1) {
                 ctx_->increment_cycle();
                 process_clock_cycle();
             }
-            
+
             // Evaluate DUT
             dut_->eval();
-            
+
             // Dump waveform
             if (trace_) {
                 trace_->dump(sim_time_);
             }
-            
+
             sim_time_++;
         }
-        
+
         auto end_time = std::chrono::high_resolution_clock::now();
         auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
-        
+
         std::cout << "\n=== Simulation Complete ===" << std::endl;
         std::cout << "Total Cycles: " << ctx_->current_cycle() << std::endl;
         std::cout << "Simulation Time: " << duration.count() << " ms" << std::endl;
     }
-    
+
     /**
      * @brief Check if simulation passed
      */
     bool passed() const {
         // Check if checker reports pass
-        bool checker_passed = checker_->is_pass_rate_acceptable();
-        std::cout << "\nchecker_passed = " << checker_passed << std::endl;
+        double pass_rate = scoreboard_->get_pass_rate();
+        std::cout << "\npass rate = " << std::fixed << std::setprecision(2) << pass_rate << std::endl;
 
-        // Check if all transactions were processed
-        bool all_transactions_driven = (driver_->pending_count() == 0);
+        bool scoreboard_passed = (pass_rate == 100.0);
+
+        // Check if all transactions were driven
+        bool all_transactions_driven = (driver_->pending_count() == PIPELINE_DEPTH);
         std::cout << "driver_->pending_count() = " << driver_->pending_count() << " , all_transactions_driven = " << all_transactions_driven << std::endl;
 
-        // Check basic statistics
-        const auto& checker_stats = checker_->get_adder_stats();
-        bool has_sufficient_coverage = (checker_stats.corner_cases_checked > 0) && 
-                                      (checker_stats.overflow_cases_checked > 0);
-        std::cout << "has_sufficient_coverage = " << has_sufficient_coverage << std::endl;
+        // Check if there are still expected_transactions to be checked
+        uint32_t expected_transactions_queue_size = scoreboard_->get_expected_transactions_queue_size();
+        std::cout << "scoreboard_->expected_transactions_.size() = " << std::to_string(expected_transactions_queue_size) << std::endl;
+        bool all_expected_transactions_checked = (expected_transactions_queue_size == PIPELINE_DEPTH);
 
-        return checker_passed && all_transactions_driven && has_sufficient_coverage;
+        return scoreboard_passed && all_transactions_driven && all_expected_transactions_checked;
     }
 
 private:
@@ -141,21 +145,30 @@ private:
     // Verilator components
     std::shared_ptr<Vhello_world_top> dut_;
     std::unique_ptr<VerilatedVcdC> trace_;
+    std::filesystem::path trace_path_;
 
     // Verification components
     std::shared_ptr<AdderSimulationContext> ctx_;
     std::unique_ptr<AdderDriver> driver_;
     std::unique_ptr<AdderMonitor> monitor_;
-    std::shared_ptr<AdderChecker<Vhello_world_top>> checker_;
+    std::shared_ptr<AdderChecker> checker_;
     std::unique_ptr<AdderScoreboard> scoreboard_;
 
     /**
      * @brief Setup waveform tracing
      */
     void setup_tracing() {
+        std::string trace_dir = ".";  // Default to current directory if not set
+
+        // Use filesystem to create the full path for the trace file
+        trace_path_ = std::filesystem::path(trace_dir) / "tb_hello_world_top.vcd";
+
+        // Ensure that the directory exists (creates the directory if it doesn't exist)
+        std::filesystem::create_directories(trace_path_.parent_path());
+
         trace_ = std::make_unique<VerilatedVcdC>();
         dut_->trace(trace_.get(), TRACE_DEPTH);
-        trace_->open("tb_hello_world_top.vcd");
+        trace_->open(trace_path_.string().c_str());
         std::cout << "Waveform tracing enabled: tb_hello_world_top.vcd" << std::endl;
     }
 
@@ -177,7 +190,7 @@ private:
         ctx_ = std::make_shared<AdderSimulationContext>();
 
         // Configure driver
-        AdderDriver::Config driver_config;
+        AdderDriver::AdderDriverConfig driver_config;
         driver_config.enable_input_validation = true;
         driver_config.enable_pipeline_tracking = true;
         driver_config.pipeline_depth = PIPELINE_DEPTH;
@@ -191,22 +204,14 @@ private:
         monitor_ = std::make_unique<AdderMonitor>("main_adder_monitor", dut_, ctx_);
 
         // Configure checker
-        AdderCheckerConfig checker_config = create_strict_adder_config();
-        checker_config.pipeline_depth = PIPELINE_DEPTH;
-        checker_config.max_pending_transactions = static_cast<uint32_t>(max_cycles_);
-        checker_config.min_pass_rate = 0.95; // 95% pass rate required
-        checker_config.enable_value_logging = true;
+        AdderCheckerConfig checker_config = create_debug_adder_config();
 
         // Create checker
-        checker_ = std::make_shared<AdderChecker<Vhello_world_top>>("main_adder_checker", dut_, ctx_, checker_config);
-
-        // Configure scoreboard
-        AdderScoreboardConfig scoreboard_config;
-        scoreboard_config.max_latency_cycles = 10;
-        scoreboard_config.max_pending_transactions = 500;
+        checker_ = std::make_shared<AdderChecker>("main_adder_checker", dut_, ctx_, checker_config);
 
         // Create scoreboard
-        scoreboard_ = std::make_unique<AdderScoreboard>("main_adder_scoreboard", dut_, ctx_, scoreboard_config, checker_);
+        AdderScoreboardConfig scoreboard_config;
+        scoreboard_ = std::make_unique<AdderScoreboard>("main_adder_scoreboard", dut_, scoreboard_config, ctx_, checker_);
 
         std::cout << "Verification components initialised" << std::endl;
     }
@@ -287,12 +292,13 @@ private:
         if (current_cycle >= PIPELINE_DEPTH){
             if (driver_->has_pending_transactions()) {
                 // Get the next transaction
-                AdderDriver::TransactionPtr next_transaction = driver_->get_next_transaction();
+                AdderTransactionPtr next_transaction = driver_->get_next_transaction();
                 // Drive the transaction
                 driver_->drive_next();
                 // Sample the input with monitor
-                auto expected_txn = monitor_->sample_input();
-                scoreboard_->add_expected(expected_txn, current_cycle + PIPELINE_DEPTH);
+                AdderTransactionPtr expected_txn = monitor_->sample_input();
+                // Add transaction to checker. expect_transaction accounts for the pipeline depth
+                scoreboard_->add_expected_transaction(expected_txn, static_cast<uint64_t>(current_cycle + driver_->get_config().pipeline_depth));
             } else {
                 // Drive idle values when no more transactions
                 driver_->drive_idle_cycles(1);
@@ -311,13 +317,15 @@ private:
         // It will only check when appropriate transactions are available
         try {
             if (current_cycle >= PIPELINE_DEPTH) {
-                // Sample the output of DUT with monitor
-                auto actual_txn = monitor_->sample_output();
-                // Register the actual transaction with scoreboard
-                scoreboard_->add_actual(actual_txn, current_cycle);
+                // Sample the output of the DUT
+                AdderTransactionPtr actual_txn = monitor_->sample_output();
+                // Feed the actual transaction into scoreboard for comparison
+                std::uint32_t checks_conducted = scoreboard_->check_current_cycle(actual_txn);
             }
         } catch (const std::exception& e) {
-            std::cerr << "check_outputs() error at cycle " << current_cycle << ": " << e.what() << std::endl;
+            std::cerr << "Check_outputs() error at cycle " << current_cycle << ": " << e.what() << std::endl;
+            // Rethrow to ensure upper error handling will handle and terminate simulations
+            throw;
         }
     }
 
@@ -344,7 +352,7 @@ private:
                       << std::endl;
         }
     }
-    
+
     /**
      * @brief Print comprehensive final reports
      */
@@ -352,35 +360,59 @@ private:
         std::cout << "\n" << std::string(80, '=') << std::endl;
         std::cout << "FINAL SIMULATION REPORT" << std::endl;
         std::cout << std::string(80, '=') << std::endl;
-        
+
         // Print driver report
         if (driver_) {
             driver_->print_report();
         }
-        
-        std::cout << std::endl;
-        
-        // Print checker report  
-        if (checker_) {
-            checker_->print_detailed_report();
-            checker_->print_histogram();
+
+        if (scoreboard_) {
+            scoreboard_->display_results(std::cout);
+            AdderScoreboardStatsPtr scoreboard_stats_ptr = scoreboard_->get_stats_ptr();
+            if (scoreboard_stats_ptr){
+                scoreboard_stats_ptr->report_coverage();
+            }
         }
-        
+
+        std::cout << std::endl;
+
         // Print overall pass/fail status
         std::cout << "\n" << std::string(80, '-') << std::endl;
-        std::cout << "OVERALL RESULT: " << (passed() ? "PASS" : "FAIL") << std::endl;
+        std::cout << "OVERALL RESULT: " << std::endl;
+        if (passed()) {
+            print_pass_ascii_art(std::cout); // Print PASS ASCII art if passed
+        } else {
+            print_fail_ascii_art(std::cout); // Print FAIL ASCII art if failed
+        }
         std::cout << std::string(80, '-') << std::endl;
-        
+
         // Print simulation summary
         std::cout << "\nSimulation Summary:" << std::endl;
         std::cout << "  Seed: " << seed_ << std::endl;
         std::cout << "  Cycles: " << ctx_->current_cycle() << std::endl;
-        std::cout << "  Waveform: tb_hello_world_top.vcd" << std::endl;
-        
-        if (checker_) {
-            std::cout << "  Pass Rate: " << std::fixed << std::setprecision(2) 
-                      << (checker_->get_current_pass_rate() * 100.0) << "%" << std::endl;
-        }
+        std::cout << "  Waveform: " << trace_path_.string() << std::endl;
+
+    }
+
+    void print_pass_ascii_art(std::ostream& out) const {
+        // Directly output the ASCII art to the provided ostream
+        out << "  _____         _____ _____ \n"
+            << " |  __ \\ /\\    / ____/ ____|\n"
+            << " | |__) /  \\  | (___| (___  \n"
+            << " |  ___/ /\\ \\  \\___ \\\\___ \\ \n"
+            << " | |  / ____ \\ ____) |___) |\n"
+            << " |_| /_/    \\_\\_____/_____/ \n";
+    }
+
+    void print_fail_ascii_art(std::ostream& out) const {
+        // Directly output the ASCII art to the provided ostream
+         out << " ______      _____ _      \n"
+             << " |  ____/\\   |_   _| |     \n"
+             << " | |__ /  \\    | | | |     \n"
+             << " |  __/ /\\ \\   | | | |     \n"
+             << " | | / ____ \\ _| |_| |____ \n"
+             << " |_|/_/    \\_\\_____|______|\n"
+             << "                           \n";
     }
 };
 
@@ -400,16 +432,16 @@ uint32_t generate_secure_random_seed() {
  * @brief Main function
  */
 int main(int argc, char** argv) {
-    // Initialize Verilator
+    // Initialise Verilator
     Verilated::randReset(2);
     Verilated::commandArgs(argc, argv);
-    
+
     // Parse command line arguments
     CommandLineParser cli_parser;
     cli_parser.add_argument("--seed", "Simulation seed (1 to 2^31-1)", false, true);
     cli_parser.add_argument("--cycles", "Maximum simulation cycles", false, true);
     cli_parser.set_default_value("--cycles", "100");
-    
+
     try {
         cli_parser.parse(argc, argv);
     } catch (const std::exception& e) {
@@ -417,7 +449,7 @@ int main(int argc, char** argv) {
         cli_parser.print_help(argv[0]);
         return 1;
     }
-    
+
     // Process seed argument
     uint32_t seed;
     if (auto seed_opt = cli_parser.get("--seed")) {
@@ -436,7 +468,7 @@ int main(int argc, char** argv) {
         seed = generate_secure_random_seed();
         std::cout << "Using generated random seed: " << seed << std::endl;
     }
-    
+
     // Process cycles argument
     uint64_t max_cycles;
     try {
@@ -451,7 +483,7 @@ int main(int argc, char** argv) {
         std::cerr << "Invalid cycles value" << std::endl;
         return 1;
     }
-    
+
     // Run simulation
     try {
         VerilatorSim sim(seed, max_cycles);

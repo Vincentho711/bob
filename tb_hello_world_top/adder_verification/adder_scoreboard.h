@@ -1,46 +1,89 @@
+#ifndef ADDER_SCOREBOARD_H
+#define ADDER_SCOREBOARD_H
+
 #include "scoreboard.h"
 #include "adder_transaction.h"
-#include "adder_checker.h"
 #include "adder_simulation_context.h"
+#include "adder_checker.h"
+#include "covergroup.h"
 #include "Vhello_world_top.h"
+#include <memory>
 
+/**
+ * @class AdderScoreboardConfig
+ * @brief Configuration for a AdderScoreboard object
+ *
+ */
 struct AdderScoreboardConfig : public ScoreboardConfig {
-    uint32_t pipeline_depth = 2;
+    bool enable_overflow_check = true;
+
+    AdderScoreboardConfig() {
+        log_level = ScoreboardLogLevel::DEBUG; // Overrides base default
+    }
+
+    explicit AdderScoreboardConfig(const ScoreboardConfig &base)
+        : ScoreboardConfig(base) {
+        log_level = ScoreboardLogLevel::DEBUG;
+    }
 };
 
+/**
+ * @class AdderScoreboardStats
+ * @brief An object to store coverage data in the scoreboard
+ *
+ */
+struct AdderScoreboardStats : public ScoreboardStats {
+    Covergroup cg;
+
+    AdderScoreboardStats() {
+        cg.add_coverpoint("sum_range", 512);
+        cg.add_coverpoint("operand_a_range", 256);
+        cg.add_coverpoint("operand_b_range", 256);
+        // Add cross coverage
+        cg.add_cross("operand_a_x_operand_b", {"operand_a_range", "operand_b_range"});
+    }
+
+    void sample(uint8_t a, uint8_t b, uint32_t sum) {
+        cg.sample("sum_range", sum);
+        cg.sample("operand_a_range", static_cast<uint32_t>(a));
+        cg.sample("operand_b_range", static_cast<uint32_t>(b));
+        cg.sample_cross("operand_a_x_operand_b", {static_cast<uint32_t>(a), static_cast<uint32_t>(b)});
+    }
+
+    void report_coverage() const {
+        cg.report();
+    }
+};
+
+// Define the shared pointer alias
+using AdderScoreboardStatsPtr = std::shared_ptr<AdderScoreboardStats>;
+
+/**
+ * @class AdderScoreboard
+ * @brief Specialised scoreboard for adder DUT
+ *
+ */
 class AdderScoreboard : public BaseScoreboard<Vhello_world_top, AdderTransaction> {
 public:
-    using DutPtr = std::shared_ptr<Vhello_world_top>;
     using Base = BaseScoreboard<Vhello_world_top, AdderTransaction>;
-    using AdderTransactionPtr = std::shared_ptr<AdderTransaction>;
-    using AdderCheckerPtr = std::shared_ptr<AdderChecker<Vhello_world_top>>;
+    using DutPtr = Base::DutPtr;
     using AdderSimulationContextPtr = std::shared_ptr<AdderSimulationContext>;
+    using AdderCheckerPtr = std::shared_ptr<AdderChecker>;
+    using AdderTransactionPtr = std::shared_ptr<AdderTransaction>;
 
-    /**
-     * @brief Construct AdderScoreboard
-     * 
-     * @param name Baseboard instance name
-     * @param dut Shared pointer to DUT
-     * @param ctx Adder-specific simulation context for tracking global state
-     * @param config Adder-specific configuration
-     * @param checker Shared pointer to checker object
-     */
-    AdderScoreboard(const std::string& name, DutPtr dut, AdderSimulationContextPtr ctx, const AdderScoreboardConfig& config, AdderCheckerPtr checker);
+    explicit AdderScoreboard(const std::string& name, DutPtr dut,
+                             AdderScoreboardConfig config, AdderSimulationContextPtr ctx, AdderCheckerPtr checker);
 
-    /**
-      * @brief Destructor - prints final report
-      */
-    virtual ~AdderScoreboard();
-
-    bool validate_scoreboard_config(const AdderScoreboardConfig& config, std::string& error_msg) const;
-    void print_report() const override;
-    void print_summary() const override;
-
-protected:
-    AdderScoreboardConfig adder_config_;
+    void add_expected_transaction(AdderTransactionPtr transaction_ptr, uint64_t expected_cycle) override;
+    std::uint32_t check_current_cycle(AdderTransactionPtr actual_ptr) override;
     void reset() override;
+
+    AdderScoreboardStatsPtr get_stats_ptr();
 
 private:
     AdderSimulationContextPtr ctx_;
-    AdderCheckerPtr checker_;
+    AdderScoreboardConfig adder_config_;
+    AdderScoreboardStats adder_stats_;
+
 };
+#endif

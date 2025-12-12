@@ -5,13 +5,29 @@ all : $(TASK_OUTDIR)/${OUTPUT_EXECUTABLE}
 # Variables passed in via environment
 VERILATOR ?= verilator
 CXX ?= g++
-CXXFLAGS ?= -O2 -Wall -Werror -Wno-unused
+CXXFLAGS ?= -O2 -Wall -Werror -Wno-unused -fsanitize=address,undefined -std=c++20
+LINKERFLAGS ?= -fsanitize=address,undefined
 # Verilator trace to allow waveform to be dumped, can be --trace or --trace-fst
 VERILATOR_TRACE_ARGS ?= --trace
 # Extra args, like assigning random values to 'x' values to catch uninitialised behaviour
 VERILATOR_EXTRA_ARGS ?= --x-assign unique --x-initial unique
 EXTERNAL_OBJECTS ?=
 INCLUDE_DIRS ?=
+
+# Automatically find all header files in the include header directories
+INCLUDE_DIRS_HEADERS := $(foreach dir,$(INCLUDE_DIRS),$(wildcard $(dir)/*.h $(dir)/*.hpp))
+$(info $$INCLUDE_DIRS_HEADERS is [${INCLUDE_DIRS_HEADERS}])
+# Append the INCLUDE_DIRS_HEADERS to TB_HEADER_SRC_FILES such that changes within INCLUDE_DIRS_HEADERS also cause rebuild
+TB_HEADER_SRC_FILES += $(INCLUDE_DIRS_HEADERS)
+
+# PROFILE_BUILD variable to enabling profiling with gprof
+PROFILE_BUILD ?= 1
+
+# Conditionally append profiling options
+ifeq ($(PROFILE_BUILD), 1)
+    VERILATOR_EXTRA_ARGS += --prof-cfuncs
+    LINKERFLAGS += -pg
+endif
 
 $(info $$RTL_SRC_FILES is [${RTL_SRC_FILES}])
 $(info $$TB_CPP_SRC_FILES is [${TB_CPP_SRC_FILES}])
@@ -37,7 +53,7 @@ $(TASK_OUTDIR)/V$(TOP_MODULE): $(RTL_SRC_FILES) $(TB_CPP_SRC_FILES) $(TB_HEADER_
 		--Mdir $(TASK_OUTDIR) \
 		$(VERILATOR_TRACE_ARGS) \
 		-CFLAGS "$(CXXFLAGS) $(INCLUDE_FLAGS)" \
-		-LDFLAGS "$(EXTERNAL_OBJECTS)"
+		-LDFLAGS "$(EXTERNAL_OBJECTS) $(LINKERFLAGS)"
 
 # Optional renaming of executable
 $(TASK_OUTDIR)/$(OUTPUT_EXECUTABLE): $(TASK_OUTDIR)/V$(TOP_MODULE)

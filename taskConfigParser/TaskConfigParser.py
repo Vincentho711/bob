@@ -5,11 +5,17 @@ import re
 import os
 
 class TaskConfigParser:
+    # Pattern which indicate that it is a function
+    FUNC_PATTERN = re.compile(r'\$\((\w+)\(([^)]*)\)\)')
     def __init__(self, logger: logging.Logger, proj_root: str) -> None:
         self.task_configs = {}
         self.logger = logger
         self.proj_root = proj_root
         self.build_scripts_dir = Path(self.proj_root) / "build_scripts"
+        self.function_registry = {
+            "get_task_dir": self.get_task_dir,
+            "get_output_dir": self.get_output_dir,
+        }
 
     def inherit_task_configs(self, task_configs: dict):
         """Inherit task_configs from bob, and store it as a local attribute"""
@@ -64,6 +70,36 @@ class TaskConfigParser:
         except Exception as e:
             self.logger.critical(f"Unexpected error during _load_task_config_file() : {e}", exc_info=True)
 
+    def get_task_dir(self, task_name: str) -> str:
+        """Retrieve task directory for a given task name."""
+        task = self.task_configs.get(task_name)
+        if not task or "task_dir" not in task:
+            raise KeyError(f"Task '{task_name}' missing 'task_dir'")
+        return task["task_dir"]
+
+    def get_output_dir(self, task_name: str) -> str:
+        """Return path to a build output directory."""
+        task = self.task_configs.get(task_name)
+        output_dir = task["output_dir"]
+        if output_dir is None:
+            raise ValueError(f"task_configs['{output_task}'] doesn't contain a 'output_dir' attribute. Please ensure a output dir is registered with task '{output_task}' first.")
+        elif not Path(output_dir).exists():
+            raise FileNotFoundError(f"Output_dir of task '{output_task}' does not exist. Please ensure it exists first.")
+        return str(output_dir)
+
+    def _eval_functions_in_string(self, s: str) -> str:
+        """Replace all $(func(arg)) calls in a string."""
+
+        def replacer(match):
+            func_name, arg = match.groups()
+            func = self.function_registry.get(func_name)
+            print(f"func: {func}")
+            if not func:
+                raise ValueError(f"Unknown function '{func_name}'")
+            return str(func(arg.strip()))
+
+        return self.FUNC_PATTERN.sub(replacer, s)
+
     def _resolve_files_spec(self, target_dir:Path, files_spec:str) -> str | list[str] | None:
         """Resolve files specification, e.g. content post @output or @input_src"""
         try:
@@ -111,24 +147,18 @@ class TaskConfigParser:
 
             output_task = match.group(1)
             files_spec = match.group(2)
-            print(f"output_task={output_task}, files_spec={files_spec}")
 
             if output_task not in self.task_configs:
                 raise ValueError(f"Referenced task '{output_task}' not found in task_configs.")
 
             output_dir = self.task_configs[output_task].get("output_dir", None)
-            print(f"output_dir={output_dir}")
             if output_dir is None:
-                print(f"output_dir is None")
                 raise ValueError(f"task_configs['{output_task}'] doesn't contain a 'output_dir' attribute. Please ensure a output dir is registered with task '{output_task}' first.")
-            elif not output_dir.exists():
-                print(f"output_dir does not exist.")
+            elif not Path(output_dir).exists():
                 raise FileNotFoundError(f"Output_dir of task '{output_task}' does not exist. Please ensure it exists first.")
 
-            print(f"Calling _resolve_files_spec()")
             self.logger.debug(f"Calling _resolve_files_spec() with target_dir='{output_dir}', files_spec='{files_spec}'")
             resolved_output_reference = self._resolve_files_spec(Path(output_dir), files_spec)
-            print(f"resolved_output_reference={resolved_output_reference}")
             return resolved_output_reference
 
         except yaml.YAMLError as ye:
@@ -156,15 +186,13 @@ class TaskConfigParser:
 
             input_task = match.group(1)
             files_spec = match.group(2)
-            print(f"input_task = {input_task}")
-            print(f"files_spec = {files_spec}")
             if input_task not in self.task_configs:
                 raise ValueError(f"Referenced task '{input_task}' not found in task_configs.")
 
             task_dir = self.task_configs[input_task].get("task_dir", None)
             if task_dir is None:
                 raise ValueError(f"task_configs['{input_task}'] doesn't contain a 'task_dir' attribute. Please ensure a output dir is registered with task '{input_task}' first.")
-            elif not task_dir.exists():
+            elif not Path(task_dir).exists():
                 raise FileNotFoundError(f"Task_dir of task '{input_task}' does not exist. Please ensure it exists first.")
 
             self.logger.debug(f"Calling _resolve_files_spec() with target_dir='{task_dir}', files_spec='{files_spec}'")
@@ -197,9 +225,14 @@ class TaskConfigParser:
             if task_name not in self.task_configs:
                 raise KeyError(f"Task {task_name} not found in task configurations.")
 
+            # e.g. "$(get_task_dir(utils))/lib" → "/abs/path/to/utils/lib"
+            if isinstance(value, str) and "$(" in value:
+                resolved_type = "function"
+                self.logger.debug(f"Resolving function expression in '{value}'")
+                resolved_value = self._eval_functions_in_string(value)
+                self.logger.debug(f"After _eval_functions_in_string: '{resolved_value}'")
             # Check if value matches output reference pattern
-            if re.match(r"\{@output:([^:\[\]]+):(\*|\[.*\]|[^:\[\}]+)\}", value):
-                print(f"matched output")
+            elif re.match(r"\{@output:([^:\[\]]+):(\*|\[.*\]|[^:\[\}]+)\}", value):
                 resolved_type = "output"
                 resolved_value = self._resolve_output_reference(value)
             # Check if value matches input reference pattern
@@ -454,20 +487,23 @@ class TaskConfigParser:
                     raise ValueError(f"external object must have resolved_type=output.")
                 external_objects.append(resolved_reference)
 
-            # Fetch 'include_headers_from_tasks' if it exists. If it does, add them to the -I option during GCC compilation
-            include_headers_from_tasks = task_config_dict.get("include_headers_from_tasks", [])
-            if not include_headers_from_tasks:
-                self.logger.debug(f"{task_config_file_path} which is a 'c_compile' build does not contain a 'include_headers_from_tasks' field. Will not include header dirs during linking.")
-            if isinstance(include_headers_from_tasks, str):
-                include_headers_from_tasks = [include_headers_from_tasks]
-            self.task_configs[task_name].setdefault("include_header_dirs", [])
-            include_header_dirs = self.task_configs[task_name]["include_header_dirs"]
-            for task in include_headers_from_tasks:
-                # Grab the task dir of the corresponding task
-                task_dir = self.task_configs[task].get("task_dir", None)
-                if task_dir is None:
-                    raise KeyError(f"Task '{task}' does not have a 'task_dir' attribute within task_configs.")
-                include_header_dirs.append(task_dir)
+            # Fetch 'include_header_dir' if it exists. If it does, add them to the -I option during GCC compilation
+            include_header_directories = task_config_dict.get("include_header_dirs", [])
+            if not include_header_directories:
+                self.logger.debug(f"{task_config_file_path} which is a 'c_compile' build does not contain a 'include_header_dirs' field. Will not include header dirs during linking.")
+            else:
+                if isinstance(include_header_directories, str):
+                    include_header_directories = [include_header_directories]
+                self.task_configs[task_name].setdefault("include_header_dirs", [])
+                include_header_dirs = self.task_configs[task_name]["include_header_dirs"]
+                for unresolved_header_dir in include_header_directories:
+                    self.logger.debug(f"unresolved_header_dir={unresolved_header_dir}")
+                    resolved_reference, resolved_type = self.resolve_reference(task_name, unresolved_header_dir)
+                    self.logger.debug(f"task_name='{task_name}', unresolved_header_dir='{unresolved_header_dir}', resolved_reference='{resolved_reference}', resolved_type='{resolved_type}'.")
+                    if not Path(resolved_reference).is_dir():
+                        self.logger.error(f"unresolved_header_dir={unresolved_header_dir} in task_config.yaml of task '{task_name}' is not a directory. resolve_reference = {resolved_reference}, resolved_type = {resolved_type}.")
+                        raise ValueError(f"unresolved_header_dir={unresolved_header_dir} in task_config.yaml of task '{task_name}' is not a directory. resolve_reference = {resolved_reference}, resolved_type = {resolved_type}.")
+                    include_header_dirs.append(resolved_reference)
 
             # Fetch 'executable_name' if it exists. If it does, that means .exe should be generated
             executable_name = task_config_dict.get("executable_name", None)
@@ -551,20 +587,23 @@ class TaskConfigParser:
                     raise ValueError(f"external object must have resolved_type=output.")
                 external_objects.append(resolved_reference)
 
-            # Fetch 'include_headers_from_tasks' if it exists. If it does, add them to the -I option during G++ compilation
-            include_headers_from_tasks = task_config_dict.get("include_headers_from_tasks", [])
-            if not include_headers_from_tasks:
-                self.logger.debug(f"{task_config_file_path} which is a 'cpp_compile' build does not contain a 'include_headers_from_tasks' field. Will not include header dirs during linking.")
-            if isinstance(include_headers_from_tasks, str):
-                include_headers_from_tasks = [include_headers_from_tasks]
-            self.task_configs[task_name].setdefault("include_header_dirs", [])
-            include_header_dirs = self.task_configs[task_name]["include_header_dirs"]
-            for task in include_headers_from_tasks:
-                # Grab the task dir of the corresponding task
-                task_dir = self.task_configs[task].get("task_dir", None)
-                if task_dir is None:
-                    raise KeyError(f"Task '{task}' does not have a 'task_dir' attribute within task_configs.")
-                include_header_dirs.append(task_dir)
+            # Fetch 'include_header_dirs' if it exists. If it does, add them to the -I option during GCC compilation
+            include_header_directories = task_config_dict.get("include_header_dirs", [])
+            if not include_header_directories:
+                self.logger.debug(f"{task_config_file_path} which is a 'cpp_compile' build does not contain a 'include_header_dirs' field. Will not include header dirs during linking.")
+            else:
+                if isinstance(include_header_directories, str):
+                    include_header_directories = [include_header_directories]
+                self.task_configs[task_name].setdefault("include_header_dirs", [])
+                include_header_dirs = self.task_configs[task_name]["include_header_dirs"]
+                for unresolved_header_dir in include_header_directories:
+                    self.logger.debug(f"unresolved_header_dir={unresolved_header_dir}")
+                    resolved_reference, resolved_type = self.resolve_reference(task_name, unresolved_header_dir)
+                    self.logger.debug(f"task_name='{task_name}', unresolved_header_dir='{unresolved_header_dir}', resolved_reference='{resolved_reference}', resolved_type='{resolved_type}'.")
+                    if not Path(resolved_reference).is_dir():
+                        self.logger.error(f"unresolved_header_dir={unresolved_header_dir} in task_config.yaml of task '{task_name}' is not a directory. resolve_reference = {resolved_reference}, resolved_type = {resolved_type}.")
+                        raise ValueError(f"unresolved_header_dir={unresolved_header_dir} in task_config.yaml of task '{task_name}' is not a directory. resolve_reference = {resolved_reference}, resolved_type = {resolved_type}.")
+                    include_header_dirs.append(resolved_reference)
 
             # Fetch 'executable_name' if it exists. If it does, that means .exe should be generated
             executable_name = task_config_dict.get("executable_name", None)
@@ -766,25 +805,25 @@ class TaskConfigParser:
             resolved_tb_cpp_src_files_list = [file for files in resolved_tb_cpp_src_files.values() for file in files]
             self.update_task_env(task_name, "TB_CPP_SRC_FILES", resolved_tb_cpp_src_files_list)
 
-            # Fetch Mandatory key 'tb_header_src_files'
+            # Fetch optional key 'tb_header_src_files'
             unresolved_tb_header_src_files = task_config_dict.get("tb_header_src_files", None)
 
             if unresolved_tb_header_src_files is None:
-                raise KeyError(f"{task_config_file_path} which is a 'verilator_tb_compile' build does not contain a mandatory field 'unresolved_tb_header_src_files'. ")
+                self.logger.debug(f"{task_config_file_path} which is a 'verilator_tb_compile' build does not contain an optional field 'unresolved_tb_header_src_files'. ")
             elif not isinstance(unresolved_tb_header_src_files, (str, list)):
                 raise TypeError(f"{task_config_file_path} mandatory field 'tb_header_src_files' should be either a str or a list. Current type = {type(unresolved_tb_header_src_files)}.")
+            else:
+                unresolved_tb_header_src_files = [unresolved_tb_header_src_files] if isinstance(unresolved_tb_header_src_files, str) else unresolved_tb_header_src_files
 
-            unresolved_tb_header_src_files = [unresolved_tb_header_src_files] if isinstance(unresolved_tb_header_src_files, str) else unresolved_tb_header_src_files
+                # Resolve every tb header src file reference
+                resolved_tb_header_src_files = self.resolve_src_files(task_name, unresolved_tb_header_src_files)
+                internal_src_files.extend(resolved_tb_header_src_files["internal_src_files"])
+                external_src_files.extend(resolved_tb_header_src_files["external_src_files"])
+                output_src_files.extend(resolved_tb_header_src_files["output_src_files"])
 
-            # Resolve every tb header src file reference
-            resolved_tb_header_src_files = self.resolve_src_files(task_name, unresolved_tb_header_src_files)
-            internal_src_files.extend(resolved_tb_header_src_files["internal_src_files"])
-            external_src_files.extend(resolved_tb_header_src_files["external_src_files"])
-            output_src_files.extend(resolved_tb_header_src_files["output_src_files"])
-
-            # Update the task env var such that all the cpp src files can be referred to in Make script
-            resolved_tb_header_src_files = [file for files in resolved_tb_header_src_files.values() for file in files]
-            self.update_task_env(task_name, "TB_HEADER_SRC_FILES", resolved_tb_header_src_files)
+                # Update the task env var such that all the cpp src files can be referred to in Make script
+                resolved_tb_header_src_files = [file for files in resolved_tb_header_src_files.values() for file in files]
+                self.update_task_env(task_name, "TB_HEADER_SRC_FILES", resolved_tb_header_src_files)
 
             # Fetch the 'top_module' from task_config.yaml and set it to task env var 'TOP_MODULE'
             top_module = task_config_dict.get("top_module", None)
@@ -800,23 +839,25 @@ class TaskConfigParser:
             else:
                 self.update_task_env(task_name, "OUTPUT_EXECUTABLE", str(output_executable), True)
 
-            # Fetch 'include_headers_from_tasks' from task_config.yaml if it exists. If it does, add them to the -I option during verilator compilation with task env var 'INCLUDE_DIRS'
-            include_headers_from_tasks = task_config_dict.get("include_headers_from_tasks", [])
-            if not include_headers_from_tasks:
-                self.logger.debug(f"{task_config_file_path} which is a 'verilator_tb_compile' build does not contain a 'include_headers_from_tasks' field. Will not include header dirs during linking.")
-            if isinstance(include_headers_from_tasks, str):
-                include_headers_from_tasks = [include_headers_from_tasks]
-            self.task_configs[task_name].setdefault("include_header_dirs", [])
-            include_header_dirs = self.task_configs[task_name]["include_header_dirs"]
-            for task in include_headers_from_tasks:
-                # Grab the task dir of the corresponding task
-                task_dir = self.task_configs[task].get("task_dir", None)
-                if task_dir is None:
-                    raise KeyError(f"Task '{task}' does not have a 'task_dir' attribute within task_configs.")
-                self.logger.debug(f"Adding '{task_dir}' to include_header_dirs.")
-                include_header_dirs.append(task_dir)
-            self.logger.debug(f"include_header_dirs = {include_header_dirs}. type(include_header_dirs) = {type(include_header_dirs)}")
-            self.update_task_env(task_name, "INCLUDE_DIRS", include_header_dirs, True, " ")
+            # Fetch 'include_header_dirs' from task_config.yaml if it exists. If it does, add them to the -I option during verilator compilation with task env var 'INCLUDE_DIRS'
+            include_header_directories = task_config_dict.get("include_header_dirs", [])
+            if not include_header_directories:
+                self.logger.debug(f"{task_config_file_path} which is a 'cpp_compile' build does not contain a 'include_header_dirs' field. Will not include header dirs during linking.")
+            else:
+                if isinstance(include_header_directories, str):
+                    include_header_directories = [include_header_directories]
+                self.task_configs[task_name].setdefault("include_header_dirs", [])
+                include_header_dirs = self.task_configs[task_name]["include_header_dirs"]
+                for unresolved_header_dir in include_header_directories:
+                    self.logger.debug(f"unresolved_header_dir={unresolved_header_dir}")
+                    resolved_reference, resolved_type = self.resolve_reference(task_name, unresolved_header_dir)
+                    self.logger.debug(f"task_name='{task_name}', unresolved_header_dir='{unresolved_header_dir}', resolved_reference='{resolved_reference}', resolved_type='{resolved_type}'.")
+                    if not Path(resolved_reference).is_dir():
+                        self.logger.error(f"unresolved_header_dir={unresolved_header_dir} in task_config.yaml of task '{task_name}' is not a directory. resolve_reference = {resolved_reference}, resolved_type = {resolved_type}.")
+                        raise ValueError(f"unresolved_header_dir={unresolved_header_dir} in task_config.yaml of task '{task_name}' is not a directory. resolve_reference = {resolved_reference}, resolved_type = {resolved_type}.")
+                    include_header_dirs.append(resolved_reference)
+                self.logger.debug(f"include_header_dirs = {include_header_dirs}. type(include_header_dirs) = {type(include_header_dirs)}")
+                self.update_task_env(task_name, "INCLUDE_DIRS", include_header_dirs, True, " ")
 
             # Fetch 'external_objects' field from task_config.yaml if it exists and set them to task env var 'EXTERNAL_OBJECTS'
             unresolved_external_objects = task_config_dict.get("external_objects", [])

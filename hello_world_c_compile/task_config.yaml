@@ -6,5 +6,5 @@ src_files:
 external_objects:
   - "{@output:arith_c_compile:sum.o}"
   - "{@output:arith_c_compile:subtract.o}"
-include_headers_from_tasks:
-  - "arith_c_compile"
+include_header_dirs:
+  - "$(get_task_dir(arith_c_compile))"

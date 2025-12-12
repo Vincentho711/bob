@@ -1,10 +1,12 @@
-#ifndef DRIVER_H
-#define DRIVER_H
+#ifndef DRIVER_2_H
+#define DRIVER_2_H
 
 #include <queue>
 #include <chrono>
 #include <iostream>
 #include <stdexcept>
+#include <cstdint>
+#include <functional>
 #include <type_traits>
 #include "transaction.h"
 #include "simulation_context.h"
@@ -89,8 +91,8 @@ public:
      * @brief Get driver statistics
      */
     struct DriverStats {
-        uint64_t transactions_driven = 0;
-        uint64_t cycles_active = 0;
+        std::uint64_t transactions_driven = 0;
+        std::uint64_t cycles_active = 0;
         std::chrono::steady_clock::time_point start_time;
         std::chrono::steady_clock::time_point last_activity;
     };
@@ -162,7 +164,7 @@ private:
 
 template<typename DUT_TYPE, typename TXN_TYPE>
 BaseDriver<DUT_TYPE, TXN_TYPE>::BaseDriver(const std::string& name, DutPtr dut, SimulationContextPtr ctx)
-    : name_(name), dut_(dut), ctx_(ctx), debug_enabled_(false) {
+    : name_(name), dut_(dut), ctx_(ctx), debug_enabled_(true) {
     if (!dut_) {
         throw std::invalid_argument("DUT pointer cannot be null");
     }
@@ -191,7 +193,7 @@ typename BaseDriver<DUT_TYPE, TXN_TYPE>::TransactionPtr BaseDriver<DUT_TYPE, TXN
 
 template<typename DUT_TYPE, typename TXN_TYPE>
 bool BaseDriver<DUT_TYPE, TXN_TYPE>::drive_next() {
-    uint64_t current_cycle = ctx_->current_cycle();
+    std::uint64_t current_cycle = ctx_->current_cycle();
     if (transaction_queue_.empty()) {
         return false;
     }

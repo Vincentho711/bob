@@ -112,7 +112,7 @@ def create_multiple_valid_task_config(monkeypatch) -> tuple[Bob, list[Path]]:
     with patch.object(Path, "rglob", return_value=mock_paths):
         # Ensure the paths exist in the test mock
         bob_instance.task_configs = {}  # Initialize an empty dictionary
-        
+
         # Mock the open function with side_effect to return specific content based on file path
         def mock_open_side_effect(filepath, *args, **kwargs):
             # Use the file path to return the correct content
@@ -357,25 +357,86 @@ def test_setup_build_dirs_oserror(mock_mkdir, bob_instance, create_valid_task_co
 
     bob_instance.logger.critical.assert_called_once()
 
-@patch("shutil.rmtree")
-def test_remove_task_build_dirs(mock_rmtree):
-    """Test that all the task build dirs have been removed"""
-    # Create a mock Bob instance and logger
+@patch("pathlib.Path.is_dir", return_value = False) # build dir does not exist
+def test_remove_task_output_dir_no_build_dir(mock_is_dir):
+    """Test that attempting to remove a particular task's output dir would return False when the `build` dir does not exist"""
     logger = MagicMock()
     bob_instance = Bob(logger)
     bob_instance.proj_root = "/mock/proj_root"
     bob_instance.task_configs = {"task1":"", "task2":""}
 
+    result = bob_instance.remove_task_output_dir("task1")
+    assert result == False
+    bob_instance.logger.info.assert_any_call("Build directory does not exist, hence the output dir of task1 does not exist too.")
+
+@patch("pathlib.Path.is_dir", return_value = True) # build dir does exist
+def test_remove_task_output_dir_non_existent_task(mock_is_dir):
+    """Test that attempting to remove a particular task's output dir would return False when it is an invalid task_name"""
+    logger = MagicMock()
+    bob_instance = Bob(logger)
+    bob_instance.proj_root = "/mock/proj_root"
+    bob_instance.task_configs = {"task1":"", "task2":""}
+
+    task_name = "non-existent-task"
+    result = bob_instance.remove_task_output_dir(task_name)
+    assert result == False
+    bob_instance.logger.warning.assert_any_call(f"Task {task_name} does not exist in task_configs, so its output dir cannot be deleted.")
+
+@patch("shutil.rmtree")
+@patch("pathlib.Path.is_dir", return_value = True) # build dir does exist, and task output dir exists too
+def test_remove_task_output_dir_valid_task(mock_is_dir, mock_rmtree):
+    """Test that attempting to remove a particular task's output dir would return True when it is a valid task_name"""
+    logger = MagicMock()
+    bob_instance = Bob(logger)
+    bob_instance.proj_root = "/mock/proj_root"
+    bob_instance.task_configs = {"task1":"", "task2":""}
+    bob_instance.mark_task_as_dirty_in_dotbob_checksum_file = MagicMock()
+
+    task_name = "task1"
+    result = bob_instance.remove_task_output_dir(task_name)
+    assert result == True
+    assert mock_rmtree.call_count == 1
+    bob_instance.mark_task_as_dirty_in_dotbob_checksum_file.assert_called_once()
+
+@patch("shutil.rmtree")
+def test_remove_output_dirs_multiple_tasks(mock_rmtree):
+    """Test that multiple task output dirs have been removed"""
+    # Create a mock Bob instance and logger
+    logger = MagicMock()
+    bob_instance = Bob(logger)
+    bob_instance.proj_root = "/mock/proj_root"
+    bob_instance.task_configs = {"task1":"", "task2":""}
+    bob_instance.mark_task_as_dirty_in_dotbob_checksum_file = MagicMock()
+
+    # Mock self.dotbob_dir as a Path and patch is_dir to return True
+    mock_dotbob_dir = MagicMock(spec=Path)
+    mock_dotbob_dir.is_dir.return_value = True
+    bob_instance.dotbob_dir = mock_dotbob_dir
+
     # Patch the methods that check for file existence and directory type
-    with patch.object(Path, "exists") as mock_exists, patch.object(Path, "is_dir") as mock_is_dir:
-        mock_exists.return_value = True
-        mock_is_dir.return_value = True
+    with patch.object(Path, "exists", return_value=True) as mock_exists, patch.object(Path, "is_dir", return_value=True) as mock_is_dir:
         # Case 1: All tasks exist and directories are valid
-        deleted_count = bob_instance.remove_task_build_dirs(["task1", "task2", "task3"])
+        deleted_count = bob_instance.remove_task_output_dirs(["task1", "task2", "task3"])
         assert deleted_count == 2  # task1 and task2 should be deleted
         assert mock_rmtree.call_count == 2
-        bob_instance.logger.info.assert_any_call("Deleted build directory: /mock/proj_root/build/task1")
-        bob_instance.logger.info.assert_any_call("Deleted build directory: /mock/proj_root/build/task2")
+        bob_instance.mark_task_as_dirty_in_dotbob_checksum_file.call_count == 2
+
+@patch("pathlib.Path.is_dir", return_value = True) # build dir and dotbob dir both exist
+@patch("shutil.rmtree")
+def test_remove_build_dir(mock_rmtree, mock_is_dir):
+    """Test that the entire build directory has been removed"""
+    logger = MagicMock()
+    bob_instance = Bob(logger)
+    bob_instance.proj_root = "/mock/proj_root"
+    bob_instance.dotbob_dir = "/mock/proj_root/.bob"
+    bob_instance.task_configs = {"task1":"", "task2":""}
+
+    build_dir = Path(bob_instance.proj_root) / "build"
+    result = bob_instance.remove_build_dir()
+    assert result
+    assert mock_rmtree.call_count == 2 # Verify that both the build dir and .bob dir has been removed
+    bob_instance.logger.info.assert_any_call(f"Deleted build directory: {str(build_dir)}")
+    bob_instance.logger.info.assert_any_call(f"Deleted .bob directory.")
 
 def test_create_all_task_env_valid_tasks(create_multiple_valid_task_config):
     """Test the creation of new env based on the global env for all tasks defined"""
@@ -623,7 +684,7 @@ def test_ensure_dotbob_dir_at_proj_root_missing_task_configs():
 @patch.object(Path, "exists", side_effect=[False, True]) # checksum.json doesn't exist initially, then it does when _save_dotbob_checksum_file() is called
 @patch("pathlib.Path.mkdir")
 def test_ensure_dotbob_dir_at_proj_root_non_existent_dotbob_dir(mock_mkdir, tmp_path: Path):
-    """Test the successful creation of dotbob dir and checksum file when non of them exist"""
+    """Test the successful creation of dotbob dir and checksum file when none of them exist"""
     os.environ["PROJ_ROOT"] = str(tmp_path)
     mock_logger = MagicMock()
     bob_instance = Bob(mock_logger)
@@ -957,9 +1018,10 @@ def test_save_dotbob_checksum_file_valid(mock_path_open, tmp_path: Path):
 
     assert json.loads(written_data) == checksum_file_dict
 
-@patch.object(Path, "exists", return_value=False)
-def test_save_dotbob_checksum_file_non_existent_checksum_file(tmp_path: Path):
-    """Test that it returns the correct error msg when self.dotbob_checksum_file does not exist"""
+@patch.object(Path, "exists", return_value=False) # Mock 'exists' to return False
+@patch.object(Path, "touch") # Mock 'touch' so no file is actually created
+def test_save_dotbob_checksum_file_non_existent_checksum_file(mock_touch, mock_exists, tmp_path: Path):
+    """Test that it creates the .checksum file when self.dotbob_checksum_file does not exist"""
     os.environ["PROJ_ROOT"] = str(tmp_path)
     mock_logger = MagicMock()
     bob_instance = Bob(mock_logger)
@@ -970,7 +1032,8 @@ def test_save_dotbob_checksum_file_non_existent_checksum_file(tmp_path: Path):
     }
 
     bob_instance._save_dotbob_checksum_file(checksum_file_dict)
-    bob_instance.logger.error.assert_called_once_with("No checksum.json within .bob dir found.")
+    mock_touch.assert_called_once()
+    bob_instance.logger.info.assert_called_once_with(f"Created missing checksum file at : {bob_instance.dotbob_checksum_file}")
 
 @patch.object(Path, "exists", return_value=True) # checksum.json exists
 @patch("pathlib.Path.open", new_callable=mock_open)
@@ -1274,32 +1337,32 @@ def bob_with_graph(sample_dependency_graph):
 def test_filter_tasks_to_rebuild_no_rebuild_required(bob_with_graph):
     """All tasks are up-to-date, no rebuids should be required"""
     with patch.object(bob_with_graph, "should_rebuild_task", return_value=False):
-        result_graph = bob_with_graph.filter_tasks_to_rebuild()
+        result_graph = bob_with_graph.filter_tasks_to_rebuild(bob_with_graph.dependency_graph)
         assert len(result_graph.nodes) == 0, "Graph should be empty if no rebuilds are needed"
 
 def test_filter_tasks_to_rebuild_single_task_rebuild(bob_with_graph):
     """Only 'arith_c_compile' requires rebuilding, but since 'hello_world_c_compile' depends on it, it also needs rebuilding"""
     with patch.object(bob_with_graph, "should_rebuild_task", side_effect=lambda task: task == "arith_c_compile"):
-        result_graph = bob_with_graph.filter_tasks_to_rebuild()
+        result_graph = bob_with_graph.filter_tasks_to_rebuild(bob_with_graph.dependency_graph)
         assert set(result_graph.nodes) == {"arith_c_compile", "hello_world_c_compile"}, "Only arith_c_compile and its dependent should be rebuilt"
 
 def test_filter_tasks_to_rebuild_all_tasks_required(bob_with_graph):
     """Every tasks requires rebuilding"""
     with patch.object(bob_with_graph, "should_rebuild_task", return_value=True):
-        result_graph = bob_with_graph.filter_tasks_to_rebuild()
+        result_graph = bob_with_graph.filter_tasks_to_rebuild(bob_with_graph.dependency_graph)
         assert set(result_graph.nodes) == set(bob_with_graph.dependency_graph.nodes), "All tasks should be in the rebuild graph"
 
 def test_filter_tasks_to_rebuild_deep_dependency_rebuild(bob_with_graph):
     """A deeply ensted dependency should cause all downstream tasks to rebuild"""
     with patch.object(bob_with_graph, "should_rebuild_task", side_effect=lambda task: task == "hello_world_4"):
-        result_graph = bob_with_graph.filter_tasks_to_rebuild()
+        result_graph = bob_with_graph.filter_tasks_to_rebuild(bob_with_graph.dependency_graph)
         expected_rebuild_tasks = {"hello_world_4", "hello_world_3", "hello_world_2"}
         assert set(result_graph.nodes) == expected_rebuild_tasks, "All dependent tasks should be marked for rebuild"
 
 def test_filter_tasks_to_rebuild_branching_dependency(bob_with_graph):
     """If a task with multiple dependecies is affected, ensure all upstream dependencies are correctly handled"""
     with patch.object(bob_with_graph, "should_rebuild_task", side_effect=lambda task: task in ["hello_world_5", "hello_world_6"]):
-        result_graph = bob_with_graph.filter_tasks_to_rebuild()
+        result_graph = bob_with_graph.filter_tasks_to_rebuild(bob_with_graph.dependency_graph)
         expected_rebuild_tasks = {"hello_world_5", "hello_world_3", "hello_world_2", "hello_world_6"}
         assert set(result_graph.nodes) == expected_rebuild_tasks, "Tasks dependent on multiple rebuild sources must also rebuild"
 
@@ -1323,19 +1386,19 @@ def bob_with_complex_graph(bob_with_graph):
 def test_filter_tasks_to_rebuild_deep_dependency_chain(bob_with_complex_graph):
     """Tests if rebuild correctly propagates through long chains A → B → C."""
     with patch.object(bob_with_complex_graph, "should_rebuild_task", side_effect=lambda task: task == "A"):
-        result_graph = bob_with_complex_graph.filter_tasks_to_rebuild()
+        result_graph = bob_with_complex_graph.filter_tasks_to_rebuild(bob_with_complex_graph.dependency_graph)
         assert set(result_graph.nodes) == {"A", "B", "C"}, "C should be rebuilt due to dependency on A."
 
 def test_filter_tasks_to_rebuild_multiple_independent_chains(bob_with_complex_graph):
     """Ensure independent chains do not trigger unnecessary rebuilds."""
     with patch.object(bob_with_complex_graph, "should_rebuild_task", side_effect=lambda task: task == "F"):
-        result_graph = bob_with_complex_graph.filter_tasks_to_rebuild()
+        result_graph = bob_with_complex_graph.filter_tasks_to_rebuild(bob_with_complex_graph.dependency_graph)
         assert set(result_graph.nodes) == {"F", "G"}, "Only F and G should be rebuilt."
 
 def test_filter_tasks_to_rebuild_diamond_dependency_structure(bob_with_complex_graph):
     """Tests if rebuild propagates correctly in a diamond structure."""
     with patch.object(bob_with_complex_graph, "should_rebuild_task", side_effect=lambda task: task == "D"):
-        result_graph = bob_with_complex_graph.filter_tasks_to_rebuild()
+        result_graph = bob_with_complex_graph.filter_tasks_to_rebuild(bob_with_complex_graph.dependency_graph)
         assert set(result_graph.nodes) == {"D", "E", "C"}, "C should rebuild since E depends on D."
 
 def test_filter_tasks_to_rebuild_cyclic_dependency_handling(bob_with_complex_graph):
@@ -1344,13 +1407,13 @@ def test_filter_tasks_to_rebuild_cyclic_dependency_handling(bob_with_complex_gra
     bob_with_complex_graph.dependency_graph.add_edge("C", "A")
 
     with patch.object(bob_with_complex_graph, "should_rebuild_task", return_value=True):
-        result_graph = bob_with_complex_graph.filter_tasks_to_rebuild()
+        result_graph = bob_with_complex_graph.filter_tasks_to_rebuild(bob_with_complex_graph.dependency_graph)
         assert len(result_graph.nodes) == len(bob_with_complex_graph.dependency_graph.nodes), "All nodes should be rebuilt due to a cycle."
 
 def test_filter_tasks_to_rebuild_mixed_rebuild_scenarios(bob_with_complex_graph):
     """Complex case where different nodes need rebuilding selectively."""
     with patch.object(bob_with_complex_graph, "should_rebuild_task", side_effect=lambda task: task in ["B", "D"]):
-        result_graph = bob_with_complex_graph.filter_tasks_to_rebuild()
+        result_graph = bob_with_complex_graph.filter_tasks_to_rebuild(bob_with_complex_graph.dependency_graph)
         assert set(result_graph.nodes) == {"B", "C", "D", "E"}, "C and E should be rebuilt due to dependencies on B and D."
 
 @pytest.fixture
@@ -1379,7 +1442,7 @@ def test_visualise_dependency_graph(bob_with_sample_dependency_graph_for_visuali
     captured_output = StringIO()
     sys.stdout = captured_output
 
-    bob_with_sample_dependency_graph_for_visualisation.visualise_dependency_graph()
+    bob_with_sample_dependency_graph_for_visualisation.visualise_dependency_graph(bob_with_sample_dependency_graph_for_visualisation.dependency_graph)
 
     # Reset stdout
     sys.stdout = sys.__stdout__
@@ -1410,6 +1473,57 @@ def test_visualise_dependency_graph(bob_with_sample_dependency_graph_for_visuali
     assert " [deploy]" in output_lines[6]
     assert " [compile_b]" in output_lines[7]
     assert "* [test]" in output_lines[8]
+
+def test_get_dependencies_for_task_single_dependency(bob_with_graph):
+    """Test that get_dependencies_for_task() return a single dependency"""
+    target_task = "hello_world_c_compile"
+    bob_with_graph.task_configs[target_task] = {"output_dir": "/path/to/output_dir"}
+    ordered_dependencies = bob_with_graph.get_dependencies_for_task(target_task)
+    assert ordered_dependencies == ["arith_c_compile"]
+
+def test_get_dependencies_for_task_multiple_dependencies(bob_with_graph):
+    """Test that get_dependencies_for_task() return multiple dependencies"""
+    target_task = "hello_world_2"
+    bob_with_graph.task_configs[target_task] = {"output_dir": "/path/to/output_dir"}
+    ordered_dependencies = bob_with_graph.get_dependencies_for_task(target_task)
+    expected_deps = [
+        "hello_world_4",
+        "hello_world_5",
+        "hello_world_6",
+        "hello_world_3",
+    ]
+    assert ordered_dependencies == expected_deps
+
+def test_get_dependencies_for_task_no_dependency(bob_with_graph):
+    """Test that get_dependencies_for_task() return an empty list if a task does not have any dependencies"""
+    target_task = "arith_c_compile"
+    bob_with_graph.task_configs[target_task] = {"output_dir": "/path/to/output_dir"}
+    ordered_dependencies = bob_with_graph.get_dependencies_for_task(target_task)
+    assert ordered_dependencies == []
+
+@patch.object(Bob,"remove_task_output_dir")
+def test_remove_task_output_dir_until_multiple_dependencies(mock_remove_task_output_dir, bob_with_graph, tmp_path):
+    """Test that remove_task_output_dir_until() calls remove_task_output_dirs multiple times for a task with dependencies"""
+    target_task = "hello_world_2"
+    bob_with_graph.proj_root = tmp_path
+    bob_with_graph.task_configs[target_task] = {"output_dir" : "/path/to/output_dir"}
+    bob_with_graph.task_configs["hello_world_4"] = {"output_dir" : "/path/to/hello_world_4/output_dir"}
+    bob_with_graph.task_configs["hello_world_5"] = {"output_dir" : "/path/to/hello_world_5/output_dir"}
+    bob_with_graph.task_configs["hello_world_6"] = {"output_dir" : "/path/to/hello_world_6/output_dir"}
+    bob_with_graph.task_configs["hello_world_3"] = {"output_dir" : "/path/to/hello_world_3/output_dir"}
+    bob_with_graph.remove_task_output_dir_until(target_task)
+
+    assert mock_remove_task_output_dir.call_count == 5
+
+@patch.object(Bob,"remove_task_output_dir")
+def test_remove_task_output_dir_until_no_dependencies(mock_remove_task_output_dir, bob_with_graph, tmp_path):
+    """Test that remove_task_output_dir_until() calls remove_task_output_dirs only once for a task without dependencies"""
+    target_task = "arith_c_compile"
+    bob_with_graph.proj_root = tmp_path
+    bob_with_graph.task_configs[target_task] = {"output_dir" : "/path/to/output_dir"}
+    bob_with_graph.remove_task_output_dir_until(target_task)
+
+    assert mock_remove_task_output_dir.call_count == 1
 
 @patch("subprocess.Popen")
 @patch("pathlib.Path.is_dir", return_value = True)
@@ -1559,3 +1673,168 @@ def test_build_command_generates_output_file(mock_is_dir, mock_popen):
 
         # Now check that the expected file "exists" after the build (via mock)
         assert output_file.exists()
+
+@pytest.fixture
+def sample_bob_instance_for_task_names_regex_find():
+    """Fixture providing a Bob object with sample task_configs, for using regex to find tasks"""
+    mock_logger = MagicMock()
+    bob_instance = Bob(mock_logger)
+    bob_instance.task_configs = {
+        "build_app" : {},
+        "test_app" : {},
+        "deploy_prod": {},
+        "cleanup" : {},
+        "integration_tests": {},
+        "test_runner": {},
+    }
+    return bob_instance
+
+def test_get_task_names_by_regex_single_literal_string(sample_bob_instance_for_task_names_regex_find):
+    """Test that it returns task names with literal strings"""
+    result = sample_bob_instance_for_task_names_regex_find.get_task_names_by_regex(["build_app"])
+    assert result == {"build_app"}
+
+def test_get_task_names_by_regex_multiple_start_regex_strings(sample_bob_instance_for_task_names_regex_find):
+    """ Test that it returns muliple task_names which all start with the same pattern"""
+    result = sample_bob_instance_for_task_names_regex_find.get_task_names_by_regex(["^test"])
+    assert result == {"test_app", "test_runner"}
+
+def test_get_task_names_by_regex_multiple_end_regex_strings(sample_bob_instance_for_task_names_regex_find):
+    """ Test that it returns muliple task_names which all end with the same pattern"""
+    result = sample_bob_instance_for_task_names_regex_find.get_task_names_by_regex(["app$"])
+    assert result == {"build_app", "test_app"}
+
+def test_get_task_names_by_regex_invalid_regex_as_literal(sample_bob_instance_for_task_names_regex_find):
+    """Test that invalid regex are treated as literal strings"""
+    result = sample_bob_instance_for_task_names_regex_find.get_task_names_by_regex(["("])
+    assert result == set()
+
+def test_get_task_names_by_regex_no_matches(sample_bob_instance_for_task_names_regex_find):
+    """Test that it returns empty set when there is no match of a literal string"""
+    result = sample_bob_instance_for_task_names_regex_find.get_task_names_by_regex(["nonexistent_task"])
+    assert result == set()
+    sample_bob_instance_for_task_names_regex_find.logger.info.assert_called_once_with("No tasks matched for pattern or literal: 'nonexistent_task'")
+
+def test_get_task_names_by_regex_mix_literals_and_regex(sample_bob_instance_for_task_names_regex_find):
+    """Test that it returns correct task_names when there is a mix of literal and regex matches"""
+    result = sample_bob_instance_for_task_names_regex_find.get_task_names_by_regex(["cleanup", "^build", "nomatch"])
+    assert result == {"cleanup", "build_app"}
+
+def test_get_task_names_by_regex_multiple_matches(sample_bob_instance_for_task_names_regex_find):
+    """Test regex matches substrings within task names"""
+    result = sample_bob_instance_for_task_names_regex_find.get_task_names_by_regex(["test"])
+    assert result == {"test_app", "integration_tests", "test_runner"}
+    result = sample_bob_instance_for_task_names_regex_find.get_task_names_by_regex(["app"])
+    assert result == {"build_app", "test_app"}
+    result = sample_bob_instance_for_task_names_regex_find.get_task_names_by_regex(["app", "^test"])
+    assert result == {"build_app", "test_runner", "test_app"}
+
+def test_get_task_names_by_regex_blank_string_pattern(sample_bob_instance_for_task_names_regex_find):
+    """Test that empty str is handled without returning all task_names"""
+    result = sample_bob_instance_for_task_names_regex_find.get_task_names_by_regex([""])
+    # None of the task names are an empty string
+    assert result == set()
+
+def test_get_task_names_by_regex_overlapping_regex_patterns(sample_bob_instance_for_task_names_regex_find):
+    """Test that overlapping regex patterns only return entries once"""
+    result = sample_bob_instance_for_task_names_regex_find.get_task_names_by_regex(["test", "runner"])
+    # 'test_runner' matches both, but should appear only once
+    assert result == {"test_app", "integration_tests", "test_runner"}
+
+def test_list_tasks_all_tasks(sample_bob_instance_for_task_names_regex_find, capsys):
+    """Test that it prints all tasks onto the terminal when list_all_tasks=True"""
+    sample_bob_instance_for_task_names_regex_find.list_tasks(True, [])
+
+    # Capture printed output
+    captured = capsys.readouterr()
+
+    # Extract stdout
+    output = captured.out.strip()
+
+    # Verify that header and all task names appear in the output
+    assert output.startswith("Tasks:")
+    for task_name in sample_bob_instance_for_task_names_regex_find.task_configs.keys():
+        assert task_name in output, f"Expected task '{task_name}' to appear in output"
+
+    # Optionally ensure there are no unexpected missing or extra lines
+    lines = [line.strip() for line in output.splitlines() if line.strip()]
+    # First line should be "Tasks:"
+    assert lines[0] == "Tasks:"
+    # The rest should match exactly the task names
+    assert set(lines[1:]) == set(sample_bob_instance_for_task_names_regex_find.task_configs.keys())
+
+def test_list_tasks_regex_filter(sample_bob_instance_for_task_names_regex_find, capsys):
+    """Test that list_tasks prints only regex-matched tasks when list_all_tasks=False"""
+    bob_instance = sample_bob_instance_for_task_names_regex_find
+
+    # Mock get_task_names_by_regex to simulate regex filtering
+    mocked_task_list = ["test_app", "test_runner"]
+    bob_instance.get_task_names_by_regex = MagicMock(return_value=mocked_task_list)
+
+    # Call list_tasks with list_all_tasks=False
+    bob_instance.list_tasks(False, [".*_test.*"])
+
+    # Capture printed output
+    captured = capsys.readouterr()
+    output = captured.out.strip()
+
+    # Assert get_task_names_by_regex was called correctly
+    bob_instance.get_task_names_by_regex.assert_called_once_with([ ".*_test.*" ])
+
+    # Check that the output contains only the mocked tasks
+    assert output.startswith("Tasks:")
+    for task_name in mocked_task_list:
+        assert task_name in output, f"Expected task '{task_name}' to appear in output"
+
+    # Ensure non-matching tasks are NOT in the output
+    non_matching_tasks = set(bob_instance.task_configs.keys()) - set(mocked_task_list)
+    for task_name in non_matching_tasks:
+        assert task_name not in output, f"Unexpected task '{task_name}' found in output"
+
+def test_list_tasks_exact_task_name(sample_bob_instance_for_task_names_regex_find, capsys):
+    """Test that list_tasks prints exactly the given task when list_all_tasks=False and exact name is provided"""
+    bob_instance = sample_bob_instance_for_task_names_regex_find
+
+    # Pretend user asked for an exact match: "cleanup"
+    requested_task = "cleanup"
+
+    # Mock get_task_names_by_regex to return exactly that task
+    bob_instance.get_task_names_by_regex = MagicMock(return_value=[requested_task])
+
+    # Call list_tasks with list_all_tasks=False
+    bob_instance.list_tasks(False, [requested_task])
+
+    # Capture printed output
+    captured = capsys.readouterr()
+    output = captured.out.strip()
+
+    # Verify get_task_names_by_regex was called correctly
+    bob_instance.get_task_names_by_regex.assert_called_once_with([requested_task])
+
+    # Output should include only that task
+    assert output.startswith("Tasks:")
+    assert requested_task in output
+    # Ensure no other tasks are printed
+    other_tasks = set(bob_instance.task_configs.keys()) - {requested_task}
+    for other in other_tasks:
+        assert other not in output, f"Unexpected task '{other}' found in output"
+
+def test_list_tasks_empty_regex_list(sample_bob_instance_for_task_names_regex_find, capsys):
+    """Test that list_tasks handles an empty regex_task_names list correctly when list_all_tasks=False"""
+    bob_instance = sample_bob_instance_for_task_names_regex_find
+
+    # Mock get_task_names_by_regex to return an empty list
+    bob_instance.get_task_names_by_regex = MagicMock(return_value=[])
+
+    # Call list_tasks with list_all_tasks=False and an empty regex list
+    bob_instance.list_tasks(False, [])
+
+    # Capture printed output
+    captured = capsys.readouterr()
+    output = captured.out.strip()
+
+    # Verify the mock was called with an empty list
+    bob_instance.get_task_names_by_regex.assert_called_once_with([])
+
+    # Output should include "Tasks:" header but no task names
+    assert output.startswith("No matched tasks with regex task name patterns: [].")

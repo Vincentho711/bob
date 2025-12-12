@@ -1,9 +1,10 @@
 task_name: tb_hello_world_top
 task_type: verilator_tb_compile
 top_module: hello_world_top
-include_headers_from_tasks:
-  - "verification_utils"
-  - "verification_lib"
+include_header_dirs:
+  - "$(get_task_dir(verification_lib))/core"
+  - "$(get_task_dir(verification_lib))/coverage"
+  - "$(get_task_dir(verification_utils))"
   # - "tb_verification_framework"
 rtl_src_files:
   - "{@input:hello_world_top_verilate:*}"
@@ -18,7 +19,6 @@ tb_cpp_src_files:
 tb_header_src_files: # Although not used in verilator.mk, we need to register them as source files to work out whether to rebuild
   - adder_verification/adder_transaction.h
   - adder_verification/adder_checker.h
-  - adder_verification/adder_checker_impl.h
   - adder_verification/adder_driver.h
   - adder_verification/adder_simulation_context.h
   - adder_verification/adder_monitor.h

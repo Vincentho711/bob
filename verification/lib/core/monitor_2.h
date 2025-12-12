@@ -1,7 +1,8 @@
-#ifndef MONITOR_H
-#define MONITOR_H
+#ifndef MONITOR_2_H
+#define MONITOR_2_H
 
 #include <iostream>
+#include <chrono>
 #include "transaction.h"
 #include "simulation_context.h"
 
@@ -101,7 +102,7 @@ private:
 
 template<typename DUT_TYPE, typename TXN_TYPE>
 BaseMonitor<DUT_TYPE, TXN_TYPE>::BaseMonitor(const std::string& name, DutPtr dut, SimulationContextPtr ctx)
-    : name_(name), dut_(dut), ctx_(ctx), debug_enabled_(false) {
+    : name_(name), dut_(dut), ctx_(ctx), debug_enabled_(true) {
     if (!dut_) {
         throw std::invalid_argument("DUT pointer cannot be null");
     }

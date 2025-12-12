@@ -58,10 +58,10 @@ std::string AdderTransaction::convert2string() const {
     std::ostringstream oss;
     if (this->kind_ == Kind::Expected) {
       oss << get_type_name() << " [" << get_name() << "] (ID: " << get_transaction_id() << ")"
-          << " - cycle=" << +get_cycle() << " - a=" << +get_a() << ", b=" << get_b();
+          << " - cycle=" << +get_cycle() << " - a=" << +get_a() << ", b=" << +get_b();
     } else {
       oss << get_type_name() << " [" << get_name() << "] (ID: " << get_transaction_id() << ")"
-          << " - cycle=" << +get_cycle() << " - result=" << get_result();
+          << " - cycle=" << +get_cycle() << " - result=" << +get_result();
     }
     return oss.str();
 }

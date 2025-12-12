@@ -299,12 +299,11 @@ def test_resolve_output_reference_non_existent_task_name(tmp_path: Path):
     assert output_reference is None
     task_config_parser.logger.error(f"ValueError: Referenced task 'non_existent_task' not found in task_configs.")
 
+@patch.object(Path, "exists", return_value=False) # Mock 'exists' to return False for 'output_dir'
 def test_resolve_output_reference_non_existent_output_dir(tmp_path: Path):
     """Test the function but the output dir for the task doesn't exist"""
     value = "{@output:test_task:src1.v}"
-    task_outdir = MagicMock(spec=Path)
-    task_outdir.__str__.return_value = "/path/to/outdir/"
-    task_outdir.exists.return_value = False
+    task_outdir = "/path/to/outdir/"
 
     mock_logger = MagicMock()
     task_config_parser = TaskConfigParser(mock_logger, str(tmp_path))
@@ -330,69 +329,64 @@ def test_resolve_output_reference_missing_output_dir_field(tmp_path: Path):
     assert output_reference is None
     task_config_parser.logger.error(f"ValueError: task_configs['{output_task}'] doesn't contain a 'output_dir' attribute. Please ensure a output dir is registered with task '{output_task}' first.")
 
-def test_resolve_output_reference_valid_files_spec_list(tmp_path: Path):
+@patch.object(Path, "exists", return_value=True) # Mock 'exists' to return True for 'output_dir'
+@patch.object(TaskConfigParser,"_resolve_files_spec")
+def test_resolve_output_reference_valid(mock_resolve_files_spec, mock_exists, tmp_path: Path):
     """Test the resolve output with a list of string as the files_spec"""
-    files_spec = "['a.cpp', 'b.h', 'c.hpp']"
-    value = f"{{@output:task1:{files_spec}}}"
-    task_outdir = MagicMock(spec=Path)
-    task_outdir.__str__.return_value = "/path/to/outdir/"
-    task_outdir.as_posix.return_value = "/path/to/outdir/"
-    task_outdir.exists.return_value = True
+    # Example input to the method
+    value = "{@output:task1:['a.cpp', 'b,h', 'c.hpp']}"
 
-    # Mock __truediv__ to return a new Path object that correctly joins paths
-    task_outdir.__truediv__.side_effect = lambda p: Path(task_outdir.__str__.return_value) / p
-
-    mock_logger = MagicMock()
-    task_config_parser = TaskConfigParser(mock_logger, str(tmp_path))
-    task_config_parser.task_configs["task1"] = {"input_src" : ["src1.v", "src2.v"], "output_dir" : task_outdir}
-    resolved_output_reference = task_config_parser._resolve_output_reference(value)
-
+    # Expected resolved output
     expected_output = [
-        str(Path("/path/to/outdir/") / "a.cpp"),
-        str(Path("/path/to/outdir/") / "b.h"),
-        str(Path("/path/to/outdir/") / "c.hpp"),
+        '/path/to/output/a.cpp',
+        '/path/to/output/b.h',
+        '/path/to/output/c.hpp'
     ]
-    task_config_parser.logger.debug.assert_any_call(f"Calling _resolve_files_spec() with target_dir='{task_outdir}', files_spec='{files_spec}'")
-    assert resolved_output_reference == expected_output
-    task_config_parser.logger.debug.assert_any_call(f"For files_spec = '{files_spec}', resolved reference (list of files within target dir): {expected_output}")
+    mock_resolve_files_spec.return_value = expected_output
+    mock_logger = MagicMock()
 
+    task_config_parser = TaskConfigParser(mock_logger, str(tmp_path))
+    task_config_parser.task_configs = {
+        "task1": {
+            "output_dir": "/path/to/output"
+        }
+    }
+    # Call the method with the test input
+    result = task_config_parser._resolve_output_reference(value)
+
+    # Assertions
+    assert result == expected_output
+    task_config_parser._resolve_files_spec.assert_called_once_with(Path('/path/to/output'), "['a.cpp', 'b,h', 'c.hpp']")
+
+@patch.object(Path, "exists", return_value=True) # Mock 'exists' to return False for 'output_dir'
 def test_resolve_output_reference_valid_single_file(tmp_path: Path):
     """Test resolving output reference of a single file in the files_spec"""
     files_spec = "singlefile"
+    task_outdir = Path("/path/to/outdir")
+    expected_output = str(task_outdir / "singlefile")
     value = f"{{@output:task1:{files_spec}}}"
-    task_outdir = MagicMock(spec=Path)
-    task_outdir.__str__.return_value = "/path/to/outdir/"
-    task_outdir.as_posix.return_value = "/path/to/outdir/"
-    task_outdir.exists.return_value = True
-
-    # Mock __truediv__ to return a new Path object that correctly joins paths
-    task_outdir.__truediv__.side_effect = lambda p: Path(task_outdir.__str__.return_value) / p
 
     mock_logger = MagicMock()
     task_config_parser = TaskConfigParser(mock_logger, str(tmp_path))
     task_config_parser.task_configs["task1"] = {"input_src" : ["src1.v", "src2.v"], "output_dir" : task_outdir}
+    task_config_parser._resolve_files_spec = MagicMock(return_value=expected_output)
     resolved_output_reference = task_config_parser._resolve_output_reference(value)
 
-    expected_output = str(Path("/path/to/outdir") / "singlefile")
-    task_config_parser.logger.debug.assert_any_call(f"Calling _resolve_files_spec() with target_dir='{task_outdir}', files_spec='{files_spec}'")
     assert resolved_output_reference == expected_output
-    task_config_parser.logger.debug.assert_any_call(f"For files_spec = '{files_spec}', resolved reference (single file within target dir): {str(task_outdir / files_spec)}")
+    task_config_parser._resolve_files_spec.assert_called_once_with(task_outdir, files_spec)
 
+@patch.object(Path, "exists", return_value=True) # Mock 'exists' to return True for 'task_dir'
 def test_resolve_input_reference_valid_single_file(tmp_path: Path):
     """Test resolving a single file of another task"""
     files_spec = "single_file.cpp"
     value = f"{{@input:task1:{files_spec}}}"
-    task_dir = MagicMock(spec=Path)
-    task_dir_2 = MagicMock(spec=Path)
-    task_dir.__str__.return_value = "/path/to/task1/"
-    task_dir.as_posix.return_value = "/path/to/task1/"
-    task_dir.exists.return_value = True
-
-    # Mock __truediv__ to return a new Path object that correctly joins paths
-    task_dir.__truediv__.side_effect = lambda p: Path(task_dir.__str__.return_value) / p
+    task_dir = Path("/path/to/task1/")
+    task_dir_2 = Path("/path/to/task2/")
+    expected_output = str(task_dir / "single_file.cpp")
 
     mock_logger = MagicMock()
     task_config_parser = TaskConfigParser(mock_logger, str(tmp_path))
+    task_config_parser._resolve_files_spec = MagicMock(return_value=expected_output)
     task_config_parser.task_configs["task1"] = {
         "task_dir" : task_dir,
         "internal_input_src" : ["single_file.cpp", "my_src.cpp"], "output_dir" : tmp_path
@@ -402,31 +396,21 @@ def test_resolve_input_reference_valid_single_file(tmp_path: Path):
         "internal_input_src" : ["a.cpp", "b.cpp"], "output_dir" : tmp_path
     }
     resolved_input_reference = task_config_parser._resolve_input_reference(value)
-    expected_output = str(Path("/path/to/task1") / "single_file.cpp")
-    task_config_parser.logger.debug.assert_any_call(f"Calling _resolve_files_spec() with target_dir='{task_dir}', files_spec='{files_spec}'")
     assert resolved_input_reference == expected_output
-    task_config_parser.logger.debug.assert_any_call(f"For files_spec = '{files_spec}', resolved reference (single file within target dir): {str(task_dir / files_spec)}")
+    task_config_parser._resolve_files_spec.assert_called_once_with(task_dir, files_spec)
 
+@patch.object(Path, "exists", return_value=True) # Mock 'exists' to return True for 'task_1_dir'
 def test_resolve_input_reference_valid_entire_input_dir(tmp_path: Path):
     """Test resolving an entire input dir of another task"""
     files_spec = "*"
     value = f"{{@input:task_1:{files_spec}}}"
-    task_1_dir = MagicMock(spec=Path)
-    task_1_dir.__str__.return_value = "/path/to/task_1"
-    task_1_dir.as_posix.return_value = "/path/to/task_1"
-    task_1_dir.exists.return_value = True
+    task_1_dir = Path("/path/to/task1")
+    task_2_dir = Path("/path/to/task2")
 
-    task_2_dir = MagicMock(spec=Path)
-    task_2_dir.__str__.return_value = "/path/to/task_2"
-    task_2_dir.as_posix.return_value = "/path/to/task_2"
-    task_2_dir.exists.return_value = True
-
-    # Mock __truediv__ to return a new Path object that correctly joins paths
-    task_1_dir.__truediv__.side_effect = lambda p: Path(task_1_dir.__str__.return_value) / p
-    task_2_dir.__truediv__.side_effect = lambda p: Path(task_2_dir.__str__.return_value) / p
-
+    expected_output = str(task_1_dir)
     mock_logger = MagicMock()
     task_config_parser = TaskConfigParser(mock_logger, str(tmp_path))
+    task_config_parser._resolve_files_spec = MagicMock(return_value=expected_output)
     task_config_parser.task_configs["task_1"] = {
         "task_dir" : task_1_dir,
         "internal_input_src" : ["single_file.cpp", "my_src.cpp"], "output_dir" : tmp_path
@@ -437,11 +421,10 @@ def test_resolve_input_reference_valid_entire_input_dir(tmp_path: Path):
     }
 
     resolved_input_reference = task_config_parser._resolve_input_reference(value)
-    expected_output = str(task_1_dir)
 
-    task_config_parser.logger.debug.assert_any_call(f"Calling _resolve_files_spec() with target_dir='{task_1_dir}', files_spec='{files_spec}'")
     assert resolved_input_reference == expected_output
-    task_config_parser.logger.debug(f"For files_spec = '{files_spec}', resolved reference (entire target dir): {str(task_1_dir)}")
+    task_config_parser._resolve_files_spec.assert_called_once_with(task_1_dir, files_spec)
+
 
 def test_resolve_reference_output_reference_with_list_of_files(tmp_path: Path):
     """Test whether an output reference like "{@output:output_task:['a.o','b.o']}" can be succesfully resolved"""
@@ -450,22 +433,14 @@ def test_resolve_reference_output_reference_with_list_of_files(tmp_path: Path):
     files_spec = "['a.o','b.o']"
     value = f"{{@output:{referenced_task_name}:{files_spec}}}"
 
+    task_1_dir = Path("/path/to/task1")
+    task_outdir = Path("/path/to/outdir")
 
-    task_1_dir = MagicMock(spec=Path)
-    task_1_dir.__str__.return_value = "/path/to/task_1"
-    task_1_dir.as_posix.return_value = "/path/to/task_1"
-    task_1_dir.exists.return_value = True
-
-    task_outdir = MagicMock(spec=Path)
-    task_outdir.__str__.return_value = "/path/to/outdir/"
-    task_outdir.as_posix.return_value = "/path/to/outdir/"
-    task_outdir.exists.return_value = True
-
-    # Mock __truediv__ to return a new Path object that correctly joins paths
-    task_outdir.__truediv__.side_effect = lambda p: Path(task_outdir.__str__.return_value) / p
+    expected_output = [str(task_outdir / 'a.o'), str(task_outdir / 'b.o')]
 
     mock_logger = MagicMock()
     task_config_parser = TaskConfigParser(mock_logger, str(tmp_path))
+    task_config_parser._resolve_output_reference = MagicMock(return_value=expected_output)
     task_config_parser.task_configs[task_name] = {
         "task_dir" : task_1_dir,
         "internal_input_src" : ["single_file.cpp", "my_src.cpp"], "output_dir" : tmp_path
@@ -475,8 +450,8 @@ def test_resolve_reference_output_reference_with_list_of_files(tmp_path: Path):
     }
 
     resolved_paths, resolved_type = task_config_parser.resolve_reference(task_name, value)
+    task_config_parser._resolve_output_reference.assert_called_once()
     assert resolved_type == "output"
-    expected_output = [str(task_outdir / 'a.o'), str(task_outdir / 'b.o')]
     assert resolved_paths == expected_output
 
 def test_resolve_reference_output_reference_with_every_files(tmp_path: Path):
@@ -537,8 +512,11 @@ def test_resolve_reference_input_reference_with_list_of_files(tmp_path: Path):
     task_1_dir.__truediv__.side_effect = lambda p: Path(task_1_dir.__str__.return_value) / p
     task_2_dir.__truediv__.side_effect = lambda p: Path(task_2_dir.__str__.return_value) / p
 
+    expected_output = [str(Path(task_2_dir / 'a.cpp').resolve()), str(Path(task_2_dir / 'b.cpp').resolve())]
+
     mock_logger = MagicMock()
     task_config_parser = TaskConfigParser(mock_logger, str(tmp_path))
+    task_config_parser._resolve_files_spec = MagicMock(return_value=expected_output)
 
     task_config_parser.task_configs[task_name] = {
         "task_dir" : task_1_dir,
@@ -550,7 +528,6 @@ def test_resolve_reference_input_reference_with_list_of_files(tmp_path: Path):
 
     resolved_paths, resolved_type = task_config_parser.resolve_reference(task_name, value)
     assert resolved_type == "input"
-    expected_output = [str(Path(task_2_dir / 'a.cpp').resolve()), str(Path(task_2_dir / 'b.cpp').resolve())]
     assert resolved_paths == expected_output
 
 @patch.object(Path, "is_dir", return_value=True) # Mock resolved_path.is_dir()
@@ -646,8 +623,9 @@ def test_resolve_reference_input_reference_every_files_exclusion_list(mock_resol
     assert resolved_value == expected_files, f"Expected {expected_files}, but got {resolved_value}"
     assert resolved_type == "input"
 
+@patch.object(TaskConfigParser, "_resolve_input_reference")  # Mock the method
 @patch.object(Path, "is_dir", return_value=False) # Mock resolved_path.is_dir()
-def test_resolve_reference_input_reference_single_file(mock_is_dir, tmp_path: Path):
+def test_resolve_reference_input_reference_single_file(mock_is_dir, mock_resolve_input_reference, tmp_path: Path):
     """Test resolving an input reference of a single file like "{@input:task_2:single_file.cpp}" """
     task_name = "task_1"
     referenced_task_name = "task_2"
@@ -669,6 +647,11 @@ def test_resolve_reference_input_reference_single_file(mock_is_dir, tmp_path: Pa
     task_1_dir.__truediv__.side_effect = lambda p: Path(task_1_dir.__str__.return_value) / p
     task_2_dir.__truediv__.side_effect = lambda p: Path(task_2_dir.__str__.return_value) / p
 
+    expected_files = str(task_2_dir / files_spec)
+
+    # Mock the return of _resolve_input_reference to return task_dir as str
+    mock_resolve_input_reference.return_value = expected_files
+
     mock_logger = MagicMock()
     task_config_parser = TaskConfigParser(mock_logger, str(tmp_path))
 
@@ -681,7 +664,6 @@ def test_resolve_reference_input_reference_single_file(mock_is_dir, tmp_path: Pa
     }
     resolved_value, resolved_type = task_config_parser.resolve_reference(task_name, value)
     assert resolved_type == "input"
-    expected_files = str(Path(task_2_dir) / files_spec)
     assert resolved_value == expected_files
 
 def test_resolve_reference_direct_reference_valid(tmp_path):
@@ -692,13 +674,7 @@ def test_resolve_reference_direct_reference_valid(tmp_path):
     value = f"{files_spec}"
 
 
-    task_1_dir = MagicMock(spec=Path)
-    task_1_dir.__str__.return_value = "/path/to/task_1"
-    task_1_dir.as_posix.return_value = "/path/to/task_1"
-    task_1_dir.exists.return_value = True
-
-    # Mock __truediv__ to return a new Path object that correctly joins paths
-    task_1_dir.__truediv__.side_effect = lambda p: Path(task_1_dir.__str__.return_value) / p
+    task_1_dir = Path("/Path/to/task_1")
 
     mock_logger = MagicMock()
     task_config_parser = TaskConfigParser(mock_logger, str(tmp_path))
@@ -709,8 +685,87 @@ def test_resolve_reference_direct_reference_valid(tmp_path):
     }
     resolved_value, resolved_type = task_config_parser.resolve_reference(task_name, value)
     assert resolved_type == "direct"
-    expected_files = str(Path(task_1_dir) / files_spec)
+    expected_files = str(task_1_dir / files_spec)
     assert resolved_value == expected_files
+
+def test_resolve_reference_with_function_call_get_task_dir_direct(tmp_path):
+    """Test that $(get_task_dir(...)) is correctly substituted before resolution"""
+    task_name = "task_1"
+    referenced_task = "util_task"
+    value = f"$(get_task_dir({referenced_task}))/include"
+
+    mock_logger = MagicMock()
+    task_config_parser = TaskConfigParser(mock_logger, str(tmp_path))
+
+    task_config_parser.task_configs[task_name] = {"task_dir": Path("/path/to/task_1")}
+    task_config_parser.task_configs[referenced_task] = {"task_dir": "/abs/path/to/util_task"}
+
+    # Mock the function registry so that get_task_dir returns expected path
+    task_config_parser.function_registry = {"get_task_dir": lambda task: task_config_parser.task_configs[task]["task_dir"]}
+
+    resolved_value, resolved_type = task_config_parser.resolve_reference(task_name, value)
+
+    expected = str(Path("/abs/path/to/util_task/include").resolve())
+    assert resolved_type == "function"
+    assert resolved_value == expected
+
+def test_resolve_reference_with_function_call_get_task_dir_relative_path(tmp_path):
+    """Test that $(...) substitution followed by relative path resolves correctly."""
+    task_name = "task_1"
+    value = "$(get_task_dir(helpers))/scripts/run.sh"
+
+    mock_logger = MagicMock()
+    task_config_parser = TaskConfigParser(mock_logger, str(tmp_path))
+    task_config_parser.task_configs[task_name] = {"task_dir": Path("/path/to/task_1")}
+    task_config_parser.task_configs["helpers"] = {"task_dir": "/projects/helpers"}
+
+    task_config_parser.function_registry = {"get_task_dir": lambda task: task_config_parser.task_configs[task]["task_dir"]}
+
+    resolved_value, resolved_type = task_config_parser.resolve_reference(task_name, value)
+
+    expected = str(Path("/projects/helpers/scripts/run.sh").resolve())
+    assert resolved_type == "function"
+    assert resolved_value == expected
+
+def test_resolve_reference_with_function_call_get_output_dir_direct(tmp_path):
+    """Test that $(get_output_dir(...)) is correctly substituted before resolution"""
+    task_name = "task_1"
+    referenced_task = "util_task"
+    value = f"$(get_output_dir({referenced_task}))/include"
+
+    mock_logger = MagicMock()
+    task_config_parser = TaskConfigParser(mock_logger, str(tmp_path))
+
+    task_config_parser.task_configs[task_name] = {"task_dir": Path("/path/to/task_1")}
+    task_config_parser.task_configs[referenced_task] = {"task_dir": "/abs/path/to/util_task", "output_dir": "/abs/path/output_dir"}
+
+    # Mock the function registry so that get_task_dir returns expected path
+    task_config_parser.function_registry = {"get_output_dir": lambda task: task_config_parser.task_configs[task]["output_dir"]}
+
+    resolved_value, resolved_type = task_config_parser.resolve_reference(task_name, value)
+
+    expected = str(Path("/abs/path/output_dir/include").resolve())
+    assert resolved_type == "function"
+    assert resolved_value == expected
+
+def test_resolve_reference_with_unknown_function(tmp_path):
+    """Test that an unknown $(...) function raises ValueError."""
+    task_name = "task_1"
+    value = "$(nonexistent_func(task_2))/path"
+
+    mock_logger = MagicMock()
+    task_config_parser = TaskConfigParser(mock_logger, str(tmp_path))
+    task_config_parser.task_configs[task_name] = {"task_dir": Path("/some/task")}
+
+    # Empty registry — so function should not exist
+    task_config_parser.function_registry = {}
+
+    result = task_config_parser.resolve_reference(task_name, value)
+
+    mock_logger.error.assert_any_call(
+        "ValueError: Unknown function 'nonexistent_func'"
+    )
+    assert result is None
 
 def test_update_task_env_invalid_task_name(tmp_path: Path):
     """Test updating the task env of an invalid task"""

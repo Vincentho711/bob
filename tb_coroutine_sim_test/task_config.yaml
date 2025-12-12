@@ -1,0 +1,12 @@
+task_name: tb_coroutine_sim_test
+task_type: verilator_tb_compile
+top_module: hello_world_top
+include_header_dirs:
+  - "$(get_task_dir(simulation_lib))/core"
+rtl_src_files:
+  - "{@input:hello_world_top_verilate:*}"
+tb_cpp_src_files:
+  - "tb_coroutine_sim_test.cpp"
+external_objects:
+  - "{@output:simulation_lib:lib_simulation_lib.a}"
+output_executable: tb_coroutine_sim_test.out

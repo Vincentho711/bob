@@ -30,10 +30,17 @@ tasks:
   hello_world_top_verilate:
     depends_on: []
 
-  verification_lib:
+  dual_port_ram_verilate:
     depends_on: []
 
+  verification_lib:
+    depends_on:
+      - simulation_lib
+
   verification_utils:
+    depends_on: []
+
+  simulation_lib:
     depends_on: []
 
   tb_hello_world_top:
@@ -41,6 +48,15 @@ tasks:
       - verification_lib
       - verification_utils
       - tb_verification_framework
+
+  tb_coroutine_sim_test:
+    depends_on:
+      - simulation_lib
+
+  tb_dual_port_ram:
+    depends_on:
+      - simulation_lib
+      - dual_port_ram_verilate
 
   # hello_world:
   #   # script: build_scripts/fpga_build.tcl

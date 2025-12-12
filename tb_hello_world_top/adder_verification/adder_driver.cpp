@@ -3,14 +3,14 @@
 
 // Constructor with default configuration
 AdderDriver::AdderDriver(const std::string& name, DutPtr dut, AdderSimulationContextPtr ctx)
-    : Base(name, dut, ctx), ctx_(ctx), config_(Config{}) {
+    : Base(name, dut, ctx), ctx_(ctx), config_(AdderDriverConfig{}) {
     current_inputs_ = {0, 0, 0, false};
     reset();
     log_info("AdderDriver initialized with pipeline depth " + std::to_string(config_.pipeline_depth));
 }
 
 // Constructor with custom configuration
-AdderDriver::AdderDriver(const std::string& name, DutPtr dut, AdderSimulationContextPtr ctx, const Config& config)
+AdderDriver::AdderDriver(const std::string& name, DutPtr dut, AdderSimulationContextPtr ctx, const AdderDriverConfig& config)
     : Base(name, dut, ctx), ctx_(ctx), config_(config) {
     current_inputs_ = {0, 0, 0, false};
     reset();
@@ -62,9 +62,9 @@ void AdderDriver::set_idle_values(uint8_t a, uint8_t b) {
     log_debug("Set idle values: a=" + std::to_string(a) + ", b=" + std::to_string(b));
 }
 
-void AdderDriver::update_config(const Config& new_config) {
+void AdderDriver::update_config(const AdderDriverConfig& new_config) {
     config_ = new_config;
-    log_info("Configuration updated");
+    log_info("AdderDriverConfiguration updated");
 }
 
 void AdderDriver::reset() {
@@ -164,17 +164,17 @@ void AdderDriver::print_report() const {
     std::cout << "\n" << std::string(50, '=') << std::endl;
     std::cout << "ADDER DRIVER REPORT: " << get_name() << std::endl;
     std::cout << std::string(50, '=') << std::endl;
-    
+
     // Base driver statistics
     const auto& base_stats = get_stats();
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(
         base_stats.last_activity - base_stats.start_time);
-    
+
     std::cout << "Base Driver Statistics:" << std::endl;
     std::cout << "  Total Transactions: " << base_stats.transactions_driven << std::endl;
     std::cout << "  Active Cycles: " << base_stats.cycles_active << std::endl;
     std::cout << "  Runtime: " << duration.count() << " ms" << std::endl;
-    
+
     // Adder-specific statistics
     std::cout << "\nAdder-Specific Statistics:" << std::endl;
     std::cout << "  Corner Cases: " << adder_stats_.corner_cases_driven << std::endl;
@@ -182,7 +182,7 @@ void AdderDriver::print_report() const {
     std::cout << "  Directed Cases: " << adder_stats_.directed_cases_driven << std::endl;
     std::cout << "  Idle Cycles: " << adder_stats_.idle_cycles_driven << std::endl;
     std::cout << "  Validation Failures: " << adder_stats_.validation_failures << std::endl;
-    
+
     // Current state
     std::cout << "\nCurrent State:" << std::endl;
     if (current_inputs_.valid) {
@@ -192,15 +192,15 @@ void AdderDriver::print_report() const {
     } else {
         std::cout << "  Last Inputs: None" << std::endl;
     }
-    
+
     std::cout << "  Pending Transactions: " << pending_count() << std::endl;
-    
+
     // Configuration
     std::cout << "\nConfiguration:" << std::endl;
     std::cout << "  Input Validation: " << (config_.enable_input_validation ? "Enabled" : "Disabled") << std::endl;
     std::cout << "  Pipeline Tracking: " << (config_.enable_pipeline_tracking ? "Enabled" : "Disabled") << std::endl;
     std::cout << "  Pipeline Depth: " << config_.pipeline_depth << std::endl;
     std::cout << "  Idle Values: a=" << +config_.idle_value_a << ", b=" << +config_.idle_value_b << std::endl;
-    
+
     std::cout << std::string(50, '=') << std::endl;
 }

@@ -1,12 +1,13 @@
 from io import TextIOWrapper
 from pathlib import Path
 from typing import Any, Dict
-from networkx import DiGraph, topological_sort, is_directed_acyclic_graph
+from networkx import DiGraph, topological_sort, is_directed_acyclic_graph, ancestors
 from toolConfigParser.ToolConfigParser import ToolConfigParser
 from ipConfigParser.IpConfigParser import IpConfigParser
 from taskConfigParser.TaskConfigParser import TaskConfigParser
 import os
 import sys
+import re
 import yaml
 import subprocess
 import multiprocessing
@@ -208,6 +209,24 @@ class Bob:
             self.logger.critical(f"Unexpected error during discover_tasks(): {e}", exc_info=True)
             sys.exit(1)
 
+    def list_tasks(self, list_all_tasks: bool, regex_task_names: list[str]) -> None:
+        if not self.task_configs:
+            raise ValueError(f"Task configs is empty. Please ensure that it is populated first.")
+        all_task_names = self.task_configs.keys()
+        tasks_to_be_shown = []
+        if list_all_tasks:
+            tasks_to_be_shown = all_task_names
+        else:
+            tasks_to_be_shown = self.get_task_names_by_regex(regex_task_names)
+
+        if len(tasks_to_be_shown):
+            print(f"Tasks:\n  " + "\n  ".join(tasks_to_be_shown))
+        else:
+            if list_all_tasks:
+                print(f"No tasks defined.")
+            else:
+                print(f"No matched tasks with regex task name patterns: {regex_task_names}.")
+
     def setup_build_dirs(self) -> None:
         """Create a dedicated build directory for each task under proj_root/build/."""
         try:
@@ -226,27 +245,100 @@ class Bob:
             self.logger.critical(f"Unexpected  error during setup_build_dirs(): {e}", exc_info=True)
             sys.exit(1)
 
-    def remove_task_build_dirs(self, task_names: list[str]) -> int:
-        """Remove the build dirs for multiple tasks, return the number of task build dirs deleted"""
+    def get_task_names_by_regex(self, regex_task_names: list[str]) -> set[str]:
+        """Check whether each regex_task_names is a valid regex pattern or str, then return a set of all the matched patterns within the all_task_names dict using regex"""
+        if not self.task_configs:
+            self.logger.debug(f"Task configs dict is empty")
+            return set()
+
+        all_task_names = self.task_configs.keys()
+        matched_tasks = set()
+
+        for regex_name in regex_task_names:
+            if not isinstance(regex_name, str):
+                raise TypeError(f"Each regex_task_name must be a string, got regex_name={regex_name} which is a {type(regex_name)}.")
+            # Handle empty str explicitly
+            if regex_name.strip() == "":
+                self.logger.info("Empty or whitespace-only pattern provided — skipping.")
+                continue
+            # try compiling the regex
+            try:
+                pattern = re.compile(regex_name)
+                # If regex compiles, use it directly
+                matches = {task for task in all_task_names if pattern.search(task)}
+            except re.error:
+                # Treat invalid regex as a literal str
+                matches = {task for task in all_task_names if regex_name == task}
+
+            if matches:
+                self.logger.debug(f"Regex '{regex_name}' matched tasks: {matches}")
+                matched_tasks.update(matches)
+            else:
+                self.logger.info(f"No tasks matched for pattern or literal: '{regex_name}'")
+        if matched_tasks:
+            self.logger.debug(f"Matched tasks:\n  " + "\n  ".join(matched_tasks))
+        else:
+            self.logger.warning(f"Could not match any valid tasks with regex patterns={regex_task_names}.")
+            valid_tasks = list(self.task_configs.keys())
+            self.logger.warning("Valid tasks:\n  " + "\n  ".join(valid_tasks))
+        return matched_tasks
+
+
+    def remove_task_output_dir(self, task_name:str) -> bool:
+        """Remove a single task output dir and mark the task as dirty, return whether the task's output dir has been removed"""
         deleted_count = 0
         try:
-            build_root = Path(self.proj_root) / "build"
-            invalid_tasks = [task for task in task_names if task not in self.task_configs]
-            if invalid_tasks:
-                self.logger.warning(f"The following tasks do no exist in task_configs and will not be deleted: {invalid_tasks}")
-            for task_name in task_names:
-                if task_name in self.task_configs:
-                    self.logger.info(f"Found {task_name}")
-                    build_dir = build_root / task_name
-                    if build_dir.exists() and build_dir.is_dir():
-                        shutil.rmtree(build_dir)
-                        deleted_count += 1
-                        self.logger.info(f"Deleted build directory: {build_dir}")
-                    else:
-                        self.logger.warning(f"Build directory not found: {build_dir}")
+            build_dir = Path(self.proj_root) / "build"
+            if not build_dir.is_dir():
+                self.logger.info(f"Build directory does not exist, hence the output dir of {task_name} does not exist too.")
+                return False
+            else:
+                if task_name not in self.task_configs:
+                    self.logger.warning(f"Task {task_name} does not exist in task_configs, so its output dir cannot be deleted.")
+                    return False
+                task_output_dir = build_dir / task_name
+                if not task_output_dir.is_dir():
+                    self.logger.info(f"{task_output_dir} does not exist, hence it has been deleted already.")
+                    return False
+                shutil.rmtree(task_output_dir)
+                self.logger.info(f"Deleted {task_output_dir} for task {task_name}.")
+                self.mark_task_as_dirty_in_dotbob_checksum_file(task_name)
+                return True
+
         except Exception as e:
-            self.logger.critical(f"Unexpected error during remove_task_build_dirs(): {e}", exc_info=True)
+            self.logger.critical(f"Unexpected error during remove_task_build_dir(): {e}", exc_info=True)
+
+    def remove_task_output_dirs(self, task_names: list[str]) -> int:
+        """Remove multiple task output dirs and mark the tasks as dirty, return the number of output dir removed"""
+        deleted_count = 0
+        build_root = Path(self.proj_root) / "build"
+        invalid_tasks = [task for task in task_names if task not in self.task_configs]
+        if invalid_tasks:
+            self.logger.warning(f"The following tasks do no exist in task_configs and will not be deleted: {invalid_tasks}")
+        for task_name in task_names:
+            if self.remove_task_output_dir(task_name):
+                deleted_count+=1
         return deleted_count
+
+    def remove_build_dir(self) -> bool:
+        """Remove the entire `build/` and `.bob/`, return the number of task output dirs deleted"""
+        try:
+            build_dir = Path(self.proj_root) / "build"
+            if not build_dir.is_dir():
+                self.logger.warning(f"Build directory not found: {build_dir}")
+                return False
+            shutil.rmtree(build_dir)
+            self.logger.info(f"Deleted build directory: {build_dir}")
+            dotbob_dir = Path(self.dotbob_dir)
+
+            if dotbob_dir.is_dir():
+                shutil.rmtree(self.dotbob_dir)
+                self.logger.info(f"Deleted .bob directory.")
+
+            return True
+
+        except Exception as e:
+            self.logger.critical(f"Unexpected error during remove_build_dir(): {e}", exc_info=True)
 
     def create_all_task_env(self) -> None:
         """ Create a separate task environment for each task defined in self.task_config based on the global environment"""
@@ -437,9 +529,10 @@ class Bob:
             # Check checksums is not empty
             if not checksums:
                 raise ValueError(f"Chechsums is an empty dict, cannot set checksum.json to empty.")
+            # Check if there is an existing .checksum file, if not, create it
             if not self.dotbob_checksum_file.exists():
-                self.logger.error(f"No checksum.json within .bob dir found.")
-                return None
+                self.dotbob_checksum_file.touch()
+                self.logger.info(f"Created missing checksum file at : {self.dotbob_checksum_file}")
             # Check that task names are unique
             task_names = list(checksums.keys())
             if len(task_names) != len(set(task_names)): # It is not possible for checksums to have duplicate keys, hence redundant
@@ -1106,7 +1199,7 @@ class Bob:
             self.logger.critical(f"Unexpected error during execute_verilator_tb_compile() : {e}", exc_info=True)
             return False
 
-    def filter_tasks_to_rebuild(self) -> DiGraph:
+    def filter_tasks_to_rebuild(self, dependency_graph: DiGraph) -> DiGraph:
         """Returns a filtered dependency graph with only tasks that need to be rebuilt."""
         # A task must be rebuilt if:
         # - It explicitly needs rebuilding (should_rebuild_task is True)
@@ -1129,7 +1222,7 @@ class Bob:
                     return True
 
                 # If any dependency needs a rebuild, this task must also rebuild
-                for dependency in self.dependency_graph.predecessors(task):
+                for dependency in dependency_graph.predecessors(task):
                     if should_rebuild_recursive(dependency):
                         tasks_to_rebuild.add(task)
                         return True
@@ -1137,13 +1230,13 @@ class Bob:
                 return False
 
             # Iterate over all tasks and determine rebuild requirements
-            for task in self.dependency_graph.nodes:
+            for task in dependency_graph.nodes:
                 should_rebuild_recursive(task)
 
             # Construct the rebuild graph with only required tasks
             for task in tasks_to_rebuild:
                 rebuild_graph.add_node(task)
-                for successor in self.dependency_graph.successors(task):
+                for successor in dependency_graph.successors(task):
                     if successor in tasks_to_rebuild:
                         rebuild_graph.add_edge(task, successor)
 
@@ -1154,25 +1247,26 @@ class Bob:
             self.logger.critical(f"Unexpected error in filter_tasks_to_rebuild(): {e}", exc_info=True)
             return DiGraph()  # Return empty graph on failure
 
-    def schedule_tasks(self, dependency_count, ready_queue):
+    def schedule_all_tasks(self, dependency_count, ready_queue):
         """Filter dependency_graph based on whether tasks need to be rebuilt. Schedules tasks dynamically while respecting dependencies"""
         try:
             if self.dependency_graph is None:
-                raise ValueError(f"self.dependency_graph = None. Please ensure build_task_dependency is run, and Bob's attribute has been updated.")
+                raise ValueError(f"self.dependency_graph = None. Please ensure build_task_dependency_graph of self.ip_config_parser is run, and Bob's attribute has been updated.")
 
-            filtered_dependency_graph = self.filter_tasks_to_rebuild()
+            # Filter from self.dependency_graph to configure out what needs to be rebuilt
+            filtered_dependency_graph = self.filter_tasks_to_rebuild(self.dependency_graph)
             self.logger.debug(f"Filtered tasks to rebuild. filtered_dependency_graph = {filtered_dependency_graph}")
             self.dependency_graph = filtered_dependency_graph
 
             # Show visualisation of the filtered dependency graph if there are tasks to be built
             if self.dependency_graph.number_of_nodes():
-                self.visualise_dependency_graph()
+                self.visualise_dependency_graph(self.dependency_graph)
 
             # Track number of dependencies (indegree) for each task
             for task in self.dependency_graph.nodes:
                 dependency_count[task] = self.dependency_graph.in_degree(task)
 
-            # Populate queue within initial tasks (indegree = 0)
+            # Populate queue with initial tasks (indegree = 0)
             for task, count in dependency_count.items():
                 if count == 0:
                     ready_queue.put(task)
@@ -1180,12 +1274,71 @@ class Bob:
             return dependency_count, ready_queue
 
         except Exception as e:
-            self.logger.critical(f"Unexpected error during schedule_tasks(): {e}", exc_info=True)
+            self.logger.critical(f"Unexpected error during schedule_all_tasks(): {e}", exc_info=True)
 
-    def visualise_dependency_graph(self) -> None:
+    def schedule_selected_tasks(self, task_names: set[str], dependency_count, ready_queue):
+        """Schedule only the given tasks and all their dependencies.
+
+        Args:
+            dependency_count : Show the number of dependencies for each selected tasks in a dict
+            ready_queue : A queue object to store initial tasks to build
+            task_names: A list of tasks to be built
+
+        Returns:
+            A (dependency_count, ready_queue) tuple
+
+        Raises:
+            ValueError: If self.dependency_graph is not initialised, throw ValueError.
+        """
+        try:
+            if self.dependency_graph is None:
+                raise ValueError(f"self.dependency_graph = None. Please ensure build_task_dependency_graph of self.ip_config_parser is run, and Bob's attribute has been updated.")
+
+            # Validate the requested task names
+            missing = [t for t in task_names if t not in self.dependency_graph]
+            if missing:
+                self.logger.warning(f"Some requested tasks not found in dependency_graph: {missing}")
+
+            # Gather all tasks, target + their ancestors (dependencies)
+            tasks_to_include = set()
+            for task in task_names:
+                if task in self.dependency_graph:
+                    tasks_to_include.add(task)
+                    tasks_to_include.update(ancestors(self.dependency_graph, task))
+
+            if not tasks_to_include:
+                self.logger.info("No valid tasks found to schedule.")
+                return dependency_count, ready_queue
+
+            # Extract the relevent subgraph
+            subgraph = self.dependency_graph.subgraph(tasks_to_include).copy()
+
+            # Filter out tasks that don't have to be rebuilt
+            filtered_dependency_subgraph = self.filter_tasks_to_rebuild(subgraph)
+            self.logger.debug(f"Scheduling subgraph with {len(filtered_dependency_subgraph)} tasks.")
+
+            if filtered_dependency_subgraph.number_of_nodes():
+                self.visualise_dependency_graph(filtered_dependency_subgraph)
+
+            # Track number of dependencies (indegree) for each task
+            for task in filtered_dependency_subgraph.nodes:
+                dependency_count[task] = filtered_dependency_subgraph.in_degree(task)
+
+            # Populate queue with initial tasks (indegree = 0)
+            for task, count in dependency_count.items():
+                if count == 0:
+                    ready_queue.put(task)
+            self.logger.debug(f"Initial ready queue: {ready_queue.qsize()}")
+            return dependency_count, ready_queue
+
+        except Exception as e:
+            self.logger.critical(f"Unexpected error during schedule_selected_tasks(): {e}", exc_info=True)
+
+
+
+    def visualise_dependency_graph(self, dependency_graph: DiGraph) -> None:
         """Visualise a directed acyclic graph (DAG) in the terminal using ASCII characters."""
         try:
-            dependency_graph = self.dependency_graph
             if not isinstance(dependency_graph, DiGraph):
                 raise TypeError(f"Dependency graph must be a directed graph (nx.DiGraph).")
 
@@ -1246,6 +1399,49 @@ class Bob:
             self.logger.critical(f"Unexpected error during visualise_dependency_graph(): {e}")
             return None
 
+    def get_dependencies_for_task(self, task_name:str) -> list[str]:
+        """Given a task_name, obtain all nodes having a path to that task, i.e. all dependencies for that task"""
+        try:
+            if self.dependency_graph is None:
+                raise ValueError(f"self.dependency_graph = None. Please ensure build_task_dependency_graph of self.ip_config_parser is run, and Bob's attribute has been updated.")
+            if task_name not in self.task_configs:
+                self.logger.warning(f"Task {task_name} does not exist in task_configs, so its output dir and its dependencies cannot be deleted.")
+                return []
+            if task_name not in self.dependency_graph:
+                self.logger.warning(f"Task {task_name} does not exist in dependency_graph so its output dir and its dependencies cannot be deleted.")
+                return []
+            # Get all the ancestor nodes (dependencies) of the task
+            dependencies = ancestors(self.dependency_graph, task_name)
+
+            # Return in topological order for proper execution sequence
+            topo_sorted = list(topological_sort(self.dependency_graph))
+            ordered_dependencies = [task for task in topo_sorted if task in dependencies]
+
+            return ordered_dependencies
+
+        except Exception as e:
+            self.logger.critical(f"Unexpected error during get_dependencies_for_task(): {e}")
+
+    def remove_task_output_dir_until(self, task_name:str) -> None:
+        """Remove all the output dirs leading up to and including the task"""
+        try:
+            print(f"In remove_task_outpuut_dir_until, task_name={task_name}")
+            # Assume that self.dependency_graph has been updated
+            if  self.dependency_graph is None:
+                raise ValueError(f"self.dependency_graph = None. Please ensure build_task_dependency_graph of self.ip_config_parser is run, and Bob's attribute has been updated.")
+            if task_name not in self.task_configs:
+                self.logger.warning(f"Task {task_name} does not exist in task_configs, so its output dir and it dependencies cannot be deleted.")
+                valid_tasks = list(self.task_configs.keys())
+                self.logger.warning("Valid tasks:\n  " + "\n  ".join(valid_tasks))
+                return
+            # Get a list of all the dependencies
+            ordered_dependencies = self.get_dependencies_for_task(task_name)
+            tasks_to_remove = ordered_dependencies + [task_name]
+            self.remove_task_output_dirs(tasks_to_remove)
+
+        except Exception as e:
+            self.logger.critical(f"Unexpected error during remove_task_output_dir_until(): {e}")
+
     def setup_task_logger(self, log_file_path: Path) -> TextIOWrapper| None:
         """Redirect stdout and stderr to a file for a subprocess (per-task logging)."""
         log_file_path.parent.mkdir(parents=True, exist_ok=True)
@@ -1254,7 +1450,7 @@ class Bob:
         sys.stderr = log_file
         return log_file
 
-    def execute_tasks(self):
+    def execute_tasks(self, build_all_tasks: bool, selected_tasks: list[str]):
         """Executes tasks with dynamic scheduling and parallel execution"""
         try:
             if self.tool_config_parser is None:
@@ -1267,8 +1463,16 @@ class Bob:
                 failure_event = manager.Event()
                 failure_info = manager.dict()
 
-                dependency_count, ready_queue = self.schedule_tasks(dependency_count, ready_queue)
+                if build_all_tasks:
+                    dependency_count, ready_queue = self.schedule_all_tasks(dependency_count, ready_queue)
+                else:
+                    # selected_tasks allow regex patterns, resolve actual task names first
+                    selected_tasks = self.get_task_names_by_regex(selected_tasks)
+                    dependency_graph, ready_queue = self.schedule_selected_tasks(set(selected_tasks), dependency_count, ready_queue)
                 self.logger.debug(f"dependency_count={dependency_count}")
+                tasks_to_be_built = dependency_count.keys()
+                number_of_tasks_to_be_built = len(tasks_to_be_built)
+                self.logger.debug(f"Number of tasks to be built = {number_of_tasks_to_be_built}")
 
                 process_pool = [] # Store active process handles
                 # Prevent spawning too many process all at once and spending too much time in context switching
@@ -1305,7 +1509,8 @@ class Bob:
                     log_path = failure_info.get("log_file_path", "Unknown Log Path")
                     self.logger.error(f"Build failed at task '{failed_task}'. Check log: {log_path}")
                 else:
-                    self.logger.info(f"Successfully built {self.dependency_graph.number_of_nodes()} tasks.")
+                    self.logger.info(f"Successfully built {number_of_tasks_to_be_built} task(s).")
+                    self.logger.info(f"Built tasks:\n  " + "\n  ".join(tasks_to_be_built))
 
                 self.logger.debug(f"At the end of execute_tasks(): dependency_count={dependency_count}")
                 self.logger.debug(f"At the end of execute_tasks(): ready_queue.qsize()={ready_queue.qsize()}")
@@ -1357,9 +1562,11 @@ class Bob:
                     # Mark task as clean and update hash_sha256 if it runs successfully
                     self.mark_task_as_clean_in_dotbob_checksum_file(task_name)
                     for dependent in dependency_graph.successors(task_name):
-                        dependency_count[dependent] -= 1
-                        if dependency_count[dependent] == 0:
-                            ready_queue.put(dependent)
+                        # Only decrement the dependency_count if the parent task needs to be built, indicated by being in the dict
+                        if dependent in dependency_count:
+                            dependency_count[dependent] -= 1
+                            if dependency_count[dependent] == 0:
+                                ready_queue.put(dependent)
             else:
                 failure_info["task_name"] = task_name
                 failure_info["log_file_path"] = str(task_config.get("output_dir") / f"{task_name}.log")
