@@ -1,15 +1,31 @@
 gcc:
-  path: /usr/bin/gcc
-  default_flags : ["-Wall", -Wextra]
+  # Linux
+  # path: /usr/bin/gcc
+  # macOS latest
+  path: /opt/homebrew/bin/gcc
+  default_flags :
+    common: ["-Wall", "-Wextra"]
 
 g++:
-  path: /usr/bin/g++
-  default_flags : ["-Wall", "-Wextra", "-std=c++20", "-fsanitize=address", "-pg"]
+  # Linux
+  # path: /usr/bin/g++
+  # macOS latest
+  path: /opt/homebrew/bin/g++
+  default_flags :
+    common: ["-Wall", "-Wextra", "-std=c++20"]
+    linux: ["-fsanitize=address,undefined", "-pg"]
 
 verilator:
-  path: /usr/bin/verilator
-  default_flags : []
+  # Linux
+  # path: /usr/bin/verilator
+  # macOS deprecated
+  # path: /opt/homebrew/bin/verilator
+  # macOS latest with gcc built verilator
+  path: /Users/vincentho/Projects/tools/verilator/bin/verilator
+  default_flags :
+    common: []
 
 ar:
   path: /usr/bin/ar
-  default_flags : []
+  default_flags :
+    common: []

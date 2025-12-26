@@ -1,4 +1,5 @@
 import yaml
+import sys
 from pathlib import Path
 from logging import Logger
 import shutil
@@ -35,13 +36,21 @@ class ToolConfigParser:
                     self.tool_flags[tool] = []
                 elif isinstance(tool_entry, dict):
                     path = tool_entry.get("path", "")
-                    flags = tool_entry.get("default_flags", [])
+                    flags_dict = tool_entry.get("default_flags", {})
                     resolved = shutil.which(path)
                     if not resolved:
                         raise FileNotFoundError(f"Tool '{tool}' path '{path}' not found in PATH.")
-                    if not isinstance(flags, list):
-                        raise ValueError(f"Tool '{tool}': 'default_flags' must be a list of strings.")
+                    if not isinstance(flags_dict, dict):
+                        raise ValueError(f"Tool '{tool}': 'default_flags' must be a dictionary.")
+                    if not "common" in flags_dict:
+                        raise ValueError(f"Tool '{tool}' does not have a mandatory 'common' field within its 'default_flags' attribute.")
+                    flags = []
+                    flags.extend(flags_dict["common"])
+                    # OS specific flags
+                    if "linux" in flags_dict and sys.platform == "linux":
+                        flags.extend(flags_dict["linux"])
                     self.tool_paths[tool] = resolved
+
                     self.tool_flags[tool] = flags
                 else:
                     raise ValueError(f"Tool '{tool}' entry must be either a string or a dict.")

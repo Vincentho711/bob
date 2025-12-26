@@ -4,6 +4,7 @@
 #include <memory>
 #include "scoreboard.h"
 #include "simulation_clock.h"
+#include "simulation_task.h"
 #include "Vdual_port_ram.h"
 #include "dual_port_ram_transaction.h"
 #include "dual_port_ram_tlm_queue.h"
@@ -15,6 +16,10 @@ public:
     explicit DualPortRamScoreboard(std::shared_ptr<DualPortRamTLMWrQueue> tlm_wr_queue, std::shared_ptr<DualPortRamTLMRdQueue> tlm_rd_queue, std::shared_ptr<ClockT> wr_clk, uint32_t wr_delay_cycle, const std::string &name, bool debug_enabled){};
 
     void update_ram_model(const TxnPtr &write_txn);
+
+    simulation::Task run_write_capture();
+
+    simulation::Task run_read_capture();
 
 protected:
     std::map<uint32_t, uint32_t> ram_model_;

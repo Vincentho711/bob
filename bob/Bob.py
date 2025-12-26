@@ -1136,8 +1136,15 @@ class Bob:
                 raise ValueError(f"Task '{task_name}' does not have a 'task_type' attribute.")
             if task_type != "verilator_tb_compile":
                 raise ValueError(f"Task '{task_name}' has task type '{task_type}' which is not 'verilator_tb_compile'. Please exeute the correct function to execute build.")
+
             # Resolve output_src_files list
             self.resolve_task_configs_output_src_files(task_name)
+
+            # Extract the path of verilator, including default flags
+            verilator_path = self.tool_config_parser.get_command("verilator")
+            self.logger.debug(f"verilator_path={verilator_path}")
+            self.task_config_parser.update_task_env(task_name, "VERILATOR_BIN_PATH", verilator_path, True)
+
             task_env = self.task_configs[task_name].get("task_env", None)
             if task_env is None:
                 raise KeyError(f"Task '{task_name}' does not have a 'task_env' attribute.")
@@ -1153,10 +1160,6 @@ class Bob:
             # Ensuer that all src_files exist
             if not self.ensure_src_files_existence(task_name):
                 raise FileNotFoundError(f"Aborting execute_verilator_verilate as one or more source files are missing.")
-
-            # Extract the path of verilator, including default flags
-            verilator_path = self.tool_config_parser.get_command("verilator")
-            self.logger.debug(f"verilator_path={verilator_path}")
 
             # Ensure that build_scripts/verilator.mk exists
             verilator_mk_path = self.build_scripts_dir / "verilator.mk"

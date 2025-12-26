@@ -85,18 +85,43 @@ def test_get_tool_path_not_found(mock_yaml_loader):
 def test_get_tool_flags(mock_yaml_loader):
     """Testing getting all the default flags for a tool"""
     m, mock_yaml = mock_yaml_loader
-    mock_yaml.return_value = {"verilator": {"path": "/usr/bin/verilator", "default_flags": ["-Wall", "-Wno-fatal"]}}
+    mock_yaml.return_value = {"verilator": {"path": "/usr/bin/verilator", "default_flags": {"common" : ["-Wall", "-Wno-fatal"]}}}
 
     with patch("pathlib.Path.exists", return_value=True), \
-         patch("shutil.which", return_value="/usr/bin/verilator"):
+        patch("shutil.which", return_value="/usr/bin/verilator"):
         mock_logger = MagicMock()
         tool_config_parser = ToolConfigParser(mock_logger, "/mock/project")
         assert tool_config_parser.get_tool_flags("verilator") == ["-Wall", "-Wno-fatal"]
 
+def test_get_tool_flags_default_flags_dict_no_common_field(mock_yaml_loader):
+    """Test get_tool_flags, but mandatory flag 'common' missing in 'default_flags'"""
+    m, mock_yaml = mock_yaml_loader
+    mock_yaml.return_value = {"verilator": {"path": "/usr/bin/verilator", "default_flags": {}}}
+
+    with patch("pathlib.Path.exists", return_value=True), \
+        patch("shutil.which", return_value="/usr/bin/verilator"):
+        mock_logger = MagicMock()
+        tool_config_parser = ToolConfigParser(mock_logger, "/mock/project")
+        tool_flags = tool_config_parser.get_tool_flags("verilator")
+        tool_config_parser.logger.error.assert_called_once_with(f"ValueError: Tool 'verilator' does not have a mandatory 'common' field within its 'default_flags' attribute.")
+
+def test_get_tool_flags_default_flags_common_and_linux_field(mock_yaml_loader):
+    """Test get_tool_flags, with both 'common' and 'linux' defined"""
+    m, mock_yaml = mock_yaml_loader
+    mock_yaml.return_value = {"gcc": {"path": "/usr/bin/gcc", "default_flags": {"common": ["-std=c++20"], "linux": ["-pg"]}}}
+
+    with patch("pathlib.Path.exists", return_value=True), \
+        patch("shutil.which", return_value="/usr/bin/gcc"), \
+        patch("sys.platform", "linux"):
+        mock_logger = MagicMock()
+        tool_config_parser = ToolConfigParser(mock_logger, "/mock/project")
+        tool_flags = tool_config_parser.get_tool_flags("gcc")
+        assert tool_flags == ["-std=c++20", "-pg"]
+
 def test_get_command_with_extra_flags(mock_yaml_loader):
     """Test get command, verify that default flags and extra flags are there"""
     m, mock_yaml = mock_yaml_loader
-    mock_yaml.return_value = {"gcc": {"path": "/usr/bin/gcc", "default_flags": ["-O2"]}}
+    mock_yaml.return_value = {"gcc": {"path": "/usr/bin/gcc", "default_flags": {"common": ["-O2"]}}}
 
     with patch("pathlib.Path.exists", return_value=True), \
          patch("shutil.which", return_value="/usr/bin/gcc"):

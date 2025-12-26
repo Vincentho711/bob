@@ -454,7 +454,8 @@ def test_resolve_reference_output_reference_with_list_of_files(tmp_path: Path):
     assert resolved_type == "output"
     assert resolved_paths == expected_output
 
-def test_resolve_reference_output_reference_with_every_files(tmp_path: Path):
+@patch.object(Path, "exists", return_value=True) # Mock resolved_path.exists()
+def test_resolve_reference_output_reference_with_every_files(mock_exists, tmp_path: Path):
     """Test whether an output reference like "{@output:output_task:*}" can be succesfully resolved"""
     task_name = "valid_task"
     referenced_task_name = "output_task"
@@ -490,6 +491,7 @@ def test_resolve_reference_output_reference_with_every_files(tmp_path: Path):
     expected_output = str(Path(task_outdir).resolve())
     assert resolved_paths == expected_output
 
+@patch.object(Path, "exists", return_value=True) # Mock resolved_path.exists()
 def test_resolve_reference_input_reference_with_list_of_files(tmp_path: Path):
     """Test whether an input reference like "{@input:task_2:['a.cpp', 'b.cpp']}" can be succesfully resolved"""
     task_name = "task_1"
@@ -531,12 +533,13 @@ def test_resolve_reference_input_reference_with_list_of_files(tmp_path: Path):
     assert resolved_paths == expected_output
 
 @patch.object(Path, "is_dir", return_value=True) # Mock resolved_path.is_dir()
+@patch.object(Path, "exists", return_value=True) # Mock resolved_path.exists()
 @patch("pathlib.Path.iterdir", return_value=[
         Path("/mock/path/task_2/file1.v"),
         Path("/mock/path/task_2/file2.sv"),
         Path("/mock/path/task_2/file3.txt")
 ])
-def test_resolve_reference_input_reference_every_files(mock_iterdir, mock_is_dir, tmp_path: Path):
+def test_resolve_reference_input_reference_every_files(mock_iterdir, mock_exists, mock_is_dir, tmp_path: Path):
     """Test whether an input reference like "{@input:task_2:*}" can be succesfully resolved to a list of file paths in str"""
     task_name = "task_1"
     referenced_task_name = "task_2"
