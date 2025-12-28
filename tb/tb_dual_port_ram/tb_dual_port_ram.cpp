@@ -7,6 +7,7 @@
 #include "simulation_clock.h"
 #include "simulation_phase_event.h"
 #include "simulation_task_symmetric_transfer.h"
+#include "simualation_exceptions.h"
 
 #include "dual_port_ram_driver.h"
 #include "dual_port_ram_top_sequence.h"
@@ -106,10 +107,14 @@ public:
 
     void start_sim_kernal() {
         // Resume all root level coroutines as they are not started upon creation
-        for (simulation::Task &task : coro_tasks) {
-            task.start();
+        try {
+            for (simulation::Task &task : coro_tasks) {
+                task.start();
+            }
+            sim_kernal_->run(max_time_);
+        } catch (...) {
+            throw;
         }
-        sim_kernal_->run(max_time_);
     }
 
 private:
@@ -149,9 +154,12 @@ int main() {
         SimulationEnvironment sim_env(123U, 500000U);
         sim_env.start_sim_kernal();
         return 0;
+    } catch (const simulation::VerificationError &e) {
+        std::cerr << "Simulation Failed: " << e.what() << std::endl;
+        return 1;
     } catch (const std::exception &e) {
         std::cerr << "Simulation Error: " << e.what() << std::endl;
-        return 1;
+        return 2;
     } catch (...) {
         std::cerr << "Unknown simultion error occurred" << std::endl;
         return 1;

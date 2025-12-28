@@ -7,6 +7,7 @@ src_files:
   - "core/simulation_clock.h"
   - "core/simulation_event.h"
   - "core/simulation_event.cpp"
+  - "core/simulation_exceptions.h"
   - "core/simulation_phase_event.h"
   - "core/simulation_phase_event.cpp"
   - "core/simulation_object_pool.h"

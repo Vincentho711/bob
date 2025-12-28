@@ -3,6 +3,7 @@
 #include <vector>
 #include <memory>
 #include "simulation_clock.h"
+#include "simulation_task_symmetric_transfer.h"
 
 namespace simulation {
 
@@ -11,6 +12,8 @@ namespace simulation {
     public:
         uint64_t time = 0U;
         std::vector<std::shared_ptr<simulation::Clock<DutType>>> clocks;
+        // Raw pointer reference to all the root tasks
+        std::vector<simulation::Task>* root_tasks = nullptr;
 
         SimulationKernal(std::shared_ptr<DutType> dut, std::shared_ptr<TraceType> trace) :
             dut_(dut), trace_(trace) {};
@@ -21,6 +24,12 @@ namespace simulation {
 
         void run(uint64_t max_time) {
             while (time < max_time) {
+                // Check root tasks for exceptions before ticking clocks
+                if (root_tasks) {
+                    for (auto &root_task : *root_tasks) {
+                        root_task.check_exception();
+                    }
+                }
                 bool clk_ticked = false;
                 for (auto &clk : clocks) {
                     clk_ticked |= clk->tick(time);

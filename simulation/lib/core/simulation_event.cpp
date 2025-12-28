@@ -16,7 +16,9 @@ namespace simulation {
         std::swap(current_batch, waiters_);
         std::cout << "current_batch.size() = " << std::to_string(current_batch.size()) << ".\n" ;
         for (auto &h : current_batch) {
-            if (h && !h.done()) h.resume();
+            if (h && !h.done()) {
+                h.resume();
+            }
         }
     }
 

@@ -7,6 +7,7 @@
 #include "simulation_clock.h"
 #include "simulation_phase_event.h"
 #include "simulation_task_symmetric_transfer.h"
+#include "simulation_exceptions.h"
 
 #include <verilated.h>
 #include <verilated_vcd_c.h>
@@ -28,6 +29,8 @@ class BaseChecker {
                 std::cout << "Resuming after wr_clk rising_edge 2 is seen." << std::endl;
                 co_await wr_clk->rising_edge(simulation::Phase::Drive);
                 std::cout << "Resuming after wr_clk rising_edge 3 is seen." << std::endl;
+                // Test throwing VerificationError
+                simulation::report_fatal("Test fatal error!");
             }
         }
 
@@ -98,10 +101,16 @@ public:
     }
 
     void start_sim_kernal() {
-        for (simulation::Task &task: coro_tasks) {
-            task.start();
+        // Pass a pointer of coro_tasks to the simulation kernal for error handling
+        sim_kernal_->root_tasks = &coro_tasks;
+        try {
+            for (simulation::Task &task: coro_tasks) {
+                task.start();
+            }
+            sim_kernal_->run(max_time_);
+        } catch (...) {
+            throw;
         }
-        sim_kernal_->run(max_time_);
     }
 
 private:
@@ -142,9 +151,12 @@ int main() {
         SimulationEnvironment sim_env(123U, 100000U);
         sim_env.start_sim_kernal();
         return 0;
+    } catch (const simulation::VerificationError &e) {
+        std::cerr << "Simulation Failed: " << e.what() << std::endl;
+        return 1;
     } catch (const std::exception &e) {
         std::cerr << "Simulation Error: " << e.what() << std::endl;
-        return 1;
+        return 2;
     } catch (...) {
         std::cerr << "Unknown simultion error occurred" << std::endl;
         return 1;

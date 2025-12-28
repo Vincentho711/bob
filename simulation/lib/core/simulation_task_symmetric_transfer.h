@@ -4,6 +4,7 @@
 #include <utility>
 #include <coroutine>
 #include <exception>
+#include "simulation_exceptions.h"
 
 namespace simulation {
     class Task {
@@ -11,6 +12,8 @@ namespace simulation {
         struct promise_type {
             // Store the handle of the coroutine waiting for us (the parent)
             std::coroutine_handle<> continuation_ = nullptr;
+            // Store the exception if any occured within a coroutine
+            std::exception_ptr exception_ = nullptr;
 
             Task get_return_object() {
                 return Task{ std::coroutine_handle<promise_type>::from_promise(*this) };
@@ -37,7 +40,9 @@ namespace simulation {
             FinalAwaiter final_suspend() noexcept { return {}; }
 
             void return_void() noexcept {}
-            void unhandled_exception() { std::terminate(); } // Simplified handling
+            void unhandled_exception() {
+                exception_ = std::current_exception();
+            } // Simplified handling
         };
 
         // --- Standard RAII boilerplate ---
@@ -55,7 +60,18 @@ namespace simulation {
         }
 
         void start() {
-            if (handle_ && !handle_.done()) handle_.resume();
+            if (handle_ && !handle_.done()) {
+                handle_.resume();
+                // Check if coroutine exited due to an exception
+                check_exception();
+            }
+        }
+
+        // Rethrow the stored exception if one exists
+        void check_exception() const {
+            if (handle_ && handle_.promise().exception_) {
+                std::rethrow_exception(handle_.promise().exception_);
+            }
         }
 
         // Making task awaitable, co_await Task();
@@ -74,7 +90,13 @@ namespace simulation {
                     return handle_;
                 }
 
-                void await_resume() const noexcept {}
+                void await_resume() {
+                    // When the sub-task finishes and returns to the parent,
+                    // check if that sub-task threw an exception
+                    if (handle_.promise().exception_) {
+                        std::rethrow_exception(handle_.promise().exception_);
+                    }
+                }
             };
             return Awaiter{handle_};
         }
