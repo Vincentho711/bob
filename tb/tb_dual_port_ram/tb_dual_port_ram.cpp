@@ -7,13 +7,14 @@
 #include "simulation_clock.h"
 #include "simulation_phase_event.h"
 #include "simulation_task_symmetric_transfer.h"
-#include "simualation_exceptions.h"
+#include "simulation_exceptions.h"
 
 #include "dual_port_ram_driver.h"
 #include "dual_port_ram_top_sequence.h"
 #include "dual_port_ram_sequencer.h"
 #include "dual_port_ram_tlm_queue.h"
 #include "dual_port_ram_monitor.h"
+#include "dual_port_ram_scoreboard.h"
 #include "testcases/directed/dual_port_ram_directed_testcases.h"
 
 #include <verilated.h>
@@ -83,6 +84,8 @@ public:
         driver_ = std::make_shared<DualPortRamDriver>(sequencer_, dut_, wr_clk_, rd_clk_);
         monitor_ = std::make_shared<DualPortRamMonitor>(dut_, wr_clk_, rd_clk_, tlm_wr_queue_, tlm_rd_queue_);
         checker_ = std::make_shared<BaseChecker>(wr_clk_);
+        scoreboard_ = std::make_shared<DualPortRamScoreboard>(tlm_wr_queue_, tlm_rd_queue_, wr_clk_, 1U);
+        // explicit DualPortRamScoreboard(std::shared_ptr<DualPortRamTLMWrQueue> tlm_wr_queue, std::shared_ptr<DualPortRamTLMRdQueue> tlm_rd_queue, std::shared_ptr<ClockT> wr_clk, uint32_t wr_delay_cycle, const std::string &name, bool debug_enabled);
 
         // Set up top sequence to execute
         const auto dual_port_ram_module_addr_width = Vdual_port_ram_dual_port_ram::ADDR_WIDTH;
@@ -106,6 +109,8 @@ public:
     }
 
     void start_sim_kernal() {
+        // Pass a pointer of coro_tasks to the simulation kernal for error handling
+        sim_kernal_->root_tasks = &coro_tasks;
         // Resume all root level coroutines as they are not started upon creation
         try {
             for (simulation::Task &task : coro_tasks) {
@@ -141,6 +146,7 @@ private:
     std::shared_ptr<DualPortRamSequencer> sequencer_;
     std::shared_ptr<DualPortRamDriver> driver_;
     std::shared_ptr<DualPortRamMonitor> monitor_;
+    std::shared_ptr<DualPortRamScoreboard> scoreboard_;
 
     // Sequence components
     std::unique_ptr<DualPortRamTopSequence> top_seq_;
@@ -153,15 +159,16 @@ int main() {
     try {
         SimulationEnvironment sim_env(123U, 500000U);
         sim_env.start_sim_kernal();
+        std::cout << "\033[1;32m" << "Simulation Passed." << "\033[0m" << std::endl;
         return 0;
     } catch (const simulation::VerificationError &e) {
-        std::cerr << "Simulation Failed: " << e.what() << std::endl;
+        std::cerr << "\033[1;31m" <<  "Simulation Failed: " << e.what() << "\033[0m" <<std::endl;
         return 1;
     } catch (const std::exception &e) {
-        std::cerr << "Simulation Error: " << e.what() << std::endl;
+        std::cerr << "\033[1;31m" << "Simulation Error: " << e.what() << "\033[0m" <<std::endl;
         return 2;
     } catch (...) {
-        std::cerr << "Unknown simultion error occurred" << std::endl;
+        std::cerr << "\033[1;31m" << "Unknown simultion error occurred." << "\033[0m" <<std::endl;
         return 1;
     }
 }

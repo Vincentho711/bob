@@ -62,7 +62,7 @@ public:
           }
 
         };
-        return Awaiter{this};
+        return Awaiter{*this};
     }
 
     // Currently, this is not really a blocking because flow control is not required.

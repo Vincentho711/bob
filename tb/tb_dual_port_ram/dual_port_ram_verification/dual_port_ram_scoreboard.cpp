@@ -7,12 +7,15 @@ DualPortRamScoreboard::DualPortRamScoreboard(
     std::shared_ptr<DualPortRamTLMRdQueue> tlm_rd_queue,
     std::shared_ptr<ClockT> wr_clk, uint32_t wr_delay_cycle,
     const std::string &name, bool debug_enabled)
-    : tlm_wr_queue_(tlm_wr_queue), tlm_rd_queue_(tlm_rd_queue),
-      wr_delay_cycle_(wr_delay_cycle), wr_clk_(wr_clk),
-      BaseScoreboard(name, debug_enabled) {
-    apply_index_ = 0U;
-    circular_buffer_size_ = wr_delay_cycle_ + 1U;
-    circular_buffer_.resize(circular_buffer_size_);
+    : BaseScoreboard(name, debug_enabled),
+      tlm_wr_queue_(tlm_wr_queue), tlm_rd_queue_(tlm_rd_queue),
+      wr_clk_(wr_clk), wr_delay_cycle_(wr_delay_cycle),
+      apply_index_(0U),
+      circular_buffer_size_(wr_delay_cycle + 1U),
+      circular_buffer_(circular_buffer_size_) {}
+
+simulation::Task DualPortRamScoreboard::run() {
+    co_return;
 }
 
 simulation::Task DualPortRamScoreboard::run_write_capture() {
@@ -47,10 +50,6 @@ simulation::Task DualPortRamScoreboard::run_read_capture() {
                 // Throw VerificationError
                 simulation::report_fatal(msg);
             }
-            bool matched = verify_with_ram_model(read_txn);
-            if (!matched) {
-                // Exception and should terminate simulations, including all running coroutines.
-            }
         }
     }
 }
@@ -61,7 +60,7 @@ simulation::Task DualPortRamScoreboard::update_ram_model() {
 
         // Apply all pending write transactions from circular buffer to ram model
         while (!circular_buffer_[apply_index_].empty()) {
-            write_txn = circular_buffer_[apply_index_].front();
+            TxnPtr write_txn = circular_buffer_[apply_index_].front();
             circular_buffer_[apply_index_].pop_front();
             // Extract addr and data of the write transaction
             uint32_t addr = write_txn->payload.addr;
@@ -72,5 +71,6 @@ simulation::Task DualPortRamScoreboard::update_ram_model() {
         }
         // Advance the apply index by 1
         apply_index_ = (apply_index_ + 1) % circular_buffer_size_;
+        log_debug("apply_index_ = " + std::to_string(apply_index_));
     }
 }

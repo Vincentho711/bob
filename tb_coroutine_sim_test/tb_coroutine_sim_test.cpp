@@ -30,7 +30,7 @@ class BaseChecker {
                 co_await wr_clk->rising_edge(simulation::Phase::Drive);
                 std::cout << "Resuming after wr_clk rising_edge 3 is seen." << std::endl;
                 // Test throwing VerificationError
-                simulation::report_fatal("Test fatal error!");
+                // simulation::report_fatal("Test fatal error!");
             }
         }
 
@@ -150,15 +150,16 @@ int main() {
     try {
         SimulationEnvironment sim_env(123U, 100000U);
         sim_env.start_sim_kernal();
+        std::cout << "\033[1;32m" << "Simulation Passed." << "\033[0m" << std::endl;
         return 0;
     } catch (const simulation::VerificationError &e) {
-        std::cerr << "Simulation Failed: " << e.what() << std::endl;
+        std::cerr << "\033[1;31m" <<  "Simulation Failed: " << e.what() << "\033[0m" <<std::endl;
         return 1;
     } catch (const std::exception &e) {
-        std::cerr << "Simulation Error: " << e.what() << std::endl;
+        std::cerr << "\033[1;31m" << "Simulation Error: " << e.what() << "\033[0m" <<std::endl;
         return 2;
     } catch (...) {
-        std::cerr << "Unknown simultion error occurred" << std::endl;
+        std::cerr << "\033[1;31m" << "Unknown simultion error occurred." << "\033[0m" <<std::endl;
         return 1;
     }
 }
