@@ -99,6 +99,11 @@ public:
         coro_tasks.emplace_back(sequencer_->start_sequence(std::move(top_seq_)));
         coro_tasks.emplace_back(driver_->wr_driver_run());
         coro_tasks.emplace_back(driver_->rd_driver_run());
+        coro_tasks.emplace_back(monitor_->wr_port_run());
+        coro_tasks.emplace_back(monitor_->rd_port_run());
+        coro_tasks.emplace_back(scoreboard_->update_ram_model());
+        coro_tasks.emplace_back(scoreboard_->run_write_capture());
+        coro_tasks.emplace_back(scoreboard_->run_read_capture());
 
     }
 

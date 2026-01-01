@@ -18,43 +18,44 @@ simulation::Task DualPortRamMonitor::run() {
 }
 
 simulation::Task DualPortRamMonitor::wr_port_run() {
-  while (true) {
-    co_await wr_clk_->rising_edge(simulation::Phase::Monitor);
+    while (true) {
+        co_await wr_clk_->rising_edge(simulation::Phase::Monitor);
 
-    if (dut_->wr_en_i) {
-      TxnPtr wr_txn =
-          std::make_shared<DualPortRamTransaction>();
-      wr_txn->payload.type = DualPortRamPayload::Write;
-      wr_txn->payload.addr = dut_->wr_addr_i;
-      wr_txn->payload.data = dut_->wr_data_i;
+        if (dut_->wr_en_i) {
+            TxnPtr wr_txn =
+                std::make_shared<DualPortRamTransaction>();
+            wr_txn->payload.type = DualPortRamPayload::Write;
+            wr_txn->payload.addr = dut_->wr_addr_i;
+            wr_txn->payload.data = dut_->wr_data_i;
 
-      co_await put_wr_transaction(wr_txn);
+            co_await put_wr_transaction(wr_txn);
+        }
     }
-  }
 }
 
 simulation::Task DualPortRamMonitor::rd_port_run() {
-  while (true) {
-    co_await rd_clk_->rising_edge(simulation::Phase::Monitor);
+    while (true) {
+        co_await rd_clk_->rising_edge(simulation::Phase::Monitor);
 
-    if (dut_->wr_en_i) {
-      TxnPtr rd_txn =
-          std::make_shared<DualPortRamTransaction>();
-      rd_txn->payload.type = DualPortRamPayload::Read;
-      rd_txn->payload.addr = dut_->rd_addr_i;
-      rd_txn->payload.data = dut_->rd_data_o;
+        // Read port is asynchronous
+        TxnPtr rd_txn = std::make_shared<DualPortRamTransaction>();
+        rd_txn->payload.type = DualPortRamPayload::Read;
+        rd_txn->payload.addr = dut_->rd_addr_i;
+        rd_txn->payload.data = dut_->rd_data_o;
 
-      co_await put_wr_transaction(rd_txn);
+        log_debug("Capturing read transaction: Addr=" + std::to_string(rd_txn->payload.addr));
+        co_await put_rd_transaction(rd_txn);
     }
-  }
 }
 
 simulation::Task DualPortRamMonitor::put_wr_transaction(
     TxnPtr wr_txn) {
-  co_await tlm_wr_queue_->blocking_put(wr_txn);
+    log_debug("tlm_wr_queue_->blocking_put(). in put_wr_transaction.");
+    co_await tlm_wr_queue_->blocking_put(wr_txn);
 }
 
 simulation::Task DualPortRamMonitor::put_rd_transaction(
-  TxnPtr rd_txn) {
-  co_await tlm_rd_queue_->blocking_put(rd_txn);
+    TxnPtr rd_txn) {
+    log_debug("tlm_rd_queue_->blocking_put() in put_rd_transaction.");
+    co_await tlm_rd_queue_->blocking_put(rd_txn);
 }

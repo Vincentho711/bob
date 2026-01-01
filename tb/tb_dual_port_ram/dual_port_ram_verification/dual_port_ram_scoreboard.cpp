@@ -22,10 +22,12 @@ simulation::Task DualPortRamScoreboard::run_write_capture() {
     while (true) {
         TxnPtr write_txn = co_await tlm_wr_queue_->blocking_get();
         if (write_txn) {
+            log_debug("write txn fetched from tlm_wr_queue.");
             // Check whether it is a valid ptr and calculate the current staging index
             uint32_t staging_index = (apply_index_ + wr_delay_cycle_) % circular_buffer_size_;
             // Push captured transaction into circular buffer for pending ram model update
             circular_buffer_[staging_index].push_back(write_txn);
+            log_debug("write_txn added to circular_buffer at staging_index = " + std::to_string(staging_index) + ".");
         }
     }
 }
@@ -34,6 +36,7 @@ simulation::Task DualPortRamScoreboard::run_read_capture() {
     while (true) {
         TxnPtr read_txn = co_await tlm_rd_queue_->blocking_get();
         if (read_txn) {
+            log_debug("read txn fetched from tlm_rd_queue.");
             uint32_t addr = read_txn->payload.addr;
             uint32_t dut_data = read_txn->payload.data;
 
@@ -57,7 +60,8 @@ simulation::Task DualPortRamScoreboard::run_read_capture() {
 simulation::Task DualPortRamScoreboard::update_ram_model() {
     while (true) {
         co_await wr_clk_->rising_edge(simulation::Phase::PreDrive);
-
+        log_debug("wr_clk->rising_edge's PreDrive detected.");
+        log_debug("circular_buffer_[apply_index_].empty() = " + std::to_string(circular_buffer_[apply_index_].empty()));
         // Apply all pending write transactions from circular buffer to ram model
         while (!circular_buffer_[apply_index_].empty()) {
             TxnPtr write_txn = circular_buffer_[apply_index_].front();
