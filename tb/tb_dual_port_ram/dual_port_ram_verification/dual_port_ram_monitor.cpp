@@ -20,13 +20,18 @@ simulation::Task DualPortRamMonitor::run() {
 simulation::Task DualPortRamMonitor::wr_port_run() {
     while (true) {
         co_await wr_clk_->rising_edge(simulation::Phase::Monitor);
+        log_debug("simulation::Phase::Monitor detected within wr_port_run().");
 
-        if (dut_->wr_en_i) {
+        if (dut->wr_en_i) {
+            log_debug("Creating write transaction...");
             TxnPtr wr_txn =
                 std::make_shared<DualPortRamTransaction>();
+            log_debug("payload.type = " + std::to_string(DualPortRamPayload::Write));
+            log_debug("payload.addr = " + std::to_string(dut->wr_addr_i));
+            log_debug("payload.data = " + std::to_string(dut->wr_data_i));
             wr_txn->payload.type = DualPortRamPayload::Write;
-            wr_txn->payload.addr = dut_->wr_addr_i;
-            wr_txn->payload.data = dut_->wr_data_i;
+            wr_txn->payload.addr = dut->wr_addr_i;
+            wr_txn->payload.data = dut->wr_data_i;
 
             co_await put_wr_transaction(wr_txn);
         }
@@ -36,12 +41,13 @@ simulation::Task DualPortRamMonitor::wr_port_run() {
 simulation::Task DualPortRamMonitor::rd_port_run() {
     while (true) {
         co_await rd_clk_->rising_edge(simulation::Phase::Monitor);
+        log_debug("simulation::Phase::Monitor detected within rd_port_run().");
 
         // Read port is asynchronous
         TxnPtr rd_txn = std::make_shared<DualPortRamTransaction>();
         rd_txn->payload.type = DualPortRamPayload::Read;
-        rd_txn->payload.addr = dut_->rd_addr_i;
-        rd_txn->payload.data = dut_->rd_data_o;
+        rd_txn->payload.addr = dut->rd_addr_i;
+        rd_txn->payload.data = dut->rd_data_o;
 
         log_debug("Capturing read transaction: Addr=" + std::to_string(rd_txn->payload.addr));
         co_await put_rd_transaction(rd_txn);
