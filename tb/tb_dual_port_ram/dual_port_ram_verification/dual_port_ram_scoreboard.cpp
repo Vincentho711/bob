@@ -1,5 +1,6 @@
 #include "dual_port_ram_scoreboard.h"
 #include "simulation_exceptions.h"
+#include <cmath>
 #include <string>
 
 DualPortRamScoreboard::DualPortRamScoreboard(
@@ -35,6 +36,13 @@ simulation::Task DualPortRamScoreboard::run_write_capture() {
 simulation::Task DualPortRamScoreboard::run_read_capture() {
     while (true) {
         TxnPtr read_txn = co_await tlm_rd_queue_->blocking_get();
+
+        // Since the read interface is always active, we should ignore reads before any writes have been done at start up
+        if (ram_model_.empty()) {
+            log_debug("Ignoring read: Ram model not yet initialised by first write.");
+            continue;
+        }
+
         if (read_txn) {
             log_debug("read txn fetched from tlm_rd_queue.");
             uint32_t addr = read_txn->payload.addr;
@@ -52,6 +60,12 @@ simulation::Task DualPortRamScoreboard::run_read_capture() {
                                   " | Observed: " + std::to_string(dut_data);
                 // Throw VerificationError
                 simulation::report_fatal(msg);
+            } else {
+                std::string msg = "Match at Addr " + std::to_string(addr) +
+                                  " | Expected: " + std::to_string(expected_data) +
+                                  " | Observed: " + std::to_string(dut_data);
+                log_debug("\033[1;32m" + msg + "\033[0m");
+                // std::cout << msg << std::endl;
             }
         }
     }
