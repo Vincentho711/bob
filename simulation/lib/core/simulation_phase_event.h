@@ -5,6 +5,7 @@
 #include <vector>
 #include <cstdint>
 #include <array>
+#include <functional>
 
 namespace simulation {
     enum class Phase : uint8_t {
@@ -38,7 +39,7 @@ namespace simulation {
 
         Awaiter operator()(Phase phase) noexcept;
 
-        void trigger() noexcept;
+        void trigger(std::function<void()> dut_eval_fn = nullptr);
 
         void clear() noexcept;
 

@@ -18,7 +18,7 @@ namespace simulation {
         return Awaiter{*this, phase};
     }
 
-    void PhaseEvent::trigger() noexcept {
+    void PhaseEvent::trigger(std::function<void()> dut_eval_fn) {
         for (std::size_t i = 0; i < PHASE_COUNT; ++i) {
             // To support co-awaiting the same clk multiple times in a Task
             std::swap(current_waiters_[i], next_waiters_[i]);
@@ -28,6 +28,11 @@ namespace simulation {
                 h.resume();
             }
             phase_vector.clear();
+            // Evaluate DUT after all tasks in the current phase yield to ensure
+            // actions concerning combinational logic done in Drive phase is reflected in the Monitor phase
+            if (dut_eval_fn) {
+                dut_eval_fn();
+            }
         }
     }
 

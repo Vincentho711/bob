@@ -37,6 +37,10 @@ namespace simulation {
             if (time >= next_event_time) {
                 // Give Verilator to settle any combinational logic that might have changed since the last clock
                 dut->eval();
+
+                // Define the DUT evaluation lambda
+                auto dut_eval_lambda = [this]() { this->dut->eval(); };
+
                 switch (step) {
                     case ClockStep::RisingEdge:
                         level = true;
@@ -44,7 +48,7 @@ namespace simulation {
                             drive_clk_signal_fn(level);
                             dut->eval();
                         }
-                        rising_edge.trigger();
+                        rising_edge.trigger(dut_eval_lambda);
                         break;
                     case ClockStep::PositiveMidPoint:
                         level = true;
@@ -52,7 +56,7 @@ namespace simulation {
                             drive_clk_signal_fn(level);
                             dut->eval();
                         }
-                        positive_mid.trigger();
+                        positive_mid.trigger(dut_eval_lambda);
                         break;
                     case ClockStep::FallingEdge:
                         level = false;
@@ -60,7 +64,7 @@ namespace simulation {
                             drive_clk_signal_fn(level);
                             dut->eval();
                         }
-                        falling_edge.trigger();
+                        falling_edge.trigger(dut_eval_lambda);
                         break;
                     case ClockStep::NegativeMidPoint:
                         level = false;
@@ -68,7 +72,7 @@ namespace simulation {
                             drive_clk_signal_fn(level);
                             dut->eval();
                         }
-                        negative_mid.trigger();
+                        negative_mid.trigger(dut_eval_lambda);
                         break;
                 }
                 // Evaluate DUT

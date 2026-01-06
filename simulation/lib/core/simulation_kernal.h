@@ -2,6 +2,7 @@
 #define SIMULATION_KERNAL_H
 #include <vector>
 #include <memory>
+#include "simulation_context.h"
 #include "simulation_clock.h"
 #include "simulation_task_symmetric_transfer.h"
 
@@ -24,6 +25,9 @@ namespace simulation {
 
         void run(uint64_t max_time) {
             while (time < max_time) {
+                // Sync global time for reporting
+                simulation::current_time_ps = time;
+
                 // Check root tasks for exceptions before ticking clocks
                 if (root_tasks) {
                     for (auto &root_task : *root_tasks) {

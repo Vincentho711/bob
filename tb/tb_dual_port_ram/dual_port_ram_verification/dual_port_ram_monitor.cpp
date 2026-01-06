@@ -49,7 +49,7 @@ simulation::Task DualPortRamMonitor::rd_port_run() {
         rd_txn->payload.addr = dut->rd_addr_i;
         rd_txn->payload.data = dut->rd_data_o;
 
-        log_debug("Capturing read transaction: Addr=" + std::to_string(rd_txn->payload.addr));
+        log_debug("Capturing read transaction: addr = " + std::to_string(rd_txn->payload.addr) + ", data = " + std::to_string(rd_txn->payload.data));
         co_await put_rd_transaction(rd_txn);
     }
 }
