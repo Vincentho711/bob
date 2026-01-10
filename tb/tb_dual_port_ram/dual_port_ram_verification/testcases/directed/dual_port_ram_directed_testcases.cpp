@@ -1,5 +1,6 @@
 #include "dual_port_ram_directed_testcases.h"
 #include <algorithm>
+#include <limits>
 
 simulation::Task Init_Reset_Sequence::body() {
     std::vector<TxnPtr> wr_txns;
@@ -12,8 +13,8 @@ simulation::Task Init_Reset_Sequence::body() {
     co_await wait_all(wr_txns);
 }
 
-simulation::Task Seq_Directed_WriteRead_All_Address::body() {
-    log_info("Starting Seq_Directed_WriteRead_All_Address sequence.");
+simulation::Task Seq_Directed_WriteRead_All_Address_Increment::body() {
+    log_info("Starting Seq_Directed_WriteRead_All_Address_Increment sequence.");
     for (uint32_t i = 0; i < (1U << wr_addr_width_); ++i) {
         uint32_t addr = i;
         uint32_t data = std::min(0x100U + i, static_cast<uint32_t>((1ULL << wr_data_width_) - 1));
@@ -25,5 +26,21 @@ simulation::Task Seq_Directed_WriteRead_All_Address::body() {
         log_debug("Read transaction issued. addr = " + std::to_string(addr));
         co_await read(addr);
     }
-    log_info("Finished Seq_Directed_WriteRead_All_Address sequence.");
+    log_info("Finished Seq_Directed_WriteRead_All_Address_Increment sequence.");
+}
+
+simulation::Task Seq_Directed_WriteRead_All_Address_Decrement::body() {
+    log_info("Starting Seq_Directed_WriteRead_All_Address_Decrement sequence.");
+    for (uint32_t i = ((1U << wr_addr_width_) - 1); i != std::numeric_limits<uint32_t>::max(); --i) {
+        uint32_t addr = i;
+        uint32_t data = std::min(0x200U + i, static_cast<uint32_t>((1ULL << wr_data_width_) - 1));
+        log_debug("Write transaction issued. addr = " + std::to_string(addr) + " , data = " + std::to_string(data));
+        co_await write(addr, data);
+    }
+    for (uint32_t i = ((1U << wr_addr_width_) - 1); i != std::numeric_limits<uint32_t>::max(); --i) {
+        uint32_t addr = i;
+        log_debug("Read transaction issued. addr = " + std::to_string(addr));
+        co_await read(addr);
+    }
+    log_info("Finished Seq_Directed_WriteRead_All_Address_Decrement sequence.");
 }

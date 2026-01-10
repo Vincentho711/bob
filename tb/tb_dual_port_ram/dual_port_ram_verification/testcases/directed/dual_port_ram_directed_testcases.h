@@ -13,9 +13,18 @@ public:
     simulation::Task body() override;
 };
 
-class Seq_Directed_WriteRead_All_Address : public DualPortRamBaseSequence {
+class Seq_Directed_WriteRead_All_Address_Increment : public DualPortRamBaseSequence {
 public:
-    Seq_Directed_WriteRead_All_Address(uint32_t addr_width, uint32_t data_width, const std::string &name = "Seq_Directed_WriteRead_All_Address")
+    Seq_Directed_WriteRead_All_Address_Increment(uint32_t addr_width, uint32_t data_width, const std::string &name = "Seq_Directed_WriteRead_All_Address_Increment")
+        : DualPortRamBaseSequence(name, true, addr_width, data_width) {};
+
+    simulation::Task body() override;
+
+};
+
+class Seq_Directed_WriteRead_All_Address_Decrement : public DualPortRamBaseSequence {
+public:
+    Seq_Directed_WriteRead_All_Address_Decrement(uint32_t addr_width, uint32_t data_width, const std::string &name = "Seq_Directed_WriteRead_All_Address_Decrement")
         : DualPortRamBaseSequence(name, true, addr_width, data_width) {};
 
     simulation::Task body() override;
