@@ -92,7 +92,7 @@ public:
         const auto dual_port_ram_module_data_width = Vdual_port_ram_dual_port_ram::DATA_WIDTH;
         const uint32_t addr_width_arg = static_cast<uint32_t>(dual_port_ram_module_addr_width);
         const uint32_t data_width_arg = static_cast<uint32_t>(dual_port_ram_module_data_width);
-        top_seq_ = std::make_unique<DualPortRamTopSequence>(addr_width_arg, data_width_arg);
+        top_seq_ = std::make_unique<DualPortRamTopSequence>(addr_width_arg, data_width_arg, 0U);
 
         // Set up task components
         coro_tasks.emplace_back(checker_->print_at_wr_clk_edges());
