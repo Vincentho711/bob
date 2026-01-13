@@ -3,6 +3,7 @@
 #include <iostream>
 #include <coroutine>
 #include "testcases/directed/dual_port_ram_directed_testcases.h"
+#include "testcases/random/dual_port_ram_random_testcases.h"
 
 simulation::Task DualPortRamTopSequence::body() {
     auto init_reset_seq = std::make_unique<Init_Reset_Sequence>(wr_addr_width_, wr_addr_width_, global_seed_);
@@ -24,5 +25,13 @@ simulation::Task DualPortRamTopSequence::body() {
 
     auto directed_all_address_decrement_wr_rd_seq = std::make_unique<Seq_Directed_WriteRead_All_Address_Decrement>(wr_addr_width_, wr_data_width_, global_seed_);
     co_await p_sequencer->start_sequence(std::move(directed_all_address_decrement_wr_rd_seq));
+    std::cout << "---------------------------------------\n";
+
+    auto random_write_random_seq = std::make_unique<Seq_Random_Write_Random>(wr_addr_width_, wr_data_width_, global_seed_, 0.5f, 20);
+    co_await p_sequencer->start_sequence(std::move(random_write_random_seq));
+    std::cout << "---------------------------------------\n";
+
+    auto random_read_random_seq = std::make_unique<Seq_Random_Read_Random>(wr_addr_width_, wr_data_width_, global_seed_, 0.5f, 20);
+    co_await p_sequencer->start_sequence(std::move(random_read_random_seq));
     std::cout << "---------------------------------------\n";
 };
