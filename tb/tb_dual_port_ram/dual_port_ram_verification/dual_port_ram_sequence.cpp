@@ -35,17 +35,17 @@ DualPortRamBaseSequence::TxnPtr DualPortRamBaseSequence::dispatch_read(uint32_t 
     return txn;
 }
 
-simulation::Task DualPortRamBaseSequence::write(uint32_t addr, uint32_t data) {
+simulation::Task<> DualPortRamBaseSequence::write(uint32_t addr, uint32_t data) {
     auto t = dispatch_write(addr, data);
     co_await wait_for_txn_done(t);
 }
 
-simulation::Task DualPortRamBaseSequence::read(uint32_t addr) {
+simulation::Task<> DualPortRamBaseSequence::read(uint32_t addr) {
     auto t = dispatch_read(addr);
     co_await wait_for_txn_done(t);
 }
 
-simulation::Task DualPortRamBaseSequence::wait_wr_cycles(uint32_t n) {
+simulation::Task<> DualPortRamBaseSequence::wait_wr_cycles(uint32_t n) {
     if (!p_sequencer) {
         log_error("Sequencer not connected. Cannot wait for clock.");
         co_return;
@@ -59,7 +59,7 @@ simulation::Task DualPortRamBaseSequence::wait_wr_cycles(uint32_t n) {
     }
 }
 
-simulation::Task DualPortRamBaseSequence::wait_rd_cycles(uint32_t n) {
+simulation::Task<> DualPortRamBaseSequence::wait_rd_cycles(uint32_t n) {
     if (!p_sequencer) {
         log_error("Sequencer not connected. Cannot wait for clock.");
         co_return;

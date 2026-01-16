@@ -14,7 +14,7 @@ public:
     explicit BaseMonitor(std::shared_ptr<DutType> dut, const std::string &name, bool debug_enabled)
         : dut(dut), name(name), debug_enabled(debug_enabled) {};
 
-    virtual simulation::Task run() = 0;
+    virtual simulation::Task<> run() = 0;
 
     void log_info(const std::string& message) const {
         std::cout << "[Monitor:" << name << "] INFO : " << message << "\n";

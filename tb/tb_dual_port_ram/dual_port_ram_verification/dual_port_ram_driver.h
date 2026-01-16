@@ -20,9 +20,9 @@ public:
                              const std::string &name = "DualPortRamDriver",
                              bool debug_enabled = true);
 
-    simulation::Task run() override;
-    simulation::Task wr_driver_run();
-    simulation::Task rd_driver_run();
+    simulation::Task<> run() override;
+    simulation::Task<> wr_driver_run();
+    simulation::Task<> rd_driver_run();
 
 private:
     std::shared_ptr<clock_t> wr_clk;

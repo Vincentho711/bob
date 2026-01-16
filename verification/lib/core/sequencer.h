@@ -18,7 +18,7 @@ public:
     virtual ~BaseSequencer() = default;
 
     template<typename SeqType>
-    simulation::Task start_sequence(std::unique_ptr<SeqType> seq) {
+    simulation::Task<> start_sequence(std::unique_ptr<SeqType> seq) {
         // Get a shared_ptr to the current BaseSequencer
         // Warning: This throws std::bad_weak_ptr if 'this' wasn't created via make_shared
         auto base_sequencer_ptr = this->shared_from_this();

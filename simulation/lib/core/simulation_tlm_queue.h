@@ -67,7 +67,7 @@ public:
 
     // Currently, this is not really a blocking because flow control is not required.
     // Simply implement it as a non-blocking put for now
-    simulation::Task blocking_put(TxnPtr txn) {
+    simulation::Task<> blocking_put(TxnPtr txn) {
         // Since we don't need to handle backpressure / capacity, blocking put is equivalent to put()
         put(txn);
         co_return;

@@ -16,11 +16,11 @@ DualPortRamScoreboard::DualPortRamScoreboard(
       circular_buffer_size_(wr_delay_cycle + 1U),
       circular_buffer_(circular_buffer_size_) {}
 
-simulation::Task DualPortRamScoreboard::run() {
+simulation::Task<> DualPortRamScoreboard::run() {
     co_return;
 }
 
-simulation::Task DualPortRamScoreboard::run_write_capture() {
+simulation::Task<> DualPortRamScoreboard::run_write_capture() {
     while (true) {
         TxnPtr write_txn = co_await tlm_wr_queue_->blocking_get();
         if (write_txn) {
@@ -36,7 +36,7 @@ simulation::Task DualPortRamScoreboard::run_write_capture() {
     }
 }
 
-simulation::Task DualPortRamScoreboard::run_read_capture() {
+simulation::Task<> DualPortRamScoreboard::run_read_capture() {
     while (true) {
         TxnPtr read_txn = co_await tlm_rd_queue_->blocking_get();
 
@@ -74,7 +74,7 @@ simulation::Task DualPortRamScoreboard::run_read_capture() {
     }
 }
 
-simulation::Task DualPortRamScoreboard::update_ram_model() {
+simulation::Task<> DualPortRamScoreboard::update_ram_model() {
     while (true) {
         co_await wr_clk_->rising_edge(simulation::Phase::PreDrive);
         // Advance the apply index by 1

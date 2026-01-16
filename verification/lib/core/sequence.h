@@ -29,7 +29,7 @@ public:
         rng_(seed_) {}
 
     virtual ~BaseSequence() = default;
-    virtual simulation::Task body() = 0;
+    virtual simulation::Task<> body() = 0;
 
     [[nodiscard]]
     uint64_t sequence_id() const noexcept { return sequence_id_; }
@@ -45,7 +45,7 @@ public:
         return txn->done_event.operator co_await();
     }
 
-    simulation::Task wait_all(std::vector<TxnPtr> txns) {
+    simulation::Task<> wait_all(std::vector<TxnPtr> txns) {
         for (auto &t : txns) {
             co_await wait_for_txn_done(t);
         }

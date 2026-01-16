@@ -19,13 +19,13 @@ public:
     [[nodiscard]]
     TxnPtr dispatch_read(uint32_t addr);
 
-    simulation::Task write(uint32_t addr, uint32_t data);
+    simulation::Task<> write(uint32_t addr, uint32_t data);
 
-    simulation::Task read(uint32_t addr);
+    simulation::Task<> read(uint32_t addr);
 
-    simulation::Task wait_wr_cycles(uint32_t n);
+    simulation::Task<> wait_wr_cycles(uint32_t n);
 
-    simulation::Task wait_rd_cycles(uint32_t n);
+    simulation::Task<> wait_rd_cycles(uint32_t n);
 
 protected:
     uint32_t wr_addr_width_;

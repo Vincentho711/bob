@@ -2,7 +2,7 @@
 #include <algorithm>
 #include <limits>
 
-simulation::Task Init_Reset_Sequence::body() {
+simulation::Task<> Init_Reset_Sequence::body() {
     std::vector<TxnPtr> wr_txns;
     for (uint32_t i = 0; i < 5; ++i) {
         uint32_t addr = 0U;
@@ -13,7 +13,7 @@ simulation::Task Init_Reset_Sequence::body() {
     co_await wait_all(wr_txns);
 }
 
-simulation::Task Seq_Directed_WriteRead_All_Address_Increment::body() {
+simulation::Task<> Seq_Directed_WriteRead_All_Address_Increment::body() {
     log_info("Starting Seq_Directed_WriteRead_All_Address_Increment sequence.");
     for (uint32_t i = 0; i < (1U << wr_addr_width_); ++i) {
         uint32_t addr = i;
@@ -29,7 +29,7 @@ simulation::Task Seq_Directed_WriteRead_All_Address_Increment::body() {
     log_info("Finished Seq_Directed_WriteRead_All_Address_Increment sequence.");
 }
 
-simulation::Task Seq_Directed_WriteRead_All_Address_Decrement::body() {
+simulation::Task<> Seq_Directed_WriteRead_All_Address_Decrement::body() {
     log_info("Starting Seq_Directed_WriteRead_All_Address_Decrement sequence.");
     for (uint32_t i = ((1U << wr_addr_width_) - 1); i != std::numeric_limits<uint32_t>::max(); --i) {
         uint32_t addr = i;

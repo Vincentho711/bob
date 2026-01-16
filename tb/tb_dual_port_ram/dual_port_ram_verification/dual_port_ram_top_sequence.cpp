@@ -5,7 +5,7 @@
 #include "testcases/directed/dual_port_ram_directed_testcases.h"
 #include "testcases/random/dual_port_ram_random_testcases.h"
 
-simulation::Task DualPortRamTopSequence::body() {
+simulation::Task<> DualPortRamTopSequence::body() {
     auto init_reset_seq = std::make_unique<Init_Reset_Sequence>(wr_addr_width_, wr_addr_width_, global_seed_);
 
     co_await p_sequencer->start_sequence(std::move(init_reset_seq));

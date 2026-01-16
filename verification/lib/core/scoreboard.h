@@ -13,7 +13,7 @@ public:
     explicit BaseScoreboard(const std::string &name, bool debug_enabled)
         : name(name), debug_enabled(debug_enabled) {}
 
-    virtual simulation::Task run() = 0;
+    virtual simulation::Task<> run() = 0;
 
     void log_info(const std::string &message) const {
         std::cout << "[Scoreboard:" << name << "] INFO : " << message << "\n";

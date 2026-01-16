@@ -8,7 +8,7 @@ public:
     DualPortRamTopSequence(uint32_t addr_width, uint32_t data_width, uint64_t global_seed, const std::string &name = "DualPortRamTopSequence", const bool enabled_debug = true) :
         DualPortRamBaseSequence(name, enabled_debug, addr_width, data_width, global_seed), global_seed_(global_seed) {};
 
-    simulation::Task body() override;
+    simulation::Task<> body() override;
 
 private:
     uint64_t global_seed_;

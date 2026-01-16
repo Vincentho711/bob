@@ -14,7 +14,7 @@ namespace simulation {
         uint64_t time = 0U;
         std::vector<std::shared_ptr<simulation::Clock<DutType>>> clocks;
         // Raw pointer reference to all the root tasks
-        std::vector<simulation::Task>* root_tasks = nullptr;
+        std::vector<simulation::Task<>>* root_tasks = nullptr;
 
         SimulationKernal(std::shared_ptr<DutType> dut, std::shared_ptr<TraceType> trace) :
             dut_(dut), trace_(trace) {};

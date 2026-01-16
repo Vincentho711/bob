@@ -8,11 +8,11 @@ DualPortRamDriver::DualPortRamDriver(
     bool debug_enabled)
     : BaseDriver(sequencer, dut, name, debug_enabled), wr_clk(wr_clk), rd_clk(rd_clk) {}
 
-simulation::Task DualPortRamDriver::run() {
+simulation::Task<> DualPortRamDriver::run() {
     co_return;
 }
 
-simulation::Task DualPortRamDriver::wr_driver_run() {
+simulation::Task<> DualPortRamDriver::wr_driver_run() {
     while (true) {
         log_debug("wr_driver_run() started.");
         // Wait for wr_clk's rising edge
@@ -47,7 +47,7 @@ simulation::Task DualPortRamDriver::wr_driver_run() {
     }
 }
 
-simulation::Task DualPortRamDriver::rd_driver_run() {
+simulation::Task<> DualPortRamDriver::rd_driver_run() {
     while (true) {
         // Wait for wr_clk's rising edge
         co_await rd_clk->rising_edge(simulation::Phase::Drive);

@@ -17,7 +17,7 @@ public:
     explicit BaseDriver(std::shared_ptr<SequencerT> sequencer, std::shared_ptr<DutType> dut, const std::string &name, bool debug_enabled)
         : p_sequencer(sequencer), dut(dut), name(name), debug_enabled(debug_enabled) {};
 
-    virtual simulation::Task run() = 0;
+    virtual simulation::Task<> run() = 0;
     void log_info(const std::string& message) const {
         std::cout << "[Sequence:" << name << "] INFO : " << message << "\n";
     }

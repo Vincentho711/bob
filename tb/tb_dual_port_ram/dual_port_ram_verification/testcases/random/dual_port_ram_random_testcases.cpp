@@ -9,7 +9,7 @@ Seq_Random_Write_Random::Seq_Random_Write_Random(uint32_t addr_width, uint32_t d
     wr_en_rate_ = wr_en_rate;
 };
 
-simulation::Task Seq_Random_Write_Random::body() {
+simulation::Task<> Seq_Random_Write_Random::body() {
     log_info("Starting Seq_Random_Write_Random sequence.");
     for (uint32_t iter = 0; iter < iterations_; ++iter) {
         if (rand_prob(wr_en_rate_)) {
@@ -32,7 +32,7 @@ Seq_Random_Read_Random::Seq_Random_Read_Random(uint32_t addr_width, uint32_t dat
     change_rate_ = change_rate;
 };
 
-simulation::Task Seq_Random_Read_Random::body() {
+simulation::Task<> Seq_Random_Read_Random::body() {
     log_info("Starting Seq_Random_Read_Random sequence.");
     for (uint32_t iter = 0; iter < iterations_; ++iter) {
         if (rand_prob(change_rate_)) {

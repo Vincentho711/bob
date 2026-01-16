@@ -22,15 +22,15 @@ public:
       bool debug_enabled = true
   );
 
-  simulation::Task run() override;
+  simulation::Task<> run() override;
 
-  simulation::Task wr_port_run();
+  simulation::Task<> wr_port_run();
 
-  simulation::Task rd_port_run();
+  simulation::Task<> rd_port_run();
 
-  simulation::Task put_wr_transaction(TxnPtr wr_txn);
+  simulation::Task<> put_wr_transaction(TxnPtr wr_txn);
 
-  simulation::Task put_rd_transaction(TxnPtr rd_txn);
+  simulation::Task<> put_rd_transaction(TxnPtr rd_txn);
 
 private:
     std::string name_;

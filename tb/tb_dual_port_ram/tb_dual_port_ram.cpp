@@ -30,13 +30,22 @@ class BaseChecker {
         BaseChecker(std::shared_ptr<clock_t> wr_clk)
             : wr_clk(wr_clk) {}
 
-        simulation::Task print_at_wr_clk_edges() {
+        simulation::Task<> print_at_wr_clk_edges() {
             while (true) {
                 co_await wr_clk->rising_edge(simulation::Phase::Drive);
                 std::cout << "Resuming after wr_clk rising_edge is seen." << std::endl;
                 co_await wr_clk->falling_edge(simulation::Phase::Drive);
                 std::cout << "Resuming after wr_clk falling_edge is seen." << std::endl;
             }
+        }
+
+        simulation::Task<> initial_ret_val() {
+            uint32_t ret_val = co_await return_value(99U);
+            std::cout << "ret_val=" << ret_val << std::endl;
+        }
+
+        simulation::Task<uint32_t> return_value(uint32_t value) {
+            co_return value;
         }
 
     private:
@@ -95,6 +104,7 @@ public:
         top_seq_ = std::make_unique<DualPortRamTopSequence>(addr_width_arg, data_width_arg, 0U);
 
         // Set up task components
+        coro_tasks.emplace_back(checker_->initial_ret_val());
         coro_tasks.emplace_back(checker_->print_at_wr_clk_edges());
         coro_tasks.emplace_back(sequencer_->start_sequence(std::move(top_seq_)));
         coro_tasks.emplace_back(driver_->wr_driver_run());
@@ -121,7 +131,7 @@ public:
         sim_kernal_->root_tasks = &coro_tasks;
         // Resume all root level coroutines as they are not started upon creation
         try {
-            for (simulation::Task &task : coro_tasks) {
+            for (simulation::Task<> &task : coro_tasks) {
                 task.start();
             }
             sim_kernal_->run(max_time_);
@@ -160,7 +170,7 @@ private:
     std::unique_ptr<DualPortRamTopSequence> top_seq_;
 
     // Task componenets
-    std::vector<simulation::Task> coro_tasks;
+    std::vector<simulation::Task<>> coro_tasks;
 };
 
 int main() {

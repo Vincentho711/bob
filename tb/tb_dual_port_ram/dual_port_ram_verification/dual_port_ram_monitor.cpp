@@ -13,11 +13,11 @@ DualPortRamMonitor::DualPortRamMonitor(
       wr_clk_(wr_clk), rd_clk_(rd_clk), tlm_wr_queue_(tlm_wr_queue),
       tlm_rd_queue_(tlm_rd_queue) {}
 
-simulation::Task DualPortRamMonitor::run() {
+simulation::Task<> DualPortRamMonitor::run() {
     co_return;
 }
 
-simulation::Task DualPortRamMonitor::wr_port_run() {
+simulation::Task<> DualPortRamMonitor::wr_port_run() {
     while (true) {
         co_await wr_clk_->rising_edge(simulation::Phase::Monitor);
         log_debug("simulation::Phase::Monitor detected within wr_port_run().");
@@ -38,7 +38,7 @@ simulation::Task DualPortRamMonitor::wr_port_run() {
     }
 }
 
-simulation::Task DualPortRamMonitor::rd_port_run() {
+simulation::Task<> DualPortRamMonitor::rd_port_run() {
     while (true) {
         co_await rd_clk_->rising_edge(simulation::Phase::Monitor);
         log_debug("simulation::Phase::Monitor detected within rd_port_run().");
@@ -54,13 +54,13 @@ simulation::Task DualPortRamMonitor::rd_port_run() {
     }
 }
 
-simulation::Task DualPortRamMonitor::put_wr_transaction(
+simulation::Task<> DualPortRamMonitor::put_wr_transaction(
     TxnPtr wr_txn) {
     log_debug("tlm_wr_queue_->blocking_put(). in put_wr_transaction.");
     co_await tlm_wr_queue_->blocking_put(wr_txn);
 }
 
-simulation::Task DualPortRamMonitor::put_rd_transaction(
+simulation::Task<> DualPortRamMonitor::put_rd_transaction(
     TxnPtr rd_txn) {
     log_debug("tlm_rd_queue_->blocking_put() in put_rd_transaction.");
     co_await tlm_rd_queue_->blocking_put(rd_txn);

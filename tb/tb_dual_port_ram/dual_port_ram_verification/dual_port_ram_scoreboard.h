@@ -24,13 +24,13 @@ public:
         bool debug_enabled = true
     );
 
-    simulation::Task run() override;
+    simulation::Task<> run() override;
 
-    simulation::Task update_ram_model();
+    simulation::Task<> update_ram_model();
 
-    simulation::Task run_write_capture();
+    simulation::Task<> run_write_capture();
 
-    simulation::Task run_read_capture();
+    simulation::Task<> run_read_capture();
 
 protected:
     std::map<uint32_t, uint32_t> ram_model_;
