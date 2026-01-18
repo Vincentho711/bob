@@ -14,4 +14,5 @@ src_files:
   - "core/simulation_object_pool.h"
   # - "core/simulation_task.h"
   - "core/simulation_task_symmetric_transfer.h"
+  - "core/simulation_task_when_all_ready.h"
   - "core/simulation_tlm_queue.h"

@@ -7,6 +7,7 @@
 #include "simulation_clock.h"
 #include "simulation_phase_event.h"
 #include "simulation_task_symmetric_transfer.h"
+#include "simulation_task_when_all_ready.h"
 #include "simulation_exceptions.h"
 
 #include "dual_port_ram_driver.h"
@@ -40,12 +41,26 @@ class BaseChecker {
         }
 
         simulation::Task<> initial_ret_val() {
-            uint32_t ret_val = co_await return_value(99U);
+            uint32_t ret_val = co_await return_value_1(99U);
             std::cout << "ret_val=" << ret_val << std::endl;
         }
 
-        simulation::Task<uint32_t> return_value(uint32_t value) {
+        simulation::Task<uint32_t> return_value_1(uint32_t value) {
             co_return value;
+        }
+
+        simulation::Task<uint32_t> return_value_2(uint32_t value) {
+            co_return value + 1U;
+        }
+
+        simulation::Task<> return_value_top_task() {
+            auto [task1, task2] = co_await simulation::when_all_ready(
+                return_value_1(20U),
+                return_value_2(80U)
+            );
+
+            std::cout << "task1 result=" << task1.result() << "\n";
+            std::cout << "task2 result=" << task2.result() << "\n";
         }
 
     private:
@@ -105,6 +120,7 @@ public:
 
         // Set up task components
         coro_tasks.emplace_back(checker_->initial_ret_val());
+        coro_tasks.emplace_back(checker_->return_value_top_task());
         coro_tasks.emplace_back(checker_->print_at_wr_clk_edges());
         coro_tasks.emplace_back(sequencer_->start_sequence(std::move(top_seq_)));
         coro_tasks.emplace_back(driver_->wr_driver_run());
