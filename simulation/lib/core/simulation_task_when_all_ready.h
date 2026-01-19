@@ -174,7 +174,7 @@ namespace simulation {
             typename Awaitable,
             typename Result = await_result_t<Awaitable>,
             std::enable_if_t<!std::is_void_v<Result>, int> = 0>
-        auto make_when_all_task(Awaitable&& a) -> WhenAllTask<Result> {
+        auto make_when_all_task(Awaitable a) -> WhenAllTask<Result> {
             Result result = co_await std::forward<Awaitable>(a);
             co_yield result;
         }
@@ -183,7 +183,7 @@ namespace simulation {
             typename Awaitable,
             typename Result = await_result_t<Awaitable>,
             std::enable_if_t<std::is_void_v<Result>, int> = 0>
-        auto make_when_all_task(Awaitable&& a) -> WhenAllTask<void> {
+        auto make_when_all_task(Awaitable a) -> WhenAllTask<void> {
             co_await std::forward<Awaitable>(a);
         }
 

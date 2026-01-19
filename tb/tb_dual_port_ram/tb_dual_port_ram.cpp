@@ -63,6 +63,27 @@ class BaseChecker {
             std::cout << "task2 result=" << task2.result() << "\n";
         }
 
+        simulation::Task<> empty_task_1() {
+            for (uint32_t i = 0 ; i < 5; ++i) {
+                co_await wr_clk->rising_edge(simulation::Phase::Drive);
+                std::cout << "empty_task_1's i = " << i << "\n";
+             };
+        }
+
+        simulation::Task<> empty_task_2() {
+            for (uint32_t i = 0 ; i < 6; ++i) {
+                co_await wr_clk->rising_edge(simulation::Phase::Drive);
+                std::cout << "empty_task_2's i = " << i << "\n";
+             };
+        }
+
+        simulation::Task<> empty_top_task() {
+            std::vector<simulation::Task<>> tasks;
+            tasks.emplace_back(empty_task_1());
+            tasks.emplace_back(empty_task_2());
+            co_await simulation::when_all_ready(std::move(tasks));
+        }
+
     private:
         std::shared_ptr<simulation::Clock<Vdual_port_ram>> wr_clk;
 
@@ -121,6 +142,7 @@ public:
         // Set up task components
         coro_tasks.emplace_back(checker_->initial_ret_val());
         coro_tasks.emplace_back(checker_->return_value_top_task());
+        // coro_tasks.emplace_back(checker_->empty_top_task());
         coro_tasks.emplace_back(checker_->print_at_wr_clk_edges());
         coro_tasks.emplace_back(sequencer_->start_sequence(std::move(top_seq_)));
         coro_tasks.emplace_back(driver_->wr_driver_run());
