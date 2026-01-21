@@ -31,6 +31,15 @@ class BaseChecker {
         BaseChecker(std::shared_ptr<clock_t> wr_clk)
             : wr_clk(wr_clk) {}
 
+        simulation::Task<> test_same_phase_event() {
+            for (uint32_t i = 0 ; i < 3U ; ++i) {
+                co_await wr_clk->rising_edge(simulation::Phase::Drive);
+                std::cout << "Test waiting for same phase event in a single task. 1." << std::endl;
+                co_await wr_clk->rising_edge(simulation::Phase::Drive);
+                std::cout << "Test waiting for same phase event in a single task. 2." << std::endl;
+            }
+        }
+
         simulation::Task<> print_at_wr_clk_edges() {
             while (true) {
                 co_await wr_clk->rising_edge(simulation::Phase::Drive);
@@ -59,21 +68,21 @@ class BaseChecker {
                 return_value_2(80U)
             );
 
-            std::cout << "task1 result=" << task1.result() << "\n";
-            std::cout << "task2 result=" << task2.result() << "\n";
+            std::cout << "task1 result=" << task1.result() << std::endl;
+            std::cout << "task2 result=" << task2.result() << std::endl;
         }
 
         simulation::Task<> empty_task_1() {
             for (uint32_t i = 0 ; i < 5; ++i) {
                 co_await wr_clk->rising_edge(simulation::Phase::Drive);
-                std::cout << "empty_task_1's i = " << i << "\n";
+                std::cout << "empty_task_1's i = " << i << std::endl;
              };
         }
 
         simulation::Task<> empty_task_2() {
             for (uint32_t i = 0 ; i < 6; ++i) {
                 co_await wr_clk->rising_edge(simulation::Phase::Drive);
-                std::cout << "empty_task_2's i = " << i << "\n";
+                std::cout << "empty_task_2's i = " << i << std::endl;
              };
         }
 
@@ -82,6 +91,7 @@ class BaseChecker {
             tasks.emplace_back(empty_task_1());
             tasks.emplace_back(empty_task_2());
             co_await simulation::when_all_ready(std::move(tasks));
+            std::cout << "empty_top_task done" << std::endl;
         }
 
     private:
@@ -140,9 +150,10 @@ public:
         top_seq_ = std::make_unique<DualPortRamTopSequence>(addr_width_arg, data_width_arg, 0U);
 
         // Set up task components
+        // coro_tasks.emplace_back(checker_->test_same_phase_event());
         coro_tasks.emplace_back(checker_->initial_ret_val());
         coro_tasks.emplace_back(checker_->return_value_top_task());
-        // coro_tasks.emplace_back(checker_->empty_top_task());
+        coro_tasks.emplace_back(checker_->empty_top_task());
         coro_tasks.emplace_back(checker_->print_at_wr_clk_edges());
         coro_tasks.emplace_back(sequencer_->start_sequence(std::move(top_seq_)));
         coro_tasks.emplace_back(driver_->wr_driver_run());

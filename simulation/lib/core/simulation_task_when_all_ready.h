@@ -32,14 +32,18 @@ namespace simulation {
             WhenAllCounter(size_t count) noexcept : count_(count + 1), continuation_(nullptr) {}
             bool is_ready() const noexcept { return count_.load(std::memory_order_acquire) == 0; }
 
+            // The last child calls notify and returns the continuation_ which is the parent handle
             std::coroutine_handle<> notify() noexcept {
-                if (count_.fetch_sub(1, std::memory_order_acq_rel) == 1) return continuation_;
-                return std::noop_coroutine();
+                if (count_.fetch_sub(1, std::memory_order_acq_rel) == 1) return continuation_; // I am the last child, resume the parent.
+                return std::noop_coroutine(); // The finished child task is not the last one, don't return anything
             }
 
-            bool start_awaiting(std::coroutine_handle<> continuation) noexcept {
-                continuation_ = continuation;
-                return count_.fetch_sub(1, std::memory_order_acq_rel) > 1;
+            void start_awaiting(std::coroutine_handle<> continuation) noexcept {
+                continuation_ = continuation; // Store the handle so children can find it
+                // Check for rare but possible case when all the children are already done before we even finished starting them.
+                if (count_.fetch_sub(1, std::memory_order_acq_rel) == 1) {
+                    continuation_.resume();
+                }
             }
         };
 
@@ -215,9 +219,12 @@ namespace simulation {
             return detail::is_container_empty(tasks_) || counter_.is_ready(); 
         }
 
-        auto await_suspend(std::coroutine_handle<> continuation) noexcept {
+        void await_suspend(std::coroutine_handle<> continuation) noexcept {
+            // Start the children tasks
             for (auto& t : tasks_) t.start(counter_);
-            return counter_.start_awaiting(continuation) ? continuation : std::noop_coroutine();
+            // Only when all the loop is done, the parent calls start_awaiting().
+            // This provides the handle needed to wake the parent up and performs the final fetch_sub(1).
+            counter_.start_awaiting(continuation);
         }
 
         Container await_resume() noexcept { return std::move(tasks_); }
@@ -234,9 +241,9 @@ namespace simulation {
 
         struct TupleAwaiter : WhenAllReadyAwaitable<Container> {
             using WhenAllReadyAwaitable<Container>::WhenAllReadyAwaitable;
-            auto await_suspend(std::coroutine_handle<> continuation) noexcept {
+            void await_suspend(std::coroutine_handle<> continuation) noexcept {
                 std::apply([this](auto&... t) { (t.start(this->counter_), ...); }, this->tasks_);
-                return this->counter_.start_awaiting(continuation) ? continuation : std::noop_coroutine();
+                this->counter_.start_awaiting(continuation);
             }
         };
         return TupleAwaiter(std::move(tasks));
