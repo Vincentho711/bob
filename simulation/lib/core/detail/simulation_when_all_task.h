@@ -16,7 +16,7 @@ namespace simulation {
             using value_type = std::remove_reference_t<T>;
             WhenAllCounter* counter_ = nullptr;
             std::exception_ptr exception_;
-            std::optional<value_type> result_;
+            std::add_pointer_t<T> result_;
 
             auto get_return_object() noexcept { return coroutine_handle_t::from_promise(*this); }
             std::suspend_always initial_suspend() noexcept { return {}; }
@@ -33,8 +33,9 @@ namespace simulation {
             }
             void unhandled_exception() noexcept { exception_ = std::current_exception(); }
 
-            void return_value(const T& result) noexcept {
-                result_.emplace(result);
+            auto yield_value(T&& result) noexcept {
+                result_ = std::addressof(result);
+                return final_suspend();
             }
 
             T& result() & {
@@ -47,14 +48,15 @@ namespace simulation {
                 if (exception_) {
                     std::rethrow_exception(exception_);
                 }
-                return std::move(*result_);
+                return std::forward<T>(*result_);
             }
 
-            // void return_void() noexcept {
-            //     // Should have either suspened at co yield pointer or an exception was thrown before running off
-            //     // the end of the coroutine.
-            //     assert(false);
-            // }
+
+            void return_void() noexcept {
+                // Should have either suspened at co yield pointer or an exception was thrown before running off
+                // the end of the coroutine.
+                assert(false);
+            }
         };
 
         template<>
@@ -120,6 +122,26 @@ namespace simulation {
                 return std::move(handle_.promise()).result();
             }
 
+            decltype(auto) non_void_result() &
+                requires (!std::is_void_v<T>) {
+                return this->result();
+            }
+
+            void non_void_result() &
+                requires std::is_void_v<T> {
+                this->result();
+            }
+
+            decltype(auto) non_void_result() &&
+                requires (!std::is_void_v<T>) {
+                return std::move(*this).result();
+            }
+
+            void non_void_result() &&
+                requires std::is_void_v<T> {
+                std::move(*this).result();
+            }
+
         private:
             handle_t handle_;
         };
@@ -129,8 +151,7 @@ namespace simulation {
             typename Result = await_result_t<Awaitable>,
             std::enable_if_t<!std::is_void_v<Result>, int> = 0>
         auto make_when_all_task(Awaitable a) -> WhenAllTask<Result> {
-        std::decay_t<Result> result = co_await std::forward<Awaitable>(a);
-            co_return result;
+            co_yield co_await static_cast<Awaitable&&>(a);
         }
 
         template<
@@ -138,7 +159,7 @@ namespace simulation {
             typename Result = await_result_t<Awaitable>,
             std::enable_if_t<std::is_void_v<Result>, int> = 0>
         auto make_when_all_task(Awaitable a) -> WhenAllTask<void> {
-            co_await std::forward<Awaitable>(a);
+            co_await static_cast<Awaitable&&>(a);
         }
 
         template<
@@ -146,8 +167,7 @@ namespace simulation {
             typename Result = await_result_t<Awaitable>,
             std::enable_if_t<!std::is_void_v<Result>, int> = 0>
         auto make_when_all_task(std::reference_wrapper<Awaitable> a) -> WhenAllTask<Result> {
-            std::decay_t<Result> result = co_await a.get();
-            co_return result;
+            co_yield co_await a.get();
         }
 
         template<
