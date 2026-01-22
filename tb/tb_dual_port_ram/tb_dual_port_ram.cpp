@@ -7,7 +7,8 @@
 #include "simulation_clock.h"
 #include "simulation_phase_event.h"
 #include "simulation_task_symmetric_transfer.h"
-#include "simulation_task_when_all_ready.h"
+#include "simulation_when_all.h"
+#include "simulation_when_all_ready.h"
 #include "simulation_exceptions.h"
 
 #include "dual_port_ram_driver.h"
@@ -62,7 +63,7 @@ class BaseChecker {
             co_return value + 1U;
         }
 
-        simulation::Task<> return_value_top_task() {
+        simulation::Task<> when_all_ready_return_value_top_task() {
             auto [task1, task2] = co_await simulation::when_all_ready(
                 return_value_1(20U),
                 return_value_2(80U)
@@ -70,6 +71,17 @@ class BaseChecker {
 
             std::cout << "task1 result=" << task1.result() << std::endl;
             std::cout << "task2 result=" << task2.result() << std::endl;
+            std::cout << "Done with when_all_ready_return_value_top_task" << std::endl;
+        }
+
+        simulation::Task<> when_all_return_value_top_task() {
+            auto [task1, task2] = co_await simulation::when_all(
+                return_value_1(20U),
+                return_value_2(80U)
+            );
+
+            std::cout << "task1 result=" << task1 << std::endl;
+            std::cout << "task2 result=" << task2 << std::endl;
         }
 
         simulation::Task<> empty_task_1() {
@@ -83,6 +95,9 @@ class BaseChecker {
             for (uint32_t i = 0 ; i < 6; ++i) {
                 co_await wr_clk->rising_edge(simulation::Phase::Drive);
                 std::cout << "empty_task_2's i = " << i << std::endl;
+                if (i == 5) {
+                    throw std::runtime_error("Testing the throwing of runtime error in void Task.");
+                }
              };
         }
 
@@ -90,7 +105,13 @@ class BaseChecker {
             std::vector<simulation::Task<>> tasks;
             tasks.emplace_back(empty_task_1());
             tasks.emplace_back(empty_task_2());
-            co_await simulation::when_all_ready(std::move(tasks));
+            // co_await returns the vector of internal WhenAllTask objects
+            co_await simulation::when_all(std::move(tasks));
+            // auto results = co_await simulation::when_all_ready(std::move(tasks));
+            // for (auto & t : results) {
+            //     // Check the result to make sure it didn't throw an exception
+            //     t.result();
+            // }
             std::cout << "empty_top_task done" << std::endl;
         }
 
@@ -150,19 +171,20 @@ public:
         top_seq_ = std::make_unique<DualPortRamTopSequence>(addr_width_arg, data_width_arg, 0U);
 
         // Set up task components
-        // coro_tasks.emplace_back(checker_->test_same_phase_event());
-        coro_tasks.emplace_back(checker_->initial_ret_val());
-        coro_tasks.emplace_back(checker_->return_value_top_task());
-        coro_tasks.emplace_back(checker_->empty_top_task());
+        coro_tasks.emplace_back(checker_->test_same_phase_event());
+        // coro_tasks.emplace_back(checker_->initial_ret_val());
+        coro_tasks.emplace_back(checker_->when_all_ready_return_value_top_task());
+        coro_tasks.emplace_back(checker_->when_all_return_value_top_task());
+        // coro_tasks.emplace_back(checker_->empty_top_task());
         coro_tasks.emplace_back(checker_->print_at_wr_clk_edges());
-        coro_tasks.emplace_back(sequencer_->start_sequence(std::move(top_seq_)));
-        coro_tasks.emplace_back(driver_->wr_driver_run());
-        coro_tasks.emplace_back(scoreboard_->update_ram_model());
-        coro_tasks.emplace_back(driver_->rd_driver_run());
-        coro_tasks.emplace_back(monitor_->wr_port_run());
-        coro_tasks.emplace_back(monitor_->rd_port_run());
-        coro_tasks.emplace_back(scoreboard_->run_read_capture());
-        coro_tasks.emplace_back(scoreboard_->run_write_capture());
+        // coro_tasks.emplace_back(sequencer_->start_sequence(std::move(top_seq_)));
+        // coro_tasks.emplace_back(driver_->wr_driver_run());
+        // coro_tasks.emplace_back(scoreboard_->update_ram_model());
+        // coro_tasks.emplace_back(driver_->rd_driver_run());
+        // coro_tasks.emplace_back(monitor_->wr_port_run());
+        // coro_tasks.emplace_back(monitor_->rd_port_run());
+        // coro_tasks.emplace_back(scoreboard_->run_read_capture());
+        // coro_tasks.emplace_back(scoreboard_->run_write_capture());
 
     }
 
