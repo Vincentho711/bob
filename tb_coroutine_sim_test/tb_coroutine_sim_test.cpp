@@ -7,6 +7,8 @@
 #include "simulation_clock.h"
 #include "simulation_phase_event.h"
 #include "simulation_task_symmetric_transfer.h"
+#include "simulation_when_all_ready.h"
+#include "simulation_when_all.h"
 #include "simulation_exceptions.h"
 
 #include <verilated.h>
@@ -21,7 +23,7 @@ class BaseChecker {
         BaseChecker(std::shared_ptr<clock_t> wr_clk, std::shared_ptr<clock_t> rd_clk)
             : wr_clk(wr_clk), rd_clk(rd_clk) {}
 
-        simulation::Task print_at_wr_clk_edges() {
+        simulation::Task<> print_at_wr_clk_edges() {
             while (true) {
                 co_await wr_clk->rising_edge(simulation::Phase::Drive);
                 std::cout << "Resuming after wr_clk rising_edge 1 is seen." << std::endl;
@@ -34,13 +36,125 @@ class BaseChecker {
             }
         }
 
-        simulation::Task print_at_rd_clk_edges() {
+        simulation::Task<> print_at_rd_clk_edges() {
             while (true) {
                 co_await rd_clk->rising_edge(simulation::Phase::Drive);
                 std::cout << "Resuming after rd_clk rising_edge is seen." << std::endl;
                 co_await rd_clk->falling_edge(simulation::Phase::Drive);
                 std::cout << "Resuming after rd_clk falling_edge is seen." << std::endl;
             }
+        }
+
+        // Dummy tasks to test when_all() and when_all_ready()
+        simulation::Task<> when_all_void_task_0() {
+            std::cout << "when_all_void_task_0\n";
+            co_return;
+        }
+
+        simulation::Task<> when_all_void_task_1() {
+            std::cout << "when_all_void_task_1\n";
+            co_return;
+        }
+
+        simulation::Task<uint32_t> when_all_return_value_task_0(uint32_t value) {
+            co_return value + 1U;
+        }
+
+        simulation::Task<uint32_t> when_all_return_value_task_1(uint32_t value) {
+            co_return value + 2U;
+        }
+
+        // when_all_ready() tests, testing non_void type for both vector and tuple format
+        simulation::Task<> when_all_ready_non_void_tuple_top() {
+            std::cout << "=== when_all_ready_non_void_tuple_top() ===\n";
+            auto [val_0, val_1] = co_await simulation::when_all_ready(
+                when_all_return_value_task_0(10U),
+                when_all_return_value_task_1(20U));
+            std::cout << "Expected = 11, Actual = " << val_0.result() << std::endl;
+            std::cout << "Expected = 22, Actual = " << val_1.result() << std::endl;
+        }
+
+        simulation::Task<> when_all_ready_non_void_vector_top() {
+            std::cout << "=== when_all_ready_non_void_vector_top() ===\n";
+            std::vector<simulation::Task<uint32_t>> tasks;
+            tasks.emplace_back(when_all_return_value_task_0(30U));
+            tasks.emplace_back(when_all_return_value_task_1(40U));
+            std::vector<simulation::detail::WhenAllTask<uint32_t>> resultTasks =
+              co_await simulation::when_all_ready(std::move(tasks));
+            for (size_t i = 0; i < resultTasks.size(); ++i) {
+                try {
+                    uint32_t& value = resultTasks[i].result();
+                    std::cout << i << " = " << value << std::endl;
+                } catch (const std::exception& ex) {
+                    std::cout << i << " : " << ex.what() << std::endl;
+                }
+            }
+        }
+
+        // when_all_ready() tests, testing void type for both vector and tuple format
+        simulation::Task<> when_all_ready_void_tuple_top() {
+            std::cout << "=== when_all_ready_void_tuple_top() ===\n";
+            auto [val_0, val_1] = co_await simulation::when_all_ready(
+                when_all_void_task_0(),
+                when_all_void_task_1());
+            val_0.result();
+            val_1.result();
+        }
+
+        simulation::Task<> when_all_ready_void_vector_top() {
+            std::cout << "=== when_all_ready_void_vector_top() ===\n";
+            std::vector<simulation::Task<>> tasks;
+            tasks.emplace_back(when_all_void_task_0());
+            tasks.emplace_back(when_all_void_task_1());
+            std::vector<simulation::detail::WhenAllTask<void>> resultTasks =
+              co_await simulation::when_all_ready(std::move(tasks));
+            for (size_t i = 0; i < resultTasks.size(); ++i) {
+                try {
+                    resultTasks[i].result();
+                } catch (const std::exception& ex) {
+                    std::cout << i << " : " << ex.what() << std::endl;
+                }
+            }
+        }
+
+        // when_all() tests, testing non-void type for both vector and tuple format
+        simulation::Task<> when_all_non_void_tuple_top() {
+            std::cout << "=== when_all_non_void_tuple_top() ===\n";
+            auto [val_0, val_1] = co_await simulation::when_all(when_all_return_value_task_0(50U), when_all_return_value_task_1(60U));
+            std::cout << "val_0 = " << val_0 << std::endl;
+            std::cout << "val_1 = " << val_1 << std::endl;
+        }
+
+        simulation::Task<> when_all_non_void_vector_top() {
+            std::cout << "=== when_all_non_void_vector_top() ===\n";
+            std::vector<simulation::Task<uint32_t>> tasks;
+            tasks.emplace_back(when_all_return_value_task_0(30U));
+            tasks.emplace_back(when_all_return_value_task_1(40U));
+            std::vector<uint32_t> results =
+              co_await simulation::when_all(std::move(tasks));
+
+            for (size_t i = 0 ; i < results.size(); ++i) {
+                try {
+                    uint32_t& result = results[i];
+                    std::cout << "i = " << i << ", result = " << result << std::endl;
+                } catch (const std::exception& ex) {
+                    std::cout << i << " : " << ex.what() << std::endl;
+                }
+            }
+        }
+
+        // when_all() tests, testing void type for both vector and tuple format
+        simulation::Task<> when_all_void_tuple_top() {
+            std::cout << "=== when_all_void_tuple_top() ===\n";
+            co_await simulation::when_all(when_all_void_task_0(), when_all_void_task_1());
+        }
+
+        simulation::Task<> when_all_void_vector_top() {
+            std::cout << "=== when_all_void_vector_top() === \n";
+            std::vector<simulation::Task<>> tasks;
+            tasks.emplace_back(when_all_void_task_0());
+            tasks.emplace_back(when_all_void_task_1());
+            co_await simulation::when_all(std::move(tasks));
         }
 
     private:
@@ -91,6 +205,15 @@ public:
         // Set up task components
         coro_tasks.push_back(primary_checker_wr_task());
         coro_tasks.push_back(primary_checker_rd_task());
+        // when_all() and when_all_ready() testcases
+        coro_tasks.push_back(checker_->when_all_ready_non_void_tuple_top());
+        coro_tasks.push_back(checker_->when_all_ready_non_void_vector_top());
+        coro_tasks.push_back(checker_->when_all_ready_void_tuple_top());
+        coro_tasks.push_back(checker_->when_all_ready_void_vector_top());
+        coro_tasks.push_back(checker_->when_all_non_void_tuple_top());
+        coro_tasks.push_back(checker_->when_all_non_void_vector_top());
+        coro_tasks.push_back(checker_->when_all_void_tuple_top());
+        coro_tasks.push_back(checker_->when_all_void_vector_top());
 
     }
 
@@ -104,7 +227,7 @@ public:
         // Pass a pointer of coro_tasks to the simulation kernal for error handling
         sim_kernal_->root_tasks = &coro_tasks;
         try {
-            for (simulation::Task &task: coro_tasks) {
+            for (simulation::Task<> &task: coro_tasks) {
                 task.start();
             }
             sim_kernal_->run(max_time_);
@@ -134,14 +257,14 @@ private:
     std::shared_ptr<BaseChecker> checker_;
 
     // Task componenets
-    std::vector<simulation::Task> coro_tasks;
+    std::vector<simulation::Task<>> coro_tasks;
 
     // Set up root tasks that might trigger other tasks,testing wrapping of task within a task
-    simulation::Task primary_checker_wr_task() {
+    simulation::Task<> primary_checker_wr_task() {
         co_await checker_->print_at_wr_clk_edges();
     }
 
-    simulation::Task primary_checker_rd_task() {
+    simulation::Task<> primary_checker_rd_task() {
         co_await checker_->print_at_rd_clk_edges();
     }
 };

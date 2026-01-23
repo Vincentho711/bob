@@ -1,0 +1,9 @@
+task_name : "when_all_cpp_compile"
+task_type : "cpp_compile"
+executable_name: "when_all_test.exe"
+src_files:
+  - "when_all_test.cpp"
+external_objects:
+  - "{@output:simulation_lib:lib_simulation_lib.a}"
+include_header_dirs:
+  - "$(get_task_dir(simulation_lib))/core"

@@ -29,6 +29,7 @@ ifeq ($(UNAME_S), Darwin)
 	OPT_FAST ?= $(GCC_OPT_LEVEL)
 	OPT_SLOW ?= $(GCC_OPT_LEVEL)
 	OPT_GLOBAL ?= $(GCC_OPT_LEVEL)
+	CXXFLAGS += -Wno-maybe-uninitialized # when_all_ready() and when_all() triggering warning which is not a concern
 endif
 
 ifeq ($(UNAME_S), Linux)

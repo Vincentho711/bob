@@ -479,8 +479,8 @@ class TaskConfigParser:
             external_objects = self.task_configs[task_name]["external_objects"]
             for unresolved_external_object in unresolved_external_objects:
                 self.logger.debug(f"unresolved_external_object={unresolved_external_object}")
-                if ".o" not in unresolved_external_object:
-                    raise ValueError(f"'.o' must exists in the unresolved_external_object='{unresolved_external_object}'")
+                if ".o" not in unresolved_external_object and ".a" not in unresolved_external_object:
+                    raise ValueError(f"'.o' and '.a' must exist in the unresolved_external_object='{unresolved_external_object}'")
                 resolved_reference, resolved_type = self.resolve_reference(task_name, unresolved_external_object)
                 self.logger.debug(f"task_name='{task_name}', unresolved_external_object='{unresolved_external_object}', resolved_reference='{resolved_reference}', resolved_type='{resolved_type}'.")
                 if resolved_type != "output":
@@ -579,8 +579,8 @@ class TaskConfigParser:
             external_objects = self.task_configs[task_name]["external_objects"]
             for unresolved_external_object in unresolved_external_objects:
                 self.logger.debug(f"unresolved_external_object={unresolved_external_object}")
-                if ".o" not in unresolved_external_object:
-                    raise ValueError(f"'.o' must exists in the unresolved_external_object='{unresolved_external_object}'")
+                if ".o" not in unresolved_external_object and ".a" not in unresolved_external_object:
+                    raise ValueError(f"'.o' or '.a' must exist in the unresolved_external_object='{unresolved_external_object}'")
                 resolved_reference, resolved_type = self.resolve_reference(task_name, unresolved_external_object)
                 self.logger.debug(f"task_name='{task_name}', unresolved_external_object='{unresolved_external_object}', resolved_reference='{resolved_reference}', resolved_type='{resolved_type}'.")
                 if resolved_type != "output":

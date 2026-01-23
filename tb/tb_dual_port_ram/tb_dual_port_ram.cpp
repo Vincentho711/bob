@@ -50,34 +50,28 @@ class BaseChecker {
             }
         }
 
-        simulation::Task<> initial_ret_val() {
-            uint32_t ret_val = co_await return_value_1(99U);
-            std::cout << "ret_val=" << ret_val << std::endl;
-        }
-
         simulation::Task<uint32_t> return_value_1(uint32_t value) {
+            throw std::runtime_error("Testing the throwing of runtime error in void Task.");
             co_return value;
         }
 
         simulation::Task<uint32_t> return_value_2(uint32_t value) {
-            co_return value + 1U;
+          co_return value + 1U;
         }
 
         simulation::Task<> when_all_ready_return_value_top_task() {
             auto [task1, task2] = co_await simulation::when_all_ready(
                 return_value_1(20U),
-                return_value_2(80U)
-            );
+                return_value_2(80U));
 
             std::cout << "task1 result=" << task1.result() << std::endl;
             std::cout << "task2 result=" << task2.result() << std::endl;
-            std::cout << "Done with when_all_ready_return_value_top_task" << std::endl;
         }
 
         simulation::Task<> when_all_return_value_top_task() {
             auto [task1, task2] = co_await simulation::when_all(
-                return_value_1(20U),
-                return_value_2(80U)
+                return_value_1(30U),
+                return_value_2(40U)
             );
 
             std::cout << "task1 result=" << task1 << std::endl;
@@ -168,23 +162,22 @@ public:
         const auto dual_port_ram_module_data_width = Vdual_port_ram_dual_port_ram::DATA_WIDTH;
         const uint32_t addr_width_arg = static_cast<uint32_t>(dual_port_ram_module_addr_width);
         const uint32_t data_width_arg = static_cast<uint32_t>(dual_port_ram_module_data_width);
-        top_seq_ = std::make_unique<DualPortRamTopSequence>(addr_width_arg, data_width_arg, 0U);
+        top_seq_ = std::make_unique<DualPortRamTopSequence>(addr_width_arg, data_width_arg, seed_);
 
         // Set up task components
-        coro_tasks.emplace_back(checker_->test_same_phase_event());
-        // coro_tasks.emplace_back(checker_->initial_ret_val());
-        coro_tasks.emplace_back(checker_->when_all_ready_return_value_top_task());
-        coro_tasks.emplace_back(checker_->when_all_return_value_top_task());
+        // coro_tasks.emplace_back(checker_->test_same_phase_event());
+        // coro_tasks.emplace_back(checker_->when_all_ready_return_value_top_task());
+        // coro_tasks.emplace_back(checker_->when_all_return_value_top_task());
         // coro_tasks.emplace_back(checker_->empty_top_task());
-        coro_tasks.emplace_back(checker_->print_at_wr_clk_edges());
-        // coro_tasks.emplace_back(sequencer_->start_sequence(std::move(top_seq_)));
-        // coro_tasks.emplace_back(driver_->wr_driver_run());
-        // coro_tasks.emplace_back(scoreboard_->update_ram_model());
-        // coro_tasks.emplace_back(driver_->rd_driver_run());
-        // coro_tasks.emplace_back(monitor_->wr_port_run());
-        // coro_tasks.emplace_back(monitor_->rd_port_run());
-        // coro_tasks.emplace_back(scoreboard_->run_read_capture());
-        // coro_tasks.emplace_back(scoreboard_->run_write_capture());
+        // coro_tasks.emplace_back(checker_->print_at_wr_clk_edges());
+        coro_tasks.emplace_back(sequencer_->start_sequence(std::move(top_seq_)));
+        coro_tasks.emplace_back(driver_->wr_driver_run());
+        coro_tasks.emplace_back(scoreboard_->update_ram_model());
+        coro_tasks.emplace_back(driver_->rd_driver_run());
+        coro_tasks.emplace_back(monitor_->wr_port_run());
+        coro_tasks.emplace_back(monitor_->rd_port_run());
+        coro_tasks.emplace_back(scoreboard_->run_read_capture());
+        coro_tasks.emplace_back(scoreboard_->run_write_capture());
 
     }
 
@@ -214,7 +207,7 @@ public:
 private:
     // Simulation parameters
     const int32_t TRACE_DEPTH = 5;
-    const uint32_t seed_;
+    const uint64_t seed_;
     const uint64_t max_time_;
 
     // Verilator components

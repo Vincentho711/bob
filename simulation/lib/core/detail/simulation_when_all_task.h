@@ -4,9 +4,10 @@
 #include <coroutine>
 #include <exception>
 #include <utility>
-#include <optional>
-#include "simulation_when_all_counter.h"
-#include "simulation_get_awaiter.h"
+#include <variant>
+#include <cassert>
+#include "detail/simulation_when_all_counter.h"
+#include "detail/simulation_get_awaiter.h"
 
 namespace simulation {
     namespace detail {
@@ -14,11 +15,14 @@ namespace simulation {
         struct WhenAllTaskPromise {
             using coroutine_handle_t = std::coroutine_handle<WhenAllTaskPromise<T>>;
             using value_type = std::remove_reference_t<T>;
-            WhenAllCounter* counter_ = nullptr;
-            std::exception_ptr exception_;
-            std::add_pointer_t<T> result_;
 
-            auto get_return_object() noexcept { return coroutine_handle_t::from_promise(*this); }
+            WhenAllCounter* counter_ = nullptr;
+            std::variant<std::monostate, value_type, std::exception_ptr> result_;
+
+            auto get_return_object() noexcept {
+                return coroutine_handle_t::from_promise(*this);
+            }
+
             std::suspend_always initial_suspend() noexcept { return {}; }
 
             auto final_suspend() noexcept {
@@ -31,41 +35,41 @@ namespace simulation {
                 };
                 return CompletionNotifier{};
             }
-            void unhandled_exception() noexcept { exception_ = std::current_exception(); }
 
-            auto yield_value(T&& result) noexcept {
-                result_ = std::addressof(result);
-                return final_suspend();
+            void unhandled_exception() noexcept {
+                result_.template emplace<std::exception_ptr>(std::current_exception());
             }
 
-            T& result() & {
-                if (exception_) {
-                    std::rethrow_exception(exception_);
+            void return_value(value_type value) {
+                result_.template emplace<value_type>(std::move(value));
+            }
+
+            value_type& result() & {
+                if (std::holds_alternative<std::exception_ptr>(result_)) {
+                    std::rethrow_exception(std::get<std::exception_ptr>(result_));
                 }
-                return *result_;
+                return std::get<value_type>(result_);
             }
-            T&& result() && {
-                if (exception_) {
-                    std::rethrow_exception(exception_);
+
+            value_type&& result() && {
+                if (std::holds_alternative<std::exception_ptr>(result_)) {
+                    std::rethrow_exception(std::get<std::exception_ptr>(result_));
                 }
-                return std::forward<T>(*result_);
-            }
-
-
-            void return_void() noexcept {
-                // Should have either suspened at co yield pointer or an exception was thrown before running off
-                // the end of the coroutine.
-                assert(false);
+                return std::move(std::get<value_type>(result_));
             }
         };
 
         template<>
         struct WhenAllTaskPromise<void> {
             using coroutine_handle_t = std::coroutine_handle<WhenAllTaskPromise<void>>;
+
             WhenAllCounter* counter_ = nullptr;
             std::exception_ptr exception_;
 
-            auto get_return_object() noexcept { return coroutine_handle_t::from_promise(*this); }
+            auto get_return_object() noexcept {
+                return coroutine_handle_t::from_promise(*this);
+            }
+
             std::suspend_always initial_suspend() noexcept { return {}; }
 
             auto final_suspend() noexcept {
@@ -79,7 +83,9 @@ namespace simulation {
                 return CompletionNotifier{};
             }
 
-            void unhandled_exception() noexcept { exception_ = std::current_exception(); }
+            void unhandled_exception() noexcept {
+                exception_ = std::current_exception();
+            }
 
             void return_void() noexcept {}
 
@@ -99,7 +105,10 @@ namespace simulation {
             WhenAllTask(handle_t h) : handle_(h) {}
             WhenAllTask(const WhenAllTask&) = delete;
             WhenAllTask& operator=(const WhenAllTask&) = delete;
-            WhenAllTask(WhenAllTask&& other) noexcept : handle_(std::exchange(other.handle_, nullptr)) {}
+
+            WhenAllTask(WhenAllTask&& other) noexcept
+                : handle_(std::exchange(other.handle_, nullptr)) {}
+
             WhenAllTask& operator=(WhenAllTask&& other) noexcept {
                 if (this != &other) {
                     if (handle_) handle_.destroy();
@@ -107,7 +116,10 @@ namespace simulation {
                 }
                 return *this;
             }
-            ~WhenAllTask() { if (handle_) handle_.destroy(); }
+
+            ~WhenAllTask() {
+                if (handle_) handle_.destroy();
+            }
 
             void start(WhenAllCounter& counter) noexcept {
                 handle_.promise().counter_ = &counter;
@@ -150,8 +162,8 @@ namespace simulation {
             typename Awaitable,
             typename Result = await_result_t<Awaitable>,
             std::enable_if_t<!std::is_void_v<Result>, int> = 0>
-        auto make_when_all_task(Awaitable a) -> WhenAllTask<Result> {
-            co_yield co_await static_cast<Awaitable&&>(a);
+        auto make_when_all_task(Awaitable a) -> WhenAllTask<std::remove_reference_t<Result>> {
+            co_return co_await static_cast<Awaitable&&>(a);
         }
 
         template<
@@ -160,14 +172,16 @@ namespace simulation {
             std::enable_if_t<std::is_void_v<Result>, int> = 0>
         auto make_when_all_task(Awaitable a) -> WhenAllTask<void> {
             co_await static_cast<Awaitable&&>(a);
+            co_return;
         }
 
         template<
             typename Awaitable,
             typename Result = await_result_t<Awaitable>,
             std::enable_if_t<!std::is_void_v<Result>, int> = 0>
-        auto make_when_all_task(std::reference_wrapper<Awaitable> a) -> WhenAllTask<Result> {
-            co_yield co_await a.get();
+        auto make_when_all_task(std::reference_wrapper<Awaitable> a)
+            -> WhenAllTask<std::remove_reference_t<Result>> {
+            co_return co_await a.get();
         }
 
         template<
@@ -176,6 +190,7 @@ namespace simulation {
             std::enable_if_t<std::is_void_v<Result>, int> = 0>
         auto make_when_all_task(std::reference_wrapper<Awaitable> a) -> WhenAllTask<void> {
             co_await a.get();
+            co_return;
         }
     }
 }

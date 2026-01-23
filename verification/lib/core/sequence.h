@@ -9,7 +9,7 @@
 
 // Global counter shared across all template instantiations
 struct BaseSequenceIdCounter {
-    inline static std::atomic<uint64_t> counter;
+    inline static std::atomic<uint64_t> counter{0};
 };
 
 template <typename TransactionT, typename ConcreteSequencerT>
