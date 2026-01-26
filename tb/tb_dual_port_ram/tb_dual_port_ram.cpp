@@ -90,9 +90,14 @@ class BaseChecker {
             for (uint32_t i = 0 ; i < 6; ++i) {
                 co_await wr_clk->rising_edge(simulation::Phase::Drive);
                 logger_.info("empty_task_2's i = " + std::to_string(i));
-                if (i == 5) {
-                    throw std::runtime_error("Testing the throwing of runtime error in void Task.");
-                }
+                // if (i == 5) {
+                //     logger_.fatal(
+                //         std::string(simulation::colours::BOLD) +
+                //         simulation::colours::BRIGHT_RED +
+                //         "Testing the throwing of runtime error in void Task." +
+                //         simulation::colours::RESET
+                //     );
+                // }
              };
         }
 
@@ -128,21 +133,14 @@ public:
         // ========================================================================
         auto& log_config = simulation::LoggerConfig::instance();
 
-        // Set minimum log level (comment out to show all levels)
-        // log_config.set_min_log_level(simulation::LogLevel::INFO);
-
-        // Force color output (useful for debugging in IDEs)
-        // log_config.set_colour_enabled(true);
-
-        // Disable color output (useful when redirecting to file)
-        // log_config.set_colour_enabled(false);
+        // Set up file logging if desired (can be controlled via command-line later)
+        // log_config.set_log_file("sim.log", simulation::OutputMode::SEPARATE_LEVELS);
+        // log_config.set_stdout_min_level(simulation::LogLevel::INFO);
+        // log_config.set_file_min_level(simulation::LogLevel::DEBUG);
 
         // Configure timestamp display
         log_config.set_show_timestamp(true);
         // log_config.set_timestamp_precision(3);  // Show as 1000.000ps
-
-        // Strip ANSI codes from user messages (in addition to auto-detection)
-        log_config.set_strip_ansi_codes(true);
 
         logger_.info("===========================================");
         logger_.info("Starting Dual Port RAM Simulation");
@@ -304,15 +302,14 @@ int main() {
     auto& global_log_config = simulation::LoggerConfig::instance();
 
     // Example configurations:
-    // global_log_config.set_min_log_level(simulation::LogLevel::INFO);  // Hide DEBUG messages
-    // global_log_config.set_colour_enabled(false);  // Disable colors for file output
-    // global_log_config.set_timestamp_precision(3);  // Show sub-picosecond precision
+    // global_log_config.set_log_file("simulation.log", simulation::OutputMode::SEPARATE_LEVELS);
+    // global_log_config.set_stdout_min_level(simulation::LogLevel::INFO);   // Console: less verbose
+    // global_log_config.set_file_min_level(simulation::LogLevel::DEBUG);    // File: captur
 
     // ============================================================================
     // Run Simulation
     // ============================================================================
     simulation::Logger main_logger("Main");
-
     try {
         SimulationEnvironment sim_env(123U, 500000U);
         sim_env.start_sim_kernal();
