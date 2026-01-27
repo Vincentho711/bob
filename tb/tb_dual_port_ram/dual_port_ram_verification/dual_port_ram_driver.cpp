@@ -26,7 +26,7 @@ simulation::Task<> DualPortRamDriver::wr_driver_run() {
             p_sequencer->write_queue.pop_front();
 
             log_debug("Driving dut->wr_en_i = 1.");
-            log_debug("Driving dut->wr_addr_i = " + std::to_string(active_wr->payload.addr) + " , dut->wr_data_i = " + std::to_string(active_wr->payload.data));
+            log_debug("[TXN:"+ std::to_string(active_wr->txn_id) +"] " + "Driving dut->wr_addr_i = " + std::to_string(active_wr->payload.addr) + " , dut->wr_data_i = " + std::to_string(active_wr->payload.data));
             // Drive wr interface to DUT
             dut->wr_en_i = true;
             dut->wr_addr_i = active_wr->payload.addr;

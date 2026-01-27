@@ -37,6 +37,7 @@ public:
     [[nodiscard]]
     TxnPtr create_transaction() {
         auto ptr = std::static_pointer_cast<TransactionT>(p_sequencer->pool.acquire());
+        ptr->set_txn_id();
         return ptr;
     }
 

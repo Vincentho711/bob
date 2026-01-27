@@ -6,6 +6,7 @@
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <vector>
 #include <string_view>
 #include <memory>
 #include <system_error>
@@ -297,7 +298,9 @@ namespace simulation {
         LogLevel level,
         const std::string& component_name,
         const std::string& message,
-        uint64_t sim_time_ps = current_time_ps
+        uint64_t sim_time_ps = current_time_ps,
+        const uint64_t* txn_id = nullptr,
+        const std::vector<std::string>* context_stack = nullptr
     ) {
         auto& config = LoggerConfig::instance();
 
@@ -378,7 +381,38 @@ namespace simulation {
                 log_stream << " ";
             }
 
-            // Message (strip ANSI codes if no colors)
+            // Hierarchical context
+            if (context_stack != nullptr && !context_stack->empty()) {
+                if (use_colours) {
+                    log_stream << colours::BRIGHT_MAGENTA;
+                }
+                log_stream << "[";
+                for (size_t i = 0; i < context_stack->size(); ++i) {
+                    if (i > 0) {
+                        log_stream << "/";
+                    }
+                    log_stream << (*context_stack)[i];
+                }
+                log_stream << "]";
+                if (use_colours) {
+                    log_stream << colours::RESET;
+                }
+                log_stream << " ";
+            }
+
+            // Transaction ID
+            if (txn_id != nullptr) {
+                if (use_colours) {
+                    log_stream << colours::BRIGHT_YELLOW;
+                }
+                log_stream << "[TXN:" << *txn_id << "]";
+                if (use_colours) {
+                    log_stream << colours::RESET;
+                }
+                log_stream << " ";
+            }
+
+            // Message (strip ANSI codes if no colours)
             if (use_colours) {
                 log_stream << message;
             } else {
@@ -409,23 +443,23 @@ namespace simulation {
     }
 
     inline void log_debug(const std::string& component_name, const std::string& message) {
-        log_message(LogLevel::DEBUG, component_name, message);
+        log_message(LogLevel::DEBUG, component_name, message, current_time_ps, nullptr, nullptr);
     }
 
     inline void log_info(const std::string& component_name, const std::string& message) {
-        log_message(LogLevel::INFO, component_name, message);
+        log_message(LogLevel::INFO, component_name, message, current_time_ps, nullptr, nullptr);
     }
 
     inline void log_warning(const std::string& component_name, const std::string& message) {
-        log_message(LogLevel::WARNING, component_name, message);
+        log_message(LogLevel::WARNING, component_name, message, current_time_ps, nullptr, nullptr);
     }
 
     inline void log_error(const std::string& component_name, const std::string& message) {
-        log_message(LogLevel::ERROR, component_name, message);
+        log_message(LogLevel::ERROR, component_name, message, current_time_ps, nullptr, nullptr);
     }
 
     inline void log_fatal(const std::string& component_name, const std::string& message) {
-        log_message(LogLevel::FATAL, component_name, message);
+        log_message(LogLevel::FATAL, component_name, message, current_time_ps, nullptr, nullptr);
     }
 
     inline void log_test_passed(const std::string& component_name, const std::string& message = "Simulation Passed") {
@@ -499,7 +533,7 @@ namespace simulation {
                 log_stream << " ";
             }
 
-            // Success message with color
+            // Success message with colour
             if (use_colours) {
                 log_stream << colours::BOLD << colours::BRIGHT_GREEN;
             }
@@ -593,7 +627,7 @@ namespace simulation {
                 log_stream << " ";
             }
 
-            // Failure message with color
+            // Failure message with colour
             if (use_colours) {
                 log_stream << colours::BOLD << colours::BRIGHT_RED;
             }
@@ -623,23 +657,108 @@ namespace simulation {
             : component_name_(std::move(component_name)) {}
 
         void debug(const std::string& message) const {
-            log_debug(component_name_, message);
+            log_message(LogLevel::DEBUG, component_name_, message, current_time_ps,
+                        nullptr, &context_stack_);
         }
 
         void info(const std::string& message) const {
-            log_info(component_name_, message);
+            log_message(LogLevel::INFO, component_name_, message, current_time_ps,
+                        nullptr, &context_stack_);
         }
 
         void warning(const std::string& message) const {
-            log_warning(component_name_, message);
+            log_message(LogLevel::WARNING, component_name_, message, current_time_ps,
+                        nullptr, &context_stack_);
         }
 
         void error(const std::string& message) const {
-            log_error(component_name_, message);
+            log_message(LogLevel::ERROR, component_name_, message, current_time_ps,
+                        nullptr, &context_stack_);
         }
 
         void fatal(const std::string& message) const {
-            log_fatal(component_name_, message);
+            log_message(LogLevel::FATAL, component_name_, message, current_time_ps,
+                        nullptr, &context_stack_);
+        }
+
+        void debug_txn(uint64_t txn_id, const std::string& message) const {
+            log_message(LogLevel::DEBUG, component_name_, message, current_time_ps,
+                       &txn_id, &context_stack_);
+        }
+
+        void info_txn(uint64_t txn_id, const std::string& message) const {
+            log_message(LogLevel::INFO, component_name_, message, current_time_ps,
+                       &txn_id, &context_stack_);
+        }
+
+        void warning_txn(uint64_t txn_id, const std::string& message) const {
+            log_message(LogLevel::WARNING, component_name_, message, current_time_ps,
+                       &txn_id, &context_stack_);
+        }
+
+        void error_txn(uint64_t txn_id, const std::string& message) const {
+            log_message(LogLevel::ERROR, component_name_, message, current_time_ps,
+                       &txn_id, &context_stack_);
+        }
+
+        void fatal_txn(uint64_t txn_id, const std::string& message) const {
+            log_message(LogLevel::FATAL, component_name_, message, current_time_ps,
+                       &txn_id, &context_stack_);
+        }
+
+        void push_context(const std::string& context) {
+            context_stack_.push_back(context);
+        }
+
+        void pop_context() {
+            if (!context_stack_.empty()) {
+                context_stack_.pop_back();
+            }
+        }
+
+        std::string get_full_context() const {
+            if (context_stack_.empty()) {
+                return "";
+            }
+
+            std::ostringstream oss;
+            for (size_t i = 0; i < context_stack_.size(); ++i) {
+                if (i > 0) {
+                    oss << "/";
+                }
+                oss << context_stack_[i];
+            }
+            return oss.str();
+        }
+
+        class ScopedContext {
+        public:
+            ScopedContext(Logger& logger, std::string context)
+                : logger_(logger), context_(std::move(context)) {
+                logger_.push_context(context_);
+            }
+
+            ~ScopedContext() {
+                logger_.pop_context();
+            }
+
+            // Prevent copying and moving
+            ScopedContext(const ScopedContext&) = delete;
+            ScopedContext& operator=(const ScopedContext&) = delete;
+            ScopedContext(ScopedContext&&) = delete;
+            ScopedContext& operator=(ScopedContext&&) = delete;
+
+            const std::string& get_context() const {
+                return context_;
+            }
+
+        private:
+            Logger& logger_;
+            std::string context_;
+        };
+
+        [[nodiscard]] ScopedContext scoped_context(std::string context) {
+            return ScopedContext(*this, std::move(context));
         }
 
         const std::string& get_component_name() const {
@@ -656,6 +775,7 @@ namespace simulation {
 
     private:
         std::string component_name_;
+        mutable std::vector<std::string> context_stack_;
     };
 
 }
