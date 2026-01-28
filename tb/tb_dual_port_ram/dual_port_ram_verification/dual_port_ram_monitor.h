@@ -18,8 +18,7 @@ public:
       std::shared_ptr<ClockT> rd_clk,
       std::shared_ptr<DualPortRamTLMWrQueue> tlm_wr_queue,
       std::shared_ptr<DualPortRamTLMRdQueue> tlm_rd_queue,
-      const std::string &name = "DualPortRamMonitor",
-      bool debug_enabled = true
+      const std::string &name = "DualPortRamMonitor"
   );
 
   simulation::Task<> run() override;
@@ -39,6 +38,8 @@ private:
     std::shared_ptr<ClockT> rd_clk_;
     std::shared_ptr<DualPortRamTLMWrQueue> tlm_wr_queue_;
     std::shared_ptr<DualPortRamTLMRdQueue> tlm_rd_queue_;
+    simulation::Logger wr_logger_;
+    simulation::Logger rd_logger_;
 };
 
 #endif // DUAL_PORT_RAM_MONITOR_H

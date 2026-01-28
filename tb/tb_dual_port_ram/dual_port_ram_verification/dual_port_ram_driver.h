@@ -17,8 +17,7 @@ public:
                              std::shared_ptr<Vdual_port_ram> dut,
                              std::shared_ptr<clock_t> wr_clk,
                              std::shared_ptr<clock_t> rd_clk,
-                             const std::string &name = "DualPortRamDriver",
-                             bool debug_enabled = true);
+                             const std::string &name = "DualPortRamDriver");
 
     simulation::Task<> run() override;
     simulation::Task<> wr_driver_run();
@@ -27,5 +26,9 @@ public:
 private:
     std::shared_ptr<clock_t> wr_clk;
     std::shared_ptr<clock_t> rd_clk;
+
+    // Separate loggers for concurrent tasks
+    mutable simulation::Logger wr_logger_;
+    mutable simulation::Logger rd_logger_;
 };
 #endif // DUAL_PORT_RAM_DRIVER_H
