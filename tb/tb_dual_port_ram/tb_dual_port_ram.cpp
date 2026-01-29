@@ -226,7 +226,7 @@ public:
             const uint32_t addr_width_arg = static_cast<uint32_t>(dual_port_ram_module_addr_width);
             const uint32_t data_width_arg = static_cast<uint32_t>(dual_port_ram_module_data_width);
             top_seq_ = std::make_unique<DualPortRamTopSequence>(addr_width_arg, data_width_arg, seed_);
-            logger_.info("Top sequence configured (ADDR_WIDTH=" + std::to_string(addr_width_arg) + 
+            logger_.info("Top sequence configured (ADDR_WIDTH=" + std::to_string(addr_width_arg) +
                         ", DATA_WIDTH=" + std::to_string(data_width_arg) + ")");
         }
 
@@ -333,7 +333,7 @@ int main() {
 
     // Example configurations:
     // global_log_config.set_log_file("simulation.log", simulation::OutputMode::SEPARATE_LEVELS);
-    // global_log_config.set_stdout_min_level(simulation::LogLevel::INFO);   // Console: less verbose
+    global_log_config.set_stdout_min_level(simulation::LogLevel::DEBUG);   // Console: less verbose
     // global_log_config.set_file_min_level(simulation::LogLevel::DEBUG);    // File: captur
 
     // ============================================================================

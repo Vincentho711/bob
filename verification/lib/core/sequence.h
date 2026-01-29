@@ -2,6 +2,7 @@
 #define SEQUENCE_H
 #include "simulation_task_symmetric_transfer.h"
 #include "simulation_event.h"
+#include "simulation_logging_utils.h"
 #include <memory>
 #include <iostream>
 #include <atomic>
@@ -22,11 +23,12 @@ public:
 
     std::shared_ptr<ConcreteSequencerT> p_sequencer = nullptr;
 
-    BaseSequence(const std::string &name, bool debug_enabled, uint64_t global_seed) :
-        name(name), debug_enabled(debug_enabled),
+    BaseSequence(const std::string &name, uint64_t global_seed) :
+        name(name),
         sequence_id_(next_sequence_id()),
         seed_(derive_seed(global_seed, sequence_id_)),
-        rng_(seed_) {}
+        rng_(seed_),
+        logger_(name) {}
 
     virtual ~BaseSequence() = default;
     virtual simulation::Task<> body() = 0;
@@ -35,40 +37,79 @@ public:
     uint64_t sequence_id() const noexcept { return sequence_id_; }
 
     [[nodiscard]]
+    uint64_t seed() const noexcept {
+        return seed_;
+    }
+
+    [[nodiscard]]
     TxnPtr create_transaction() {
         auto ptr = std::static_pointer_cast<TransactionT>(p_sequencer->pool.acquire());
-        ptr->set_txn_id();
+        ptr->renew_txn_id(); // Get fresh ID when acquired from pool
+        log_debug_txn(ptr->txn_id, "Transaction created.");
         return ptr;
     }
 
     TxnDoneAwaiter wait_for_txn_done(TxnPtr txn) {
+        log_debug_txn(txn->txn_id, "Waiting for transaction completion");
         // Return the Awaiter object created by the Event's operator co_await()
         return txn->done_event.operator co_await();
     }
 
     simulation::Task<> wait_all(std::vector<TxnPtr> txns) {
+        auto wait_ctx = logger_.scoped_context("WaitAll");
+        log_debug("Waiting for " + std::to_string(txns.size()) + " transactions");
         for (auto &t : txns) {
             co_await wait_for_txn_done(t);
         }
     }
 
     void log_info(const std::string& message) const {
-        std::cout << "[Sequence:" << name << "] INFO : " << message << "\n";
+        logger_.info(message);
     }
 
     void log_error(const std::string& message) const {
-        std::cout << "[Sequence:" << name << "] ERROR : " << message << "\n";
+        logger_.error(message);
     }
 
     void log_debug(const std::string& message) const {
-        if (debug_enabled) {
-            std::cout << "[Sequence:" << name << "] DEBUG : " << message << "\n";
-        }
+        logger_.debug(message);
     }
+
+    void log_warning(const std::string& message) const {
+        logger_.warning(message);
+    }
+
+    void log_info_txn(uint64_t txn_id, const std::string& message) const {
+        logger_.info_txn(txn_id, message);
+    }
+
+    void log_debug_txn(uint64_t txn_id, const std::string& message) const {
+        logger_.debug_txn(txn_id, message);
+    }
+
+    void log_error_txn(uint64_t txn_id, const std::string& message) const {
+        logger_.error_txn(txn_id, message);
+    }
+
+    void log_warning_txn(uint64_t txn_id, const std::string& message) const {
+        logger_.warning_txn(txn_id, message);
+    }
+
+    // Direct logger access for contexts
+    simulation::Logger& get_logger() {
+        return logger_;
+    }
+
+    const simulation::Logger& get_logger() const {
+        return logger_;
+    }
+
 protected:
     [[nodiscard]]
     uint32_t rand_uint(uint32_t min, uint32_t max) {
         if (min > max) {
+            log_error("rand_uint: min (" + std::to_string(min) +
+                     ") must be <= max (" + std::to_string(max) + ")");
             throw std::invalid_argument("rand_uint: min must be <= max");
         }
         std::uniform_int_distribution<uint32_t> dist(min, max);
@@ -84,6 +125,8 @@ protected:
     [[nodiscard]]
     bool rand_prob(float p) {
         if (p < 0.0f || p > 1.0f) {
+            log_error("rand_prob: p (" + std::to_string(p) +
+                     ") must be >= 0.0 and <= 1.0");
             throw std::invalid_argument("rand_prob: p must be >= 0.0 and <= 1.0");
         }
         std::bernoulli_distribution dist(p);
@@ -96,17 +139,18 @@ protected:
         x ^= sequence_id + (x << 6) + (x >> 2);
         return x;
     }
-protected:
-    static uint64_t next_sequence_id() {
-        return BaseSequenceIdCounter::counter.fetch_add(1, std::memory_order_relaxed);
-    }
 private:
     std::string name;
-    bool debug_enabled = true;
     const uint64_t sequence_id_;
     const uint64_t seed_;
     std::mt19937_64 rng_;
 
     static std::atomic<uint64_t> global_sequence_counter_;
+
+protected:
+    mutable simulation::Logger logger_;
+    static uint64_t next_sequence_id() {
+      return BaseSequenceIdCounter::counter.fetch_add(1, std::memory_order_relaxed);
+    }
 };
 #endif  // SEQUENCE_H

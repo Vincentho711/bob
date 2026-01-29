@@ -12,7 +12,7 @@ DualPortRamMonitor::DualPortRamMonitor(
     : BaseMonitor<DualPortRamTransaction, Vdual_port_ram>(dut, name),
       wr_clk_(wr_clk), rd_clk_(rd_clk),
       tlm_wr_queue_(tlm_wr_queue), tlm_rd_queue_(tlm_rd_queue),
-      wr_logger_(name + "WrPort"), rd_logger_(name + "RdPort") {}
+      wr_logger_(name + "_WrPort"), rd_logger_(name + "_RdPort") {}
 
 simulation::Task<> DualPortRamMonitor::run() {
     co_return;
@@ -27,7 +27,6 @@ simulation::Task<> DualPortRamMonitor::wr_port_run() {
         if (dut->wr_en_i) {
             wr_logger_.debug("Capturing write transaction");
             TxnPtr wr_txn = std::make_shared<DualPortRamTransaction>();
-            wr_txn->set_txn_id();
             wr_txn->payload.type = DualPortRamPayload::Write;
             wr_txn->payload.addr = dut->wr_addr_i;
             wr_txn->payload.data = dut->wr_data_i;
@@ -48,7 +47,6 @@ simulation::Task<> DualPortRamMonitor::rd_port_run() {
 
         // Read port is asynchronous
         TxnPtr rd_txn = std::make_shared<DualPortRamTransaction>();
-        rd_txn->set_txn_id();
         rd_txn->payload.type = DualPortRamPayload::Read;
         rd_txn->payload.addr = dut->rd_addr_i;
         rd_txn->payload.data = dut->rd_data_o;
