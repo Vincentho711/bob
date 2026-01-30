@@ -12,8 +12,8 @@ class BaseScoreboard {
 public:
     using TxnPtr = std::shared_ptr<TransactionT>;
 
-    explicit BaseScoreboard(const std::string &name, bool debug_enabled = false)
-        : name_(name), logger_(name), debug_enabled_(debug_enabled) {}
+    explicit BaseScoreboard(const std::string &name)
+        : name_(name), logger_(name) {}
 
     virtual simulation::Task<> run() = 0;
 
@@ -26,13 +26,31 @@ public:
     }
 
     void log_debug(const std::string &message) const {
-        if (debug_enabled_) {
-            logger_.debug(message);
-        }
+        logger_.debug(message);
     }
 
     void log_warning(const std::string &message) const {
-          logger_.warning(message);
+        logger_.warning(message);
+    }
+
+    void log_info_txn(uint64_t txn_id, const std::string& message) const {
+        logger_.info_txn(txn_id, message);
+    }
+
+    void log_debug_txn(uint64_t txn_id, const std::string& message) const {
+        logger_.debug_txn(txn_id, message);
+    }
+
+    void log_error_txn(uint64_t txn_id, const std::string& message) const {
+        logger_.error_txn(txn_id, message);
+    }
+
+    void log_warning_txn(uint64_t txn_id, const std::string& message) const {
+        logger_.warning_txn(txn_id, message);
+    }
+
+    simulation::Logger& get_logger() {
+        return logger_;
     }
 
     const simulation::Logger& get_logger() const {
@@ -41,7 +59,7 @@ public:
 
 private:
     std::string name_;
+protected:
     simulation::Logger logger_;
-    bool debug_enabled_ = true;
 };
 #endif

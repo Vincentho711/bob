@@ -8,8 +8,8 @@ DualPortRamScoreboard::DualPortRamScoreboard(
     std::shared_ptr<DualPortRamTLMWrQueue> tlm_wr_queue,
     std::shared_ptr<DualPortRamTLMRdQueue> tlm_rd_queue,
     std::shared_ptr<ClockT> wr_clk, uint32_t wr_delay_cycle,
-    const std::string &name, bool debug_enabled)
-    : BaseScoreboard(name, debug_enabled),
+    const std::string &name)
+    : BaseScoreboard(name),
       tlm_wr_queue_(tlm_wr_queue), tlm_rd_queue_(tlm_rd_queue),
       wr_clk_(wr_clk), wr_delay_cycle_(wr_delay_cycle),
       apply_index_(0U),
@@ -24,14 +24,15 @@ simulation::Task<> DualPortRamScoreboard::run_write_capture() {
     while (true) {
         TxnPtr write_txn = co_await tlm_wr_queue_->blocking_get();
         if (write_txn) {
-            log_debug("write txn fetched from tlm_wr_queue.");
-            log_debug("current apply_index_ = " + std::to_string(apply_index_));
+            auto wr_cap_ctx = logger_.scoped_context("Run Write Capture");
+            log_debug_txn(write_txn->txn_id, "Write txn fetched from tlm wr queue");
+            log_debug_txn(write_txn->txn_id, "Current apply index = " + std::to_string(apply_index_));
             // Check whether it is a valid ptr and calculate the current staging index
             uint32_t staging_index = (apply_index_ + wr_delay_cycle_) % circular_buffer_size_;
-            log_debug("current staging_index = " + std::to_string(staging_index));
+            log_debug_txn(write_txn->txn_id, "Current staging index = " + std::to_string(staging_index));
             // Push captured transaction into circular buffer for pending ram model update
             circular_buffer_[staging_index].push_back(write_txn);
-            log_debug("write_txn added to circular_buffer at staging_index = " + std::to_string(staging_index) + ".");
+            log_debug_txn(write_txn->txn_id, "Write transaction added to circular_buffer at staging index = " + std::to_string(staging_index));
         }
     }
 }
@@ -47,7 +48,8 @@ simulation::Task<> DualPortRamScoreboard::run_read_capture() {
         }
 
         if (read_txn) {
-            log_debug("read txn fetched from tlm_rd_queue.");
+            auto rd_cap_ctx = logger_.scoped_context("Run Read Capture");
+            log_debug_txn(read_txn->txn_id, "Read txn fetched from tlm rd queue");
             uint32_t addr = read_txn->payload.addr;
             uint32_t dut_data = read_txn->payload.data;
 
@@ -67,8 +69,7 @@ simulation::Task<> DualPortRamScoreboard::run_read_capture() {
                 std::string msg = "Match at addr: " + std::to_string(addr) +
                                   " | Expected data: " + std::to_string(expected_data) +
                                   " | Observed data: " + std::to_string(dut_data);
-                log_debug("\033[1;32m" + msg + "\033[0m");
-                // std::cout << msg << std::endl;
+                log_debug_txn(read_txn->txn_id, msg);
             }
         }
     }
@@ -77,13 +78,14 @@ simulation::Task<> DualPortRamScoreboard::run_read_capture() {
 simulation::Task<> DualPortRamScoreboard::update_ram_model() {
     while (true) {
         co_await wr_clk_->rising_edge(simulation::Phase::PreDrive);
+        auto update_model_ctx = logger_.scoped_context("Update ram model");
         // Advance the apply index by 1
         apply_index_ = (apply_index_ + 1) % circular_buffer_size_;
         log_debug(std::format(
-            "\033[1;34mCurrent apply_index_ = {}\033[0m",
+            "Current apply index = {}",
             apply_index_
         ));
-        log_debug(std::string("\033[1;34m") + "circular_buffer_[apply_index_].empty() = " + std::to_string(circular_buffer_[apply_index_].empty()) + std::string("\033[0m"));
+        log_debug("Circular_buffer_[apply_index_].empty() = " + std::to_string(circular_buffer_[apply_index_].empty()));
         // Apply all pending write transactions from circular buffer to ram model
         while (!circular_buffer_[apply_index_].empty()) {
             TxnPtr write_txn = circular_buffer_[apply_index_].front();
@@ -91,7 +93,7 @@ simulation::Task<> DualPortRamScoreboard::update_ram_model() {
             // Extract addr and data of the write transaction
             uint32_t addr = write_txn->payload.addr;
             uint32_t data = write_txn->payload.data;
-            log_debug(std::string("\033[1;34m") + "Updating ram model with write txn, addr = " + std::to_string(addr) + " , data = " + std::to_string(data) + std::string("\033[0m"));
+            log_debug_txn(write_txn->txn_id, "Updating ram model with write txn, addr = " + std::to_string(addr) + " , data = " + std::to_string(data));
             // Update the map
             ram_model_[addr] = data;
         }

@@ -20,8 +20,7 @@ public:
         std::shared_ptr<DualPortRamTLMWrQueue> tlm_wr_queue,
         std::shared_ptr<DualPortRamTLMRdQueue> tlm_rd_queue,
         std::shared_ptr<ClockT> wr_clk, uint32_t wr_delay_cycle,
-        const std::string &name = "DualPortRamScoreboard",
-        bool debug_enabled = true
+        const std::string &name = "DualPortRamScoreboard"
     );
 
     simulation::Task<> run() override;
