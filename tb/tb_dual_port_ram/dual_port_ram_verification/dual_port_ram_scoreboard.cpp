@@ -60,15 +60,21 @@ simulation::Task<> DualPortRamScoreboard::run_read_capture() {
             }
             uint32_t expected_data = ram_model_[addr];
             if (dut_data != expected_data) {
-                std::string msg = "Mismatch at addr: " + std::to_string(addr) +
-                                  " | Expected data: " + std::to_string(expected_data) +
-                                  " | Observed data: " + std::to_string(dut_data);
+                std::string msg = std::format(
+                    "{}Mismatch at addr: 0x{:X} | Expected data: 0x{:X} | Observed data: 0x{:X}{}",
+                    simulation::colours::RED,
+                    addr, expected_data, dut_data,
+                    simulation::colours::RESET
+                );
                 // Throw VerificationError
                 simulation::report_fatal(msg);
             } else {
-                std::string msg = "Match at addr: " + std::to_string(addr) +
-                                  " | Expected data: " + std::to_string(expected_data) +
-                                  " | Observed data: " + std::to_string(dut_data);
+                std::string msg = std::format(
+                    "{}Match at addr: 0x{:X} | Expected data: 0x{:X} | Observed data: 0x{:X}{}",
+                    simulation::colours::GREEN,
+                    addr, expected_data, dut_data,
+                    simulation::colours::RESET
+                );
                 log_debug_txn(read_txn->txn_id, msg);
             }
         }
@@ -93,7 +99,7 @@ simulation::Task<> DualPortRamScoreboard::update_ram_model() {
             // Extract addr and data of the write transaction
             uint32_t addr = write_txn->payload.addr;
             uint32_t data = write_txn->payload.data;
-            log_debug_txn(write_txn->txn_id, "Updating ram model with write txn, addr = " + std::to_string(addr) + " , data = " + std::to_string(data));
+            log_debug_txn(write_txn->txn_id, std::format("Updating ram model with write txn, addr: 0x{:X} , data: 0x{:X}", addr, data));
             // Update the map
             ram_model_[addr] = data;
         }
