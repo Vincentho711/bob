@@ -10,6 +10,7 @@
 #include "simulation_when_all_ready.h"
 #include "simulation_when_all.h"
 #include "simulation_exceptions.h"
+#include "simulation_logging_utils.h"
 
 #include <verilated.h>
 #include <verilated_vcd_c.h>
@@ -21,16 +22,16 @@ class BaseChecker {
         using clock_t = simulation::Clock<Vhello_world_top>;
 
         BaseChecker(std::shared_ptr<clock_t> wr_clk, std::shared_ptr<clock_t> rd_clk)
-            : wr_clk(wr_clk), rd_clk(rd_clk) {}
+            : wr_clk(wr_clk), rd_clk(rd_clk), logger_("BaseChecker") {}
 
         simulation::Task<> print_at_wr_clk_edges() {
             while (true) {
                 co_await wr_clk->rising_edge(simulation::Phase::Drive);
-                std::cout << "Resuming after wr_clk rising_edge 1 is seen." << std::endl;
+                logger_.info("Resuming after wr_clk rising_edge 1 is seen.");
                 co_await wr_clk->rising_edge(simulation::Phase::Drive);
-                std::cout << "Resuming after wr_clk rising_edge 2 is seen." << std::endl;
+                logger_.info("Resuming after wr_clk rising_edge 2 is seen.");
                 co_await wr_clk->rising_edge(simulation::Phase::Drive);
-                std::cout << "Resuming after wr_clk rising_edge 3 is seen." << std::endl;
+                logger_.info("Resuming after wr_clk rising_edge 3 is seen.");
                 // Test throwing VerificationError
                 // simulation::report_fatal("Test fatal error!");
             }
@@ -160,6 +161,7 @@ class BaseChecker {
     private:
         std::shared_ptr<simulation::Clock<Vhello_world_top>> wr_clk;
         std::shared_ptr<simulation::Clock<Vhello_world_top>> rd_clk;
+        simulation::Logger logger_;
 
 };
 
