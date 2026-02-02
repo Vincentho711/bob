@@ -1,6 +1,7 @@
 #include <memory>
 #include <coroutine>
 #include <iostream>
+#include <format>
 #include <functional>
 
 #include "simulation_kernal.h"
@@ -40,20 +41,20 @@ class BaseChecker {
         simulation::Task<> print_at_rd_clk_edges() {
             while (true) {
                 co_await rd_clk->rising_edge(simulation::Phase::Drive);
-                std::cout << "Resuming after rd_clk rising_edge is seen." << std::endl;
+                logger_.info("Resuming after rd_clk rising_edge is seen.");
                 co_await rd_clk->falling_edge(simulation::Phase::Drive);
-                std::cout << "Resuming after rd_clk falling_edge is seen." << std::endl;
+                logger_.info("Resuming after rd_clk falling_edge is seen.");
             }
         }
 
         // Dummy tasks to test when_all() and when_all_ready()
         simulation::Task<> when_all_void_task_0() {
-            std::cout << "when_all_void_task_0\n";
+            logger_.info("when_all_void_task_0");
             co_return;
         }
 
         simulation::Task<> when_all_void_task_1() {
-            std::cout << "when_all_void_task_1\n";
+            logger_.info("when_all_void_task_1");
             co_return;
         }
 
@@ -67,16 +68,16 @@ class BaseChecker {
 
         // when_all_ready() tests, testing non_void type for both vector and tuple format
         simulation::Task<> when_all_ready_non_void_tuple_top() {
-            std::cout << "=== when_all_ready_non_void_tuple_top() ===\n";
+            logger_.info("=== when_all_ready_non_void_tuple_top() ===");
             auto [val_0, val_1] = co_await simulation::when_all_ready(
                 when_all_return_value_task_0(10U),
                 when_all_return_value_task_1(20U));
-            std::cout << "Expected = 11, Actual = " << val_0.result() << std::endl;
-            std::cout << "Expected = 22, Actual = " << val_1.result() << std::endl;
+            logger_.info(std::format("Expected = 11, Actual = {}", val_0.result()));
+            logger_.info(std::format("Expected = 22, Actual = {}", val_1.result()));
         }
 
         simulation::Task<> when_all_ready_non_void_vector_top() {
-            std::cout << "=== when_all_ready_non_void_vector_top() ===\n";
+            logger_.info("=== when_all_ready_non_void_vector_top() ===");
             std::vector<simulation::Task<uint32_t>> tasks;
             tasks.emplace_back(when_all_return_value_task_0(30U));
             tasks.emplace_back(when_all_return_value_task_1(40U));
@@ -85,16 +86,16 @@ class BaseChecker {
             for (size_t i = 0; i < resultTasks.size(); ++i) {
                 try {
                     uint32_t& value = resultTasks[i].result();
-                    std::cout << i << " = " << value << std::endl;
+                    logger_.info(std::format("i={}, value={}", i , value));
                 } catch (const std::exception& ex) {
-                    std::cout << i << " : " << ex.what() << std::endl;
+                    logger_.error(std::format("i={}, {}", i , ex.what()));
                 }
             }
         }
 
         // when_all_ready() tests, testing void type for both vector and tuple format
         simulation::Task<> when_all_ready_void_tuple_top() {
-            std::cout << "=== when_all_ready_void_tuple_top() ===\n";
+            logger_.info("=== when_all_ready_void_tuple_top() ===");
             auto [val_0, val_1] = co_await simulation::when_all_ready(
                 when_all_void_task_0(),
                 when_all_void_task_1());
@@ -103,7 +104,7 @@ class BaseChecker {
         }
 
         simulation::Task<> when_all_ready_void_vector_top() {
-            std::cout << "=== when_all_ready_void_vector_top() ===\n";
+            logger_.info("=== when_all_ready_void_vector_top() ===");
             std::vector<simulation::Task<>> tasks;
             tasks.emplace_back(when_all_void_task_0());
             tasks.emplace_back(when_all_void_task_1());
@@ -113,21 +114,21 @@ class BaseChecker {
                 try {
                     resultTasks[i].result();
                 } catch (const std::exception& ex) {
-                    std::cout << i << " : " << ex.what() << std::endl;
+                    logger_.error(std::format("i={}, {}", i , ex.what()));
                 }
             }
         }
 
         // when_all() tests, testing non-void type for both vector and tuple format
         simulation::Task<> when_all_non_void_tuple_top() {
-            std::cout << "=== when_all_non_void_tuple_top() ===\n";
+            logger_.info("=== when_all_non_void_tuple_top() ===");
             auto [val_0, val_1] = co_await simulation::when_all(when_all_return_value_task_0(50U), when_all_return_value_task_1(60U));
-            std::cout << "val_0 = " << val_0 << std::endl;
-            std::cout << "val_1 = " << val_1 << std::endl;
+            logger_.info(std::format("val_0 = {}", val_0));
+            logger_.info(std::format("val_1 = {}", val_1));
         }
 
         simulation::Task<> when_all_non_void_vector_top() {
-            std::cout << "=== when_all_non_void_vector_top() ===\n";
+            logger_.info("=== when_all_non_void_vector_top() ===");
             std::vector<simulation::Task<uint32_t>> tasks;
             tasks.emplace_back(when_all_return_value_task_0(30U));
             tasks.emplace_back(when_all_return_value_task_1(40U));
@@ -137,21 +138,21 @@ class BaseChecker {
             for (size_t i = 0 ; i < results.size(); ++i) {
                 try {
                     uint32_t& result = results[i];
-                    std::cout << "i = " << i << ", result = " << result << std::endl;
+                    logger_.info(std::format("i={}, result={}", i , result));
                 } catch (const std::exception& ex) {
-                    std::cout << i << " : " << ex.what() << std::endl;
+                    logger_.error(std::format("i={}, {}", i , ex.what()));
                 }
             }
         }
 
         // when_all() tests, testing void type for both vector and tuple format
         simulation::Task<> when_all_void_tuple_top() {
-            std::cout << "=== when_all_void_tuple_top() ===\n";
+            logger_.info("=== when_all_void_tuple_top() ===");
             co_await simulation::when_all(when_all_void_task_0(), when_all_void_task_1());
         }
 
         simulation::Task<> when_all_void_vector_top() {
-            std::cout << "=== when_all_void_vector_top() === \n";
+            logger_.info("=== when_all_void_vector_top() ===");
             std::vector<simulation::Task<>> tasks;
             tasks.emplace_back(when_all_void_task_0());
             tasks.emplace_back(when_all_void_task_1());
@@ -167,9 +168,10 @@ class BaseChecker {
 
 class SimulationEnvironment {
 public:
-    SimulationEnvironment(uint32_t seed, uint64_t max_time)
+    SimulationEnvironment(uint64_t seed, uint64_t max_time)
         : seed_(seed),
-          max_time_(max_time) {
+          max_time_(max_time),
+          logger_("SimEnv") {
         // Initialise Verilator
         Verilated::traceEverOn(true);
         Verilated::randSeed(seed);
@@ -226,13 +228,21 @@ public:
     }
 
     void start_sim_kernal() {
+        auto run_ctx = logger_.scoped_context("SimulationRun");
+        logger_.info("Starting simulation kernel...");
         // Pass a pointer of coro_tasks to the simulation kernal for error handling
         sim_kernal_->root_tasks = &coro_tasks;
         try {
-            for (simulation::Task<> &task: coro_tasks) {
-                task.start();
+            {
+                auto startup_ctx = logger_.scoped_context("TaskStartup");
+                for (simulation::Task<> &task: coro_tasks) {
+                    task.start();
+                }
             }
-            sim_kernal_->run(max_time_);
+            {
+                auto exec_ctx = logger_.scoped_context("Execution");
+                sim_kernal_->run(max_time_);
+            }
         } catch (...) {
             throw;
         }
@@ -241,8 +251,11 @@ public:
 private:
     // Simulation parameters
     const int32_t TRACE_DEPTH = 5;
-    const uint32_t seed_;
+    const uint64_t seed_;
     const uint64_t max_time_;
+
+    // Logger for this class
+    simulation::Logger logger_;
 
     // Verilator components
     std::shared_ptr<Vhello_world_top> dut_;
@@ -272,19 +285,22 @@ private:
 };
 
 int main() {
+    auto& global_log_config = simulation::LoggerConfig::instance();
+    global_log_config.set_stdout_min_level(simulation::LogLevel::INFO);
+    simulation::Logger main_logger("Main");
     try {
-        SimulationEnvironment sim_env(123U, 100000U);
+        SimulationEnvironment sim_env(123U, 10000000U);
         sim_env.start_sim_kernal();
-        std::cout << "\033[1;32m" << "Simulation Passed." << "\033[0m" << std::endl;
+        main_logger.test_passed("Simulation Passed");
         return 0;
     } catch (const simulation::VerificationError &e) {
-        std::cerr << "\033[1;31m" <<  "Simulation Failed: " << e.what() << "\033[0m" <<std::endl;
+        main_logger.test_failed(std::string("Verification Error: ") + e.what());
         return 1;
     } catch (const std::exception &e) {
-        std::cerr << "\033[1;31m" << "Simulation Error: " << e.what() << "\033[0m" <<std::endl;
+        main_logger.test_failed(std::string("Runtime Error: ") + e.what());
         return 2;
     } catch (...) {
-        std::cerr << "\033[1;31m" << "Unknown simultion error occurred." << "\033[0m" <<std::endl;
+        main_logger.test_failed("Unknown simulation error occurred");
         return 1;
     }
 }

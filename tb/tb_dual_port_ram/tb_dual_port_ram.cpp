@@ -333,7 +333,7 @@ int main() {
 
     // Example configurations:
     // global_log_config.set_log_file("simulation.log", simulation::OutputMode::SEPARATE_LEVELS);
-    global_log_config.set_stdout_min_level(simulation::LogLevel::DEBUG);   // Console: less verbose
+    global_log_config.set_stdout_min_level(simulation::LogLevel::INFO);   // Console: less verbose
     // global_log_config.set_file_min_level(simulation::LogLevel::DEBUG);    // File: captur
 
     // ============================================================================
@@ -341,7 +341,7 @@ int main() {
     // ============================================================================
     simulation::Logger main_logger("Main");
     try {
-        SimulationEnvironment sim_env(123U, 500000U);
+        SimulationEnvironment sim_env(123U, 10000000U);
         sim_env.start_sim_kernal();
 
         main_logger.test_passed("Simulation Passed");

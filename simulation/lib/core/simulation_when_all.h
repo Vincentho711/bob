@@ -35,7 +35,6 @@ namespace simulation {
         using WhenAllAwaitableBase<Container>::WhenAllAwaitableBase;
 
         void await_suspend(std::coroutine_handle<> continuation) noexcept {
-            std::cout << "Tuple await suspend() entered" << std::endl;
             // Start children first
             std::apply([this](auto&... t) { 
                 (t.start(this->counter_), ...); 

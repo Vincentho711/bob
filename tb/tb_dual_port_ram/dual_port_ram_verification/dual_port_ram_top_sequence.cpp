@@ -27,11 +27,15 @@ simulation::Task<> DualPortRamTopSequence::body() {
     co_await p_sequencer->start_sequence(std::move(directed_all_address_decrement_wr_rd_seq));
     log_info("---------------------------------------");
 
-    auto random_write_random_seq = std::make_unique<Seq_Random_Write_Random>(wr_addr_width_, wr_data_width_, global_seed_, 0.5f, 20);
+    auto random_write_random_seq = std::make_unique<Seq_Random_Write_Random>(wr_addr_width_, wr_data_width_, global_seed_, 0.5f, 500);
     co_await p_sequencer->start_sequence(std::move(random_write_random_seq));
     log_info("---------------------------------------");
 
-    auto random_read_random_seq = std::make_unique<Seq_Random_Read_Random>(wr_addr_width_, wr_data_width_, global_seed_, 0.5f, 20);
+    auto random_read_random_seq = std::make_unique<Seq_Random_Read_Random>(wr_addr_width_, wr_data_width_, global_seed_, 0.5f, 500);
     co_await p_sequencer->start_sequence(std::move(random_read_random_seq));
+    log_info("---------------------------------------");
+
+    auto random_write_read_random_seq = std::make_unique<Seq_Random_Write_Read_Random>(wr_addr_width_, wr_data_width_, global_seed_, 0.9f, 0.8f, 500);
+    co_await p_sequencer->start_sequence(std::move(random_write_read_random_seq));
     log_info("---------------------------------------");
 };

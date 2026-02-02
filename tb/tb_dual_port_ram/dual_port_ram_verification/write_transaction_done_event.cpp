@@ -2,7 +2,6 @@
 
 void WriteTransactionDoneEvent::Awaiter::await_suspend(std::coroutine_handle<> h) noexcept {
     event.suspended_coroutines.push_back(h);
-    std::cout << "coroutine handled added to suspended_coroutines vector." << std::endl;
 }
 
 void WriteTransactionDoneEvent::set_done() noexcept {
