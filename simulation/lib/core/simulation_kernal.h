@@ -4,6 +4,7 @@
 #include <memory>
 #include "simulation_context.h"
 #include "simulation_clock.h"
+#include "simulation_event_schedular.h"
 #include "simulation_task_symmetric_transfer.h"
 
 namespace simulation {
@@ -23,32 +24,55 @@ namespace simulation {
             clocks.push_back(clk);
         }
 
+        void initialise() {
+            // Initialise all clocks, they will self schedule their first events
+            for (auto& clk : clocks) {
+                clk->initialise(scheduler_);
+            }
+        }
+
         void run(uint64_t max_time) {
-            while (time < max_time) {
-                // Sync global time for reporting
+            uint64_t last_waveform_time = 0;
+            while (scheduler_.has_events()) {
+                uint64_t next_time = scheduler_.peek_next_time();
+                // Check if we have exceeded max time
+                if (next_time >= max_time) {
+                    time = max_time;
+                    simulation::current_time_ps = time;
+                    break;
+                }
+
+                // Advnace simulation time to next event
+                time = next_time;
                 simulation::current_time_ps = time;
 
-                // Check root tasks for exceptions before ticking clocks
+                // Get all events at this time
+                auto event_batch = scheduler_.get_next_batch();
+
+                // Process all events at  this time
+                for (const auto& event : event_batch) {
+                    event.clock->execute_step(event.step, time);
+                }
+
+                // Check root tasks for exceptions after processing events
                 if (root_tasks) {
-                    for (auto &root_task : *root_tasks) {
+                    for (auto& root_task : *root_tasks) {
                         root_task.check_exception();
                     }
                 }
-                bool clk_ticked = false;
-                for (auto &clk : clocks) {
-                    clk_ticked |= clk->tick(time);
-                }
-                // Dump waveform
-                if (clk_ticked && trace_) {
+
+                // Dump waveform if enabled
+                if (trace_) {
                     trace_->dump(time);
+                    last_waveform_time = time;
                 }
-                // Advance time only after all triggered coroutines yield
-                time++;
             }
         }
+
     private:
         std::shared_ptr<DutType> dut_;
         std::shared_ptr<TraceType> trace_;
+        EventSchedular<DutType> scheduler_;
     };
 
 }

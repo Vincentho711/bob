@@ -203,6 +203,9 @@ public:
         sim_kernal_->register_clock(wr_clk_);
         sim_kernal_->register_clock(rd_clk_);
 
+        // Initialise - clocks self-schedule their first events
+        sim_kernal_->initialise();
+
         // Set up verification components
         checker_ = std::make_shared<BaseChecker>(wr_clk_, rd_clk_);
 
