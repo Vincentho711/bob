@@ -4,7 +4,7 @@
 #include <format>
 #include <functional>
 
-#include "simulation_kernal.h"
+#include "simulation_kernel.h"
 #include "simulation_clock.h"
 #include "simulation_phase_event.h"
 #include "simulation_task_symmetric_transfer.h"
@@ -197,7 +197,7 @@ public:
         rd_clk_ = std::make_shared<simulation::Clock<Vhello_world_top>>("rd_clk", 4000U, dut_, rd_clk_drive_fn);
 
         // Set up simulation components
-        sim_kernal_ = std::make_unique<simulation::SimulationKernal<Vhello_world_top, VerilatedVcdC>>(dut_, trace_);
+        sim_kernal_ = std::make_unique<simulation::SimulationKernel<Vhello_world_top, VerilatedVcdC>>(dut_, trace_);
 
         // Register clocking componenets with simulation kernal
         sim_kernal_->register_clock(wr_clk_);

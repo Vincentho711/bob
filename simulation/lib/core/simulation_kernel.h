@@ -1,23 +1,23 @@
-#ifndef SIMULATION_KERNAL_H
-#define SIMULATION_KERNAL_H
+#ifndef SIMULATION_KERNEL_H
+#define SIMULATION_KERNEL_H
 #include <vector>
 #include <memory>
 #include "simulation_context.h"
 #include "simulation_clock.h"
-#include "simulation_event_schedular.h"
+#include "simulation_event_scheduler.h"
 #include "simulation_task_symmetric_transfer.h"
 
 namespace simulation {
 
     template <typename DutType, typename TraceType>
-    class SimulationKernal {
+    class SimulationKernel {
     public:
         uint64_t time = 0U;
         std::vector<std::shared_ptr<simulation::Clock<DutType>>> clocks;
         // Raw pointer reference to all the root tasks
         std::vector<simulation::Task<>>* root_tasks = nullptr;
 
-        SimulationKernal(std::shared_ptr<DutType> dut, std::shared_ptr<TraceType> trace) :
+        SimulationKernel(std::shared_ptr<DutType> dut, std::shared_ptr<TraceType> trace) :
             dut_(dut), trace_(trace) {};
 
         void register_clock(std::shared_ptr<simulation::Clock<DutType>> clk) {
@@ -45,16 +45,44 @@ namespace simulation {
                 // Advnace simulation time to next event
                 time = next_time;
                 simulation::current_time_ps = time;
+                scheduler_.set_current_time(time);
 
                 // Get all events at this time
-                auto event_batch = scheduler_.get_next_batch();
+                auto batch = scheduler_.get_next_batch();
 
-                // Process all events at  this time
-                for (const auto& event : event_batch) {
-                    event.clock->execute_step(event.step, time);
+                // Process all clock events at this time first
+                for (const auto& clock_event : batch.clock_events) {
+                    clock_event.clock->execute_step(clock_event.step, time);
                 }
 
-                // Check root tasks for exceptions after processing events
+                // Check root tasks for exceptions after processing clock events
+                if (root_tasks) {
+                    for (auto& root_task : *root_tasks) {
+                        root_task.check_exception();
+                    }
+                }
+
+                // Process async events
+                for (const auto& async_event : batch.async_events) {
+                    async_event.callback();
+                    // After each async event, eval to propagate combinational changes
+                    dut_->eval();
+                }
+
+                // Check root tasks for exceptions after processing async events
+                if (root_tasks) {
+                    for (auto& root_task : *root_tasks) {
+                        root_task.check_exception();
+                    }
+                }
+
+                // Process async immediate events
+                scheduler_.process_async_immediate_events();
+
+                // Final evaluation to ensure changes are reflected
+                dut_->eval();
+
+                // Check root tasks for exceptions after processing immediate events
                 if (root_tasks) {
                     for (auto& root_task : *root_tasks) {
                         root_task.check_exception();
@@ -69,12 +97,16 @@ namespace simulation {
             }
         }
 
+        EventScheduler<DutType>& get_scheduler() {
+            return scheduler_;
+        }
+
     private:
         std::shared_ptr<DutType> dut_;
         std::shared_ptr<TraceType> trace_;
-        EventSchedular<DutType> scheduler_;
+        EventScheduler<DutType> scheduler_;
     };
 
 }
 
-#endif // SIMULATION_KERNAL_H
+#endif // SIMULATION_KERNEL_H

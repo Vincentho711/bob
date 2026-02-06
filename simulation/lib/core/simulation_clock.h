@@ -8,7 +8,7 @@
 
 namespace simulation {
     template <typename DutType>
-    class EventSchedular;
+    class EventScheduler;
     template <typename DutType>
     struct ClockEvent;
 
@@ -37,10 +37,10 @@ namespace simulation {
         Clock(const std::string &n, const uint64_t ps, std::shared_ptr<DutType> dut, std::function<void(bool)> clk_drive_fn, uint64_t initial_offset_ps =0)
             : name(n), period_ps(ps), dut(dut), drive_clk_signal_fn(clk_drive_fn), current_step_(ClockStep::RisingEdge), initial_offset_(initial_offset_ps) {}
 
-        void initialise(EventSchedular<DutType>& scheduler) {
+        void initialise(EventScheduler<DutType>& scheduler) {
             scheduler_ = &scheduler;
             // Schedule first RisingEdge
-            schedule_next_event(initial_offset_);
+            schedule_next_clock_event(initial_offset_);
         }
 
         void execute_step(ClockStep step, uint64_t current_time) {
@@ -103,7 +103,7 @@ namespace simulation {
 
             // Schedule the next event
             uint64_t next_time = current_time + (period_ps / CLOCK_STEP_COUNT);
-            schedule_next_event(next_time);
+            schedule_next_clock_event(next_time);
         }
 
         uint64_t get_next_event_time(uint64_t current_time) const {
@@ -116,7 +116,7 @@ namespace simulation {
     private:
         ClockStep current_step_;
         uint64_t initial_offset_;
-        EventSchedular<DutType>* scheduler_ = nullptr;
+        EventScheduler<DutType>* scheduler_ = nullptr;
 
         void advance_step() {
             current_step_ = static_cast<ClockStep>(
@@ -124,9 +124,9 @@ namespace simulation {
             );
         }
 
-        void schedule_next_event(uint64_t time_ps) {
+        void schedule_next_clock_event(uint64_t time_ps) {
             if (scheduler_) {
-                scheduler_->schedule_event(time_ps, this, current_step_);
+                scheduler_->schedule_clock_event(time_ps, this, current_step_);
             }
         }
     };
