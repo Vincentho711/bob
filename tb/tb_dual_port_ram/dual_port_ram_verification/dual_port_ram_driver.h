@@ -14,12 +14,11 @@ class DualPortRamDriver
 public:
     using clock_t = simulation::Clock<Vdual_port_ram>;
     explicit DualPortRamDriver(std::shared_ptr<DualPortRamSequencer> sequencer,
-                             std::shared_ptr<Vdual_port_ram> dut,
                              std::shared_ptr<clock_t> wr_clk,
                              std::shared_ptr<clock_t> rd_clk,
                              const std::string &name = "DualPortRamDriver");
 
-    simulation::Task<> run() override;
+    simulation::Task<> run_phase() override;
     simulation::Task<> wr_driver_run();
     simulation::Task<> rd_driver_run();
 

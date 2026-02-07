@@ -3,6 +3,7 @@
 #include <iostream>
 #include <functional>
 
+#include "simulation_context.h"
 #include "simulation_kernel.h"
 #include "simulation_clock.h"
 #include "simulation_phase_event.h"
@@ -130,7 +131,8 @@ public:
     SimulationEnvironment(uint32_t seed, uint64_t max_time)
         : seed_(seed),
           max_time_(max_time),
-          logger_("SimEnv") {
+          logger_("SimEnv"),
+          sim_context_(nullptr) {
 
         auto init_ctx = logger_.scoped_context("Initialisation");
 
@@ -193,6 +195,10 @@ public:
             auto kernel_ctx = logger_.scoped_context("KernelSetup");
             sim_kernel_ = std::make_unique<simulation::SimulationKernel<Vdual_port_ram, VerilatedVcdC>>(dut_, trace_);
 
+            // Create and set context
+            sim_context_ = std::make_unique<simulation::SimulationContext<Vdual_port_ram>>(sim_kernel_->get_scheduler(), dut_);
+            simulation::SimulationContext<Vdual_port_ram>::set_current(sim_context_.get());
+
             // Register clocking componenets with simulation kernel
             sim_kernel_->register_clock(wr_clk_);
             sim_kernel_->register_clock(rd_clk_);
@@ -212,7 +218,7 @@ public:
             tlm_rd_queue_ = std::make_shared<DualPortRamTLMRdQueue>();
             sequencer_ = std::make_shared<DualPortRamSequencer>(wr_clk_, rd_clk_);
             // top_sequence_ = std::make_unique<DualPortRamTopSequence>();
-            driver_ = std::make_shared<DualPortRamDriver>(sequencer_, dut_, wr_clk_, rd_clk_);
+            driver_ = std::make_shared<DualPortRamDriver>(sequencer_, wr_clk_, rd_clk_);
             monitor_ = std::make_shared<DualPortRamMonitor>(dut_, wr_clk_, rd_clk_, tlm_wr_queue_, tlm_rd_queue_);
             checker_ = std::make_shared<BaseChecker>(wr_clk_);
             scoreboard_ = std::make_shared<DualPortRamScoreboard>(tlm_wr_queue_, tlm_rd_queue_, wr_clk_, 1U);
@@ -246,9 +252,8 @@ public:
             coro_tasks.emplace_back(checker_->empty_top_task());
             // coro_tasks.emplace_back(checker_->print_at_wr_clk_edges());
             coro_tasks.emplace_back(sequencer_->start_sequence(std::move(top_seq_)));
-            coro_tasks.emplace_back(driver_->wr_driver_run());
+            coro_tasks.emplace_back(driver_->run_phase());
             coro_tasks.emplace_back(scoreboard_->update_ram_model());
-            coro_tasks.emplace_back(driver_->rd_driver_run());
             coro_tasks.emplace_back(monitor_->wr_port_run());
             coro_tasks.emplace_back(monitor_->rd_port_run());
             coro_tasks.emplace_back(scoreboard_->run_read_capture());
@@ -308,6 +313,7 @@ private:
 
     // Simulation components
     std::unique_ptr<simulation::SimulationKernel<Vdual_port_ram, VerilatedVcdC>> sim_kernel_;
+    std::unique_ptr<simulation::SimulationContext<Vdual_port_ram>> sim_context_;
 
     // Clocking components
     std::shared_ptr<simulation::Clock<Vdual_port_ram>> wr_clk_;

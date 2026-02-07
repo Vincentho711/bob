@@ -4,6 +4,7 @@ lib_type : "static"
 lib_name : "lib_simulation_lib.a"
 src_files:
   - "core/simulation_context.h"
+  - "core/simulation_component.h"
   - "core/simulation_kernel.h"
   - "core/simulation_clock.h"
   - "core/simulation_event.h"
