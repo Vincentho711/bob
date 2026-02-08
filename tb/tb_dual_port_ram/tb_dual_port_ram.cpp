@@ -219,7 +219,7 @@ public:
             sequencer_ = std::make_shared<DualPortRamSequencer>(wr_clk_, rd_clk_);
             // top_sequence_ = std::make_unique<DualPortRamTopSequence>();
             driver_ = std::make_shared<DualPortRamDriver>(sequencer_, wr_clk_, rd_clk_);
-            monitor_ = std::make_shared<DualPortRamMonitor>(dut_, wr_clk_, rd_clk_, tlm_wr_queue_, tlm_rd_queue_);
+            monitor_ = std::make_shared<DualPortRamMonitor>(wr_clk_, rd_clk_, tlm_wr_queue_, tlm_rd_queue_);
             checker_ = std::make_shared<BaseChecker>(wr_clk_);
             scoreboard_ = std::make_shared<DualPortRamScoreboard>(tlm_wr_queue_, tlm_rd_queue_, wr_clk_, 1U);
             // explicit DualPortRamScoreboard(std::shared_ptr<DualPortRamTLMWrQueue> tlm_wr_queue, std::shared_ptr<DualPortRamTLMRdQueue> tlm_rd_queue, std::shared_ptr<ClockT> wr_clk, uint32_t wr_delay_cycle, const std::string &name, bool debug_enabled);
@@ -253,11 +253,8 @@ public:
             // coro_tasks.emplace_back(checker_->print_at_wr_clk_edges());
             coro_tasks.emplace_back(sequencer_->start_sequence(std::move(top_seq_)));
             coro_tasks.emplace_back(driver_->run_phase());
-            coro_tasks.emplace_back(scoreboard_->update_ram_model());
-            coro_tasks.emplace_back(monitor_->wr_port_run());
-            coro_tasks.emplace_back(monitor_->rd_port_run());
-            coro_tasks.emplace_back(scoreboard_->run_read_capture());
-            coro_tasks.emplace_back(scoreboard_->run_write_capture());
+            coro_tasks.emplace_back(monitor_->run_phase());
+            coro_tasks.emplace_back(scoreboard_->run_phase());
 
             logger_.info("Created " + std::to_string(coro_tasks.size()) + " coroutine tasks");
         }
@@ -343,7 +340,7 @@ int main() {
 
     // Example configurations:
     // global_log_config.set_log_file("simulation.log", simulation::OutputMode::SEPARATE_LEVELS);
-    global_log_config.set_stdout_min_level(simulation::LogLevel::INFO);   // Console: less verbose
+    global_log_config.set_stdout_min_level(simulation::LogLevel::DEBUG);   // Console: less verbose
     // global_log_config.set_file_min_level(simulation::LogLevel::DEBUG);    // File: captur
 
     // ============================================================================

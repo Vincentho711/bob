@@ -13,7 +13,6 @@ public:
   using ClockT = simulation::Clock<Vdual_port_ram>;
   using TxnPtr = std::shared_ptr<DualPortRamTransaction>;
   explicit DualPortRamMonitor(
-      std::shared_ptr<Vdual_port_ram> dut,
       std::shared_ptr<ClockT> wr_clk,
       std::shared_ptr<ClockT> rd_clk,
       std::shared_ptr<DualPortRamTLMWrQueue> tlm_wr_queue,
@@ -21,7 +20,7 @@ public:
       const std::string &name = "DualPortRamMonitor"
   );
 
-  simulation::Task<> run() override;
+  simulation::Task<> run_phase() override;
 
   simulation::Task<> wr_port_run();
 
@@ -32,8 +31,6 @@ public:
   simulation::Task<> put_rd_transaction(TxnPtr rd_txn);
 
 private:
-    std::string name_;
-    std::shared_ptr<Vdual_port_ram> dut_;
     std::shared_ptr<ClockT> wr_clk_;
     std::shared_ptr<ClockT> rd_clk_;
     std::shared_ptr<DualPortRamTLMWrQueue> tlm_wr_queue_;

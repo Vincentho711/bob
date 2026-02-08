@@ -12,7 +12,7 @@
 #include "dual_port_ram_transaction.h"
 #include "dual_port_ram_tlm_queue.h"
 
-class DualPortRamScoreboard : public BaseScoreboard<DualPortRamTransaction> {
+class DualPortRamScoreboard : public BaseScoreboard<Vdual_port_ram, DualPortRamTransaction> {
 public:
     using ClockT = simulation::Clock<Vdual_port_ram>;
     using TxnPtr = std::shared_ptr<DualPortRamTransaction>;
@@ -23,7 +23,7 @@ public:
         const std::string &name = "DualPortRamScoreboard"
     );
 
-    simulation::Task<> run() override;
+    simulation::Task<> run_phase() override;
 
     simulation::Task<> update_ram_model();
 
