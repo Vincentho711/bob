@@ -340,7 +340,7 @@ int main() {
 
     // Example configurations:
     // global_log_config.set_log_file("simulation.log", simulation::OutputMode::SEPARATE_LEVELS);
-    global_log_config.set_stdout_min_level(simulation::LogLevel::DEBUG);   // Console: less verbose
+    global_log_config.set_stdout_min_level(simulation::LogLevel::INFO);   // Console: less verbose
     // global_log_config.set_file_min_level(simulation::LogLevel::DEBUG);    // File: captur
 
     // ============================================================================

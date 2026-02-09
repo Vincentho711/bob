@@ -4,14 +4,15 @@
 #include "dual_port_ram_sequencer.h"
 #include "sequence.h"
 #include "simulation_task_symmetric_transfer.h"
+#include "Vdual_port_ram.h"
 #include <memory>
 
-class DualPortRamBaseSequence : public BaseSequence<DualPortRamTransaction, DualPortRamSequencer> {
+class DualPortRamBaseSequence : public BaseSequence<Vdual_port_ram, DualPortRamTransaction, DualPortRamSequencer> {
 public:
     using TxnType = DualPortRamTransaction;
     using TxnPtr = std::shared_ptr<TxnType>;
 
-    explicit DualPortRamBaseSequence(const std::string& name, uint32_t wr_addr_width, uint32_t wr_data_width, uint64_t global_seed);
+    explicit DualPortRamBaseSequence(uint32_t wr_addr_width, uint32_t wr_data_width, uint64_t global_seed, const std::string& name);
 
     [[nodiscard]]
     TxnPtr dispatch_write(uint32_t addr, uint32_t data);

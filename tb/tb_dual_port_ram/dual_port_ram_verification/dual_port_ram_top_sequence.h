@@ -6,7 +6,7 @@
 class DualPortRamTopSequence : public DualPortRamBaseSequence {
 public:
     DualPortRamTopSequence(uint32_t addr_width, uint32_t data_width, uint64_t global_seed, const std::string &name = "DualPortRamTopSequence") :
-        DualPortRamBaseSequence(name, addr_width, data_width, global_seed), global_seed_(global_seed) {};
+        DualPortRamBaseSequence(addr_width, data_width, global_seed, name), global_seed_(global_seed) {};
 
     simulation::Task<> body() override;
 
