@@ -19,6 +19,7 @@ src_files:
   - "core/simulation_task_symmetric_transfer.h"
   - "core/simulation_when_all.h"
   - "core/simulation_when_all_ready.h"
+  - "core/simulation_delay.h"
   - "core/simulation_tlm_queue.h"
   - "core/detail/simulation_get_awaiter.h"
   - "core/detail/simulation_when_all_counter.h"
