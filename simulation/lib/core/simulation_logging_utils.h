@@ -435,10 +435,10 @@ namespace simulation {
             config.write_to_file(formatted_msg);
         }
 
-        if (level == LogLevel::FATAL) {
-            config.flush(); // Ensure everything is written before error
-            throw std::runtime_error("Simulation terminated due to fatal error.\n");
-        }
+        // if (level == LogLevel::FATAL) {
+        //     config.flush(); // Ensure everything is written before error
+        //     throw std::runtime_error("Simulation terminated due to fatal error.\n");
+        // }
 
     }
 

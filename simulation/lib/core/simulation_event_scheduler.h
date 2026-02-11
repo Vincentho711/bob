@@ -6,10 +6,15 @@
 #include <cstdint>
 #include <limits>
 #include "simulation_clock.h"
+#include "simulation_task_symmetric_transfer.h"
 
 namespace simulation {
+
+// Forward declarations
 template <typename DutType>
 class Clock;
+
+enum class ClockStep : uint8_t;
 
 template <typename DutType>
 struct ClockEvent {
@@ -55,6 +60,7 @@ public:
         clock_events_.emplace(time_ps, clock, step);
     }
 
+    // Async events callback API
     // Schedule async callback at specific time
     void schedule_async_event(uint64_t time_ps, std::function<void()> callback, uint32_t priority = 0) {
         async_events_.emplace(time_ps, callback, priority);
@@ -69,6 +75,22 @@ public:
     // Execute async callback immediately
     void execute_async_immediate(std::function<void()> callback) {
         immediate_events_.push_back(callback);
+    }
+
+    // Async events coroutine API
+    template <typename T = void>
+    void schedule_async_event(uint64_t time_ps, simulation::Task<T>&& task, uint32_t priority = 0) {
+        // Convert it into a callback such that we can use the callback API
+        auto callback = [task = std::move(task)] () mutable {
+            task.start();
+        };
+        async_events_.emplace(time_ps, std::move(callback), priority);
+    }
+
+    template <typename T = void>
+    void schedule_async_delay(uint64_t delay_ps, simulation::Task<T>&& task, uint32_t priority = 0) {
+        uint64_t target_time = current_time_ps_ + delay_ps;
+        schedule_async_event(target_time, std::move(task), priority);
     }
 
     bool has_events() const {

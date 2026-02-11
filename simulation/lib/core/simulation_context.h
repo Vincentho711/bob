@@ -1,19 +1,23 @@
 #ifndef SIMULATION_CONTEXT_H
 #define SIMULATION_CONTEXT_H
 
-#include "simulation_event_scheduler.h"
 #include <memory>
 #include <stdexcept>
 #include <string>
 #include <cstdint>
 
 namespace simulation {
+    inline uint64_t current_time_ps = 0;
+}
 
-template <typename DutType>
-class EventScheduler;
+// Forward declarations
 
-inline uint64_t current_time_ps = 0;
+namespace simulation {
+    template <typename DutType>
+    class EventScheduler;
+}
 
+namespace simulation {
 template <typename DutType>
 class SimulationContext {
 public:

@@ -58,10 +58,21 @@ simulation::Task<> DualPortRamScoreboard::run_read_capture() {
             uint32_t addr = read_txn->payload.addr;
             uint32_t dut_data = read_txn->payload.data;
 
+            if (addr == 7U) {
+                std::string msg = std::format(
+                    "{}Mismatch at addr: 0x{:X} | Expected data: 0x{:X} | Observed data: 0x{:X}{}",
+                    simulation::colours::RED,
+                    7U, 0U, dut_data,
+                    simulation::colours::RESET
+                );
+                // Throw VerificationError
+                simulation::report_fatal(this->logger_, msg);
+            }
+
             // Look up in our ram model
             if (ram_model_.find(addr) == ram_model_.end()) {
                 // Throw VerificationError
-                simulation::report_fatal("Read from uninitialised address: " + std::to_string(addr));
+                simulation::report_fatal(this->logger_, "Read from uninitialised address: " + std::to_string(addr));
             }
             uint32_t expected_data = ram_model_[addr];
             if (dut_data != expected_data) {
@@ -72,7 +83,7 @@ simulation::Task<> DualPortRamScoreboard::run_read_capture() {
                     simulation::colours::RESET
                 );
                 // Throw VerificationError
-                simulation::report_fatal(msg);
+                simulation::report_fatal(this->logger_, msg);
             } else {
                 std::string msg = std::format(
                     "{}Match at addr: 0x{:X} | Expected data: 0x{:X} | Observed data: 0x{:X}{}",

@@ -38,6 +38,9 @@ class BaseChecker {
             auto test_ctx = logger_.scoped_context("PhaseEventTest");
 
             for (uint32_t i = 0 ; i < 3U ; ++i) {
+                if (i == 2U) {
+                    simulation::report_fatal(logger_, "Fatal....");
+                }
                 auto iteration_ctx = logger_.scoped_context("Iteration" + std::to_string(i));
                 co_await wr_clk->rising_edge(simulation::Phase::Drive);
                 logger_.debug("Test waiting for same phase event in a single task. 1.");
@@ -182,7 +185,7 @@ public:
             };
             wr_clk_ = std::make_shared<simulation::Clock<Vdual_port_ram>>("wr_clk", 5000U, dut_, wr_clk_drive_fn);
             // rd clk doesn't have to drive DUT clock signal, used for verification only.
-            rd_clk_ = std::make_shared<simulation::Clock<Vdual_port_ram>>("rd_clk", 5000U, dut_, std::function<void(bool)>{});
+            rd_clk_ = std::make_shared<simulation::Clock<Vdual_port_ram>>("rd_clk", 5000U, dut_, std::function<void(bool)>{}, 1000U);
             logger_.debug("Clock components initialised: ");
             logger_.debug("   wr_clk: period=5000ps");
             logger_.debug("   rd_clk: period=5000ps");
@@ -246,7 +249,7 @@ public:
         {
             auto task_ctx = logger_.scoped_context("TaskSetup");
             logger_.debug("Creating coroutine tasks...");
-            // coro_tasks.emplace_back(checker_->test_same_phase_event());
+            coro_tasks.emplace_back(checker_->test_same_phase_event());
             // coro_tasks.emplace_back(checker_->when_all_ready_return_value_top_task());
             // coro_tasks.emplace_back(checker_->when_all_return_value_top_task());
             coro_tasks.emplace_back(checker_->empty_top_task());
@@ -354,7 +357,14 @@ int main() {
         main_logger.test_passed("Simulation Passed");
         return 0;
     } catch (const simulation::VerificationError &e) {
-        main_logger.test_failed(std::string("Verification Error: ") + e.what());
+        main_logger.error(std::format("Verification error: {}", e.what()));
+        main_logger.error(std::format("Component: {}", e.get_component_name()));
+        main_logger.error(std::format("Timestamp: {}ps", e.get_timestamp()));
+        const std::source_location location = e.get_location();
+        main_logger.error(std::format("[file={} line={} func={}]", location.file_name(), location.line(), location.function_name()));
+        return 1;
+    } catch (const std::runtime_error &e) {
+        main_logger.test_failed(std::string("Runtime Error: ") + e.what());
         return 1;
     } catch (const std::exception &e) {
         main_logger.test_failed(std::string("Runtime Error: ") + e.what());
