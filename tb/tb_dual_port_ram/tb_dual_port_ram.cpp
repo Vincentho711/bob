@@ -357,11 +357,11 @@ int main() {
         main_logger.test_passed("Simulation Passed");
         return 0;
     } catch (const simulation::VerificationError &e) {
-        main_logger.error(std::format("Verification error: {}", e.what()));
+        main_logger.test_failed(std::format("Verification error: {}", e.what()));
         main_logger.error(std::format("Component: {}", e.get_component_name()));
         main_logger.error(std::format("Timestamp: {}ps", e.get_timestamp()));
         const std::source_location location = e.get_location();
-        main_logger.error(std::format("[file={} line={} func={}]", location.file_name(), location.line(), location.function_name()));
+        main_logger.error(std::format("{}:{}: in function {}", location.file_name(), location.line(), location.function_name()));
         return 1;
     } catch (const std::runtime_error &e) {
         main_logger.test_failed(std::string("Runtime Error: ") + e.what());
