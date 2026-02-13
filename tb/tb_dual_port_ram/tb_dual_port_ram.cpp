@@ -38,9 +38,6 @@ class BaseChecker {
             auto test_ctx = logger_.scoped_context("PhaseEventTest");
 
             for (uint32_t i = 0 ; i < 3U ; ++i) {
-                if (i == 2U) {
-                    simulation::report_fatal(logger_, "Fatal....");
-                }
                 auto iteration_ctx = logger_.scoped_context("Iteration" + std::to_string(i));
                 co_await wr_clk->rising_edge(simulation::Phase::Drive);
                 logger_.debug("Test waiting for same phase event in a single task. 1.");
@@ -60,7 +57,7 @@ class BaseChecker {
         }
 
         simulation::Task<uint32_t> return_value_1(uint32_t value) {
-            throw std::runtime_error("Testing the throwing of runtime error in void Task.");
+            // throw std::runtime_error("Testing the throwing of runtime error in void Task.");
             co_return value;
         }
 
@@ -255,9 +252,13 @@ public:
             coro_tasks.emplace_back(checker_->empty_top_task());
             // coro_tasks.emplace_back(checker_->print_at_wr_clk_edges());
             coro_tasks.emplace_back(sequencer_->start_sequence(std::move(top_seq_)));
-            coro_tasks.emplace_back(driver_->run_phase());
-            coro_tasks.emplace_back(monitor_->run_phase());
-            coro_tasks.emplace_back(scoreboard_->run_phase());
+            coro_tasks.emplace_back(driver_->wr_driver_run());
+            coro_tasks.emplace_back(driver_->rd_driver_run());
+            coro_tasks.emplace_back(monitor_->wr_port_run());
+            coro_tasks.emplace_back(monitor_->rd_port_run());
+            coro_tasks.emplace_back(scoreboard_->run_write_capture());
+            coro_tasks.emplace_back(scoreboard_->run_read_capture());
+            coro_tasks.emplace_back(scoreboard_->update_ram_model());
 
             logger_.info("Created " + std::to_string(coro_tasks.size()) + " coroutine tasks");
         }

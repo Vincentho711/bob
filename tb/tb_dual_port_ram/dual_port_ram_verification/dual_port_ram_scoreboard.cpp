@@ -18,11 +18,16 @@ DualPortRamScoreboard::DualPortRamScoreboard(
       circular_buffer_(circular_buffer_size_) {}
 
 simulation::Task<> DualPortRamScoreboard::run_phase() {
+    // Since the run_write_capture(), run_read_capture() and update_ram_model are infinite tasks, exception thrown will not be caught.
+    // Set them as root tasks for exceptions to be caught
+    /*
     std::vector<simulation::Task<>> tasks;
     tasks.emplace_back(run_write_capture());
     tasks.emplace_back(run_read_capture());
     tasks.emplace_back(update_ram_model());
     co_await simulation::when_all(std::move(tasks));
+    */
+    co_return;
 }
 
 simulation::Task<> DualPortRamScoreboard::run_write_capture() {
@@ -57,17 +62,6 @@ simulation::Task<> DualPortRamScoreboard::run_read_capture() {
             log_debug_txn(read_txn->txn_id, "Read txn fetched from tlm rd queue");
             uint32_t addr = read_txn->payload.addr;
             uint32_t dut_data = read_txn->payload.data;
-
-            if (addr == 7U) {
-                std::string msg = std::format(
-                    "{}Mismatch at addr: 0x{:X} | Expected data: 0x{:X} | Observed data: 0x{:X}{}",
-                    simulation::colours::RED,
-                    7U, 0U, dut_data,
-                    simulation::colours::RESET
-                );
-                // Throw VerificationError
-                simulation::report_fatal(this->logger_, msg);
-            }
 
             // Look up in our ram model
             if (ram_model_.find(addr) == ram_model_.end()) {

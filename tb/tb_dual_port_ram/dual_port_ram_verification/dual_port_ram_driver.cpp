@@ -12,11 +12,16 @@ DualPortRamDriver::DualPortRamDriver(
       rd_logger_(this->get_name() + "_RdPort") {}
 
 simulation::Task<> DualPortRamDriver::run_phase() {
+    // Since the wr_driver_run() and rd_driver_run() are infinite tasks, exception thrown will not be caught.
+    // Set them as root tasks for exceptions to be caught
+    /*
     std::vector<simulation::Task<>> tasks;
 
     tasks.emplace_back(wr_driver_run());
     tasks.emplace_back(rd_driver_run());
     co_await simulation::when_all(std::move(tasks));
+    */
+    co_return;
 }
 
 simulation::Task<> DualPortRamDriver::wr_driver_run() {

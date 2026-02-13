@@ -17,11 +17,14 @@ DualPortRamMonitor::DualPortRamMonitor(
       wr_logger_(name + "_WrPort"), rd_logger_(name + "_RdPort") {}
 
 simulation::Task<> DualPortRamMonitor::run_phase() {
-    std::vector<simulation::Task<>> tasks;
-
-    tasks.emplace_back(wr_port_run());
-    tasks.emplace_back(rd_port_run());
-    co_await simulation::when_all(std::move(tasks));
+    // Since the wr_port_run() and rd_port_run() are infinite tasks, exception thrown will not be caught.
+    // Set them as root tasks for exceptions to be caught
+    // std::vector<simulation::Task<>> tasks;
+    //
+    // tasks.emplace_back(wr_port_run());
+    // tasks.emplace_back(rd_port_run());
+    // co_await simulation::when_all(std::move(tasks));
+    co_return;
 }
 
 simulation::Task<> DualPortRamMonitor::wr_port_run() {
