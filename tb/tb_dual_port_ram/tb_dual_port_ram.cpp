@@ -12,6 +12,7 @@
 #include "simulation_when_all_ready.h"
 #include "simulation_exceptions.h"
 #include "simulation_logging_utils.h"
+#include "simulation_delay.h"
 
 #include "dual_port_ram_driver.h"
 #include "dual_port_ram_top_sequence.h"
@@ -27,22 +28,22 @@
 #include <Vdual_port_ram.h>
 #include "Vdual_port_ram_dual_port_ram.h"
 
-class BaseChecker {
+class BaseChecker : public simulation::SimulationComponent<Vdual_port_ram>{
     public:
         using clock_t = simulation::Clock<Vdual_port_ram>;
 
-        BaseChecker(std::shared_ptr<clock_t> wr_clk)
-            : wr_clk(wr_clk), logger_("BaseChecker") {}
+        BaseChecker(const std::string &name, std::shared_ptr<clock_t> wr_clk)
+            : simulation::SimulationComponent<Vdual_port_ram>(name), wr_clk(wr_clk) {}
 
         simulation::Task<> test_same_phase_event() {
-            auto test_ctx = logger_.scoped_context("PhaseEventTest");
+            auto test_ctx = this->logger_.scoped_context("PhaseEventTest");
 
             for (uint32_t i = 0 ; i < 3U ; ++i) {
-                auto iteration_ctx = logger_.scoped_context("Iteration" + std::to_string(i));
+                auto iteration_ctx = this->logger_.scoped_context("Iteration" + std::to_string(i));
                 co_await wr_clk->rising_edge(simulation::Phase::Drive);
-                logger_.debug("Test waiting for same phase event in a single task. 1.");
+                this->logger_.debug("Test waiting for same phase event in a single task. 1.");
                 co_await wr_clk->rising_edge(simulation::Phase::Drive);
-                logger_.debug("Test waiting for same phase event in a single task. 2.");
+                this->logger_.debug("Test waiting for same phase event in a single task. 2.");
             }
         }
 
@@ -50,9 +51,9 @@ class BaseChecker {
             auto edge_ctx = logger_.scoped_context("ClockEdgeMonitor");
             while (true) {
                 co_await wr_clk->rising_edge(simulation::Phase::Drive);
-                logger_.debug("Resuming after wr_clk rising_edge is seen.");
+                this->logger_.debug("Resuming after wr_clk rising_edge is seen.");
                 co_await wr_clk->falling_edge(simulation::Phase::Drive);
-                logger_.debug("Resuming after wr_clk falling_edge is seen.");
+                this->logger_.debug("Resuming after wr_clk falling_edge is seen.");
             }
         }
 
@@ -70,8 +71,8 @@ class BaseChecker {
                 return_value_1(20U),
                 return_value_2(80U));
 
-            logger_.info("task1 result=" + std::to_string(task1.result()));
-            logger_.info("task2 result=" + std::to_string(task2.result()));
+            this->logger_.info("task1 result=" + std::to_string(task1.result()));
+            this->logger_.info("task2 result=" + std::to_string(task2.result()));
         }
 
         simulation::Task<> when_all_return_value_top_task() {
@@ -80,21 +81,22 @@ class BaseChecker {
                 return_value_2(40U)
             );
 
-            logger_.info("task1 result=" + std::to_string(task1));
-            logger_.info("task2 result=" + std::to_string(task2));
+            this->logger_.info("task1 result=" + std::to_string(task1));
+            this->logger_.info("task2 result=" + std::to_string(task2));
         }
 
         simulation::Task<> empty_task_1() {
             for (uint32_t i = 0 ; i < 5; ++i) {
                 co_await wr_clk->rising_edge(simulation::Phase::Drive);
-                logger_.info("empty_task_1's i = " + std::to_string(i));
-             };
+                this->logger_.info("empty_task_1's i = " + std::to_string(i));
+            };
+            schedule_one_off_async_event();
         }
 
         simulation::Task<> empty_task_2() {
             for (uint32_t i = 0 ; i < 6; ++i) {
                 co_await wr_clk->rising_edge(simulation::Phase::Drive);
-                logger_.info("empty_task_2's i = " + std::to_string(i));
+                this->logger_.info("empty_task_2's i = " + std::to_string(i));
                 // if (i == 5) {
                 //     logger_.fatal(
                 //         std::string(simulation::colours::BOLD) +
@@ -117,12 +119,26 @@ class BaseChecker {
             //     // Check the result to make sure it didn't throw an exception
             //     t.result();
             // }
-            logger_.info("empty_top_task done.");
+            this->logger_.info("empty_top_task done.");
+        }
+
+        void schedule_one_off_async_event() {
+            auto one_off_ctx = this->logger_.scoped_context("One Off Async Event");
+            scheduler().schedule_async_event(246780, [this]() {
+                this->logger_.info(std::format("schedule_one_off_async_event() fired at {}ps", this->current_time()));
+            });
+        }
+
+        simulation::Task<> async_test_task() {
+            auto async_test_task_ctx = this->logger_.scoped_context("async test task");
+            co_await simulation::delay_us<Vdual_port_ram>(1);
+            this->logger_.info("Waited 1 us.");
+            co_await simulation::delay_us<Vdual_port_ram>(2);
+            this->logger_.info("Waited 2 us.");
         }
 
     private:
         std::shared_ptr<simulation::Clock<Vdual_port_ram>> wr_clk;
-        simulation::Logger logger_;
 
 };
 
@@ -220,7 +236,7 @@ public:
             // top_sequence_ = std::make_unique<DualPortRamTopSequence>();
             driver_ = std::make_shared<DualPortRamDriver>(sequencer_, wr_clk_, rd_clk_);
             monitor_ = std::make_shared<DualPortRamMonitor>(wr_clk_, rd_clk_, tlm_wr_queue_, tlm_rd_queue_);
-            checker_ = std::make_shared<BaseChecker>(wr_clk_);
+            checker_ = std::make_shared<BaseChecker>("BaseChecker", wr_clk_);
             scoreboard_ = std::make_shared<DualPortRamScoreboard>(tlm_wr_queue_, tlm_rd_queue_, wr_clk_, 1U);
             // explicit DualPortRamScoreboard(std::shared_ptr<DualPortRamTLMWrQueue> tlm_wr_queue, std::shared_ptr<DualPortRamTLMRdQueue> tlm_rd_queue, std::shared_ptr<ClockT> wr_clk, uint32_t wr_delay_cycle, const std::string &name, bool debug_enabled);
             logger_.info("Verification components created");
@@ -250,6 +266,7 @@ public:
             // coro_tasks.emplace_back(checker_->when_all_ready_return_value_top_task());
             // coro_tasks.emplace_back(checker_->when_all_return_value_top_task());
             coro_tasks.emplace_back(checker_->empty_top_task());
+            coro_tasks.emplace_back(checker_->async_test_task());
             // coro_tasks.emplace_back(checker_->print_at_wr_clk_edges());
             coro_tasks.emplace_back(sequencer_->start_sequence(std::move(top_seq_)));
             coro_tasks.emplace_back(driver_->wr_driver_run());
