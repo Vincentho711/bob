@@ -369,7 +369,7 @@ int main() {
     // ============================================================================
     simulation::Logger main_logger("Main");
     try {
-        SimulationEnvironment sim_env(123U, 10000000U);
+        SimulationEnvironment sim_env(124U, 10000000U);
         sim_env.start_sim_kernel();
 
         main_logger.test_passed("Simulation Passed");
