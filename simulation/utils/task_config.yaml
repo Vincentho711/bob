@@ -1,0 +1,6 @@
+task_name : "simulation_utils"
+task_type : "cpp_compile"
+lib_type : "static"
+lib_name : "lib_simulation_utils.a"
+src_files:
+  - "args/simulation_args_type_converter.h"

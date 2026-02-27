@@ -43,6 +43,9 @@ tasks:
   simulation_lib:
     depends_on: []
 
+  simulation_utils:
+    depends_on: []
+
   tb_hello_world_top:
     depends_on:
       - verification_lib
@@ -56,6 +59,7 @@ tasks:
   tb_dual_port_ram:
     depends_on:
       - simulation_lib
+      - simulation_utils
       - dual_port_ram_verilate
 
   when_all_cpp_compile:

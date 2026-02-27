@@ -14,6 +14,8 @@
 #include "simulation_logging_utils.h"
 #include "simulation_delay.h"
 
+#include "simulation_args_type_converter.h"
+
 #include "dual_port_ram_driver.h"
 #include "dual_port_ram_top_sequence.h"
 #include "dual_port_ram_sequencer.h"

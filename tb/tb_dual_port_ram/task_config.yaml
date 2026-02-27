@@ -3,6 +3,7 @@ task_type: verilator_tb_compile
 top_module: dual_port_ram
 include_header_dirs:
   - "$(get_task_dir(simulation_lib))/core"
+  - "$(get_task_dir(simulation_utils))/args"
   - "$(get_task_dir(verification_lib))/core"
   - "$(get_task_dir(tb_dual_port_ram))/dual_port_ram_verification"
 rtl_src_files:
@@ -23,4 +24,5 @@ tb_header_src_files:
     - "dual_port_ram_verification/testcases/random/dual_port_ram_random_testcases.h"
 external_objects:
   - "{@output:simulation_lib:lib_simulation_lib.a}"
+  - "{@output:simulation_utils:lib_simulation_utils.a}"
 output_executable: tb_dual_port_ram.out
