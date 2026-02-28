@@ -4,3 +4,6 @@ lib_type : "static"
 lib_name : "lib_simulation_utils.a"
 src_files:
   - "args/simulation_args_type_converter.h"
+  - "args/simulation_args_argument_descriptor.h"
+  - "args/simulation_args_argument_registry.h"
+  - "args/simulation_args_argument_registry.cpp"
