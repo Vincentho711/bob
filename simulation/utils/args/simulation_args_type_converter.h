@@ -1,3 +1,6 @@
+#ifndef SIMULATION_ARGS_TYPE_CONVERTER_H
+#define SIMULATION_ARGS_TYPE_CONVERTER_H
+
 #include <string_view>
 #include <stdexcept>
 #include <string>
@@ -9,8 +12,7 @@
 #include <ranges>
 #include <concepts>
 
-namespace simulation {
-namespace args{
+namespace simulation::args {
 class TypeConverter {
 public:
     TypeConverter() = delete;
@@ -77,5 +79,5 @@ private:
         return "--" + std::string(name);
     }
 };
-};
 }
+#endif
