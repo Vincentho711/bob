@@ -9,3 +9,5 @@ src_files:
   - "args/simulation_args_argument_registry.cpp"
   - "args/simulation_args_tokeniser.h"
   - "args/simulation_args_tokeniser.cpp"
+  - "args/simulation_args_help_formatter.h"
+  - "args/simulation_args_help_formatter.cpp"
