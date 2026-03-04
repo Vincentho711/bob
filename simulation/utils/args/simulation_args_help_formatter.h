@@ -12,7 +12,11 @@ class HelpFormatter {
 public:
     HelpFormatter() = delete;
 
+    // ── --help output ───
     static void print_help(std::string_view program_name, std::string_view program_description, const ArgumentRegistry& registry, std::ostream& out = std::cout);
+    // ── --dry-run output: print all resolved values with their sources ─────────
+    static void print_resolved(const ArgumentRegistry& registry, std::ostream& out = std::cout);
+
 };
 }
 #endif

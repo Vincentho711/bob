@@ -1,4 +1,5 @@
 #include "simulation_args_help_formatter.h"
+#include <iomanip>
 
 void simulation::args::HelpFormatter::print_help(std::string_view program_name, std::string_view program_description, const ArgumentRegistry &registry, std::ostream& out) {
     out << "\nUsage: " << program_name << "[options]\n";
@@ -56,4 +57,30 @@ void simulation::args::HelpFormatter::print_help(std::string_view program_name, 
             << "  Example: SIM_UART0_BAUD_RATE=115200\n"
             << "  Precedence: default < env var < command line\n\n";
     }
+}
+
+void simulation::args::HelpFormatter::print_resolved(const ArgumentRegistry& registry, std::ostream& out) {
+    out << "\n[DRY-RUN] Resolved argument values:\n\n";
+
+    std::string current_prefix = "\x01";
+
+    for (const auto& d : registry.all()) {
+        if (d.group_prefix != current_prefix) {
+            current_prefix = d.group_prefix;
+            out << (current_prefix.empty() ? "  [core]\n" : "  [" + current_prefix + "]\n");
+        }
+
+        constexpr int kKeyWidth = 36;
+        const std::string key = "   --" + d.full_name;
+        out << key;
+        if (static_cast<int>(key.size() < kKeyWidth)) {
+            out << std::string(static_cast<std::size_t>(kKeyWidth) - key.size(), ' ');
+        } else {
+            out << "\n" << std::string(kKeyWidth, ' ');
+        }
+
+        out << "= " << std::left << std::setw(20) << d.serialise()
+             << "  [" << source_name(d.source) << "]\n";
+    }
+    out << "\n";
 }
