@@ -11,3 +11,4 @@ src_files:
   - "args/simulation_args_tokeniser.cpp"
   - "args/simulation_args_help_formatter.h"
   - "args/simulation_args_help_formatter.cpp"
+  - "args/simulation_args_group_app.h"

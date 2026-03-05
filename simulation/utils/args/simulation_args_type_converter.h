@@ -31,6 +31,21 @@ public:
     static uint32_t parse_uint32(std::string_view sv, std::string_view n) { return parse_int<uint32_t>(trim(sv), n, "uint32"); }
     static int64_t  parse_int64 (std::string_view sv, std::string_view n) { return parse_int<int64_t> (trim(sv), n, "int64");  }
     static uint64_t parse_uint64(std::string_view sv, std::string_view n) { return parse_int<uint64_t>(trim(sv), n, "uint64"); }
+    static double parse_double(std::string_view sv, std::string_view opt_name) {
+        // std::stod is locale-sensitive but from_chars float is not universally
+        // available in C++20 toolchains. For simulation args (startup-only,
+        // non-hot-path), this is acceptable.
+        try {
+            std::size_t consumed = 0;
+            double result = std::stod(std::string(sv), &consumed);
+            if (consumed != sv.size())
+                throw std::invalid_argument{"trailing characters"};
+            return result;
+        } catch (...) {
+            throw std::invalid_argument(flag(opt_name) + ": cannot convert \"" +
+                std::string(sv) + "\" to double.");
+        }
+    }
 
     static std::string parse_string(std::string_view sv, std::string_view /*opt_name*/) {
         return std::string(sv);
