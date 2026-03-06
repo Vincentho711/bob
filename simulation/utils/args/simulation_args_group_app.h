@@ -62,6 +62,32 @@ public:
         return *this;
     }
 
+    GroupApp& add_flag(std::string_view name, bool& binding, std::string_view description, bool default_value = false) {
+        binding = default_value;
+
+        ArgumentDescriptor arg_desc;
+        arg_desc.full_name = make_full_name(name);
+        arg_desc.cli_flag = "--" + arg_desc.full_name;
+        arg_desc.env_var = make_env_var(name);
+        arg_desc.description = std::string(description);
+        arg_desc.group_prefix = std::string(prefix_);
+        arg_desc.default_string = TypeConverter::str(default_value);
+        arg_desc.type_hint = {}; // flags have no value in --help
+        arg_desc.is_flag = true;
+        arg_desc.required = false;
+        arg_desc.source = ArgumentSource::Default;
+
+        bool* ptr = std::addressof(binding);
+        arg_desc.apply = [ptr, fn = arg_desc.full_name](std::string_view sv) {
+            *ptr = TypeConverter::parse_bool(sv, fn);
+        };
+        arg_desc.serialise = [ptr]() -> std::string {
+            return TypeConverter::str(*ptr);
+        };
+        registry_.register_argument(std::move(arg_desc));
+        return *this;
+    }
+
 private:
 
     [[nodiscard]] std::string make_full_name(std::string_view name) const {
