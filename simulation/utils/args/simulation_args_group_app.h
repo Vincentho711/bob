@@ -4,8 +4,12 @@
 #include "simulation_args_argument_registry.h"
 #include "simulation_args_type_converter.h"
 #include <cctype>
+#include <complex>
 #include <concepts>
 #include <memory>
+#include <stdexcept>
+#include <ranges>
+#include <string>
 
 namespace simulation::args {
 
@@ -86,6 +90,46 @@ public:
         };
         registry_.register_argument(std::move(arg_desc));
         return *this;
+    }
+
+    GroupApp& add_enum_argument(std::string_view name, std::string& binding, std::string_view description, std::vector<std::string> valid_values, std::string default_value = {}) {
+        // Validate that the default value is one of valid_values
+        if (!default_value.empty()) {
+            if (std::ranges::find(valid_values, default_value) == valid_values.end()) {
+                throw std::invalid_argument("Default value \"" + default_value + "\" for option \"--" + make_full_name(name) + "\" is not in valid_values.");
+            }
+        }
+        binding = default_value;
+        ArgumentDescriptor arg_desc;
+        arg_desc.full_name = make_full_name(name);
+        arg_desc.cli_flag = "--" + arg_desc.full_name;
+        arg_desc.env_var = make_env_var(name);
+        arg_desc.description = std::string(description);
+        arg_desc.group_prefix = std::string(prefix_);
+        arg_desc.default_string = default_value;
+        arg_desc.type_hint = "<string>";
+        arg_desc.is_flag = false;
+        arg_desc.required = false;
+        arg_desc.valid_values = valid_values;
+        arg_desc.source = ArgumentSource::Default;
+
+        std::string* ptr = std::addressof(binding);
+
+        arg_desc.apply = [ptr, fn = arg_desc.full_name, vv = std::move(valid_values)](std::string_view sv) {
+            std::string val{sv};
+            if (std::ranges::find(vv, val) == vv.end()) {
+                std::string msg = "--" + fn + ": \"" + val + "\" is not valid.\n Valid: ";
+                for (std::size_t k = 0; k < vv.size(); ++k) {
+                    if (k) msg += ", ";
+                    msg += vv[k];
+                }
+                throw std::invalid_argument(msg + ".");
+            }
+            *ptr = std::move(val);
+        };
+
+        arg_desc.serialise = [ptr]() -> std::string { return *ptr; };
+        registry_.register_argument(std::move(arg_desc));
     }
 
 private:
