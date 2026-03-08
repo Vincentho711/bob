@@ -11,6 +11,7 @@
 #include <cctype>
 #include <ranges>
 #include <concepts>
+#include <limits>
 
 namespace simulation::args {
 class TypeConverter {
@@ -65,14 +66,27 @@ private:
             throw std::invalid_argument(flag(opt_name) + ": empty value for " + std::string(type_name) + ".");
         }
 
-        T result{};
-        const auto [ptr, ec] = std::from_chars(sv.data(), sv.data() + sv.size(), result);
-
-        if (ec != std::errc{} || ptr != sv.data() + sv.size()) {
+        try {
+            std::size_t consumed = 0;
+            if constexpr (std::is_unsigned_v<T>) {
+                if (sv.front() == '-')
+                    throw std::invalid_argument{"negative value"};
+                const unsigned long long val = std::stoull(std::string(sv), &consumed);
+                if (consumed != sv.size() || val > std::numeric_limits<T>::max())
+                    throw std::invalid_argument{"out of range or trailing characters"};
+                return static_cast<T>(val);
+            } else {
+                const long long val = std::stoll(std::string(sv), &consumed);
+                if (consumed != sv.size() ||
+                    val < std::numeric_limits<T>::min() ||
+                    val > std::numeric_limits<T>::max())
+                    throw std::invalid_argument{"out of range or trailing characters"};
+                return static_cast<T>(val);
+            }
+        } catch (...) {
             throw std::invalid_argument(flag(opt_name) + ": cannot convert \"" +
                 std::string(sv) + "\" to " + std::string(type_name) + ".");
         }
-        return result;
     }
 
     // Returns a copy with all characters lowercased
