@@ -18,6 +18,8 @@
 #include "simulation_args_argument_descriptor.h"
 #include "simulation_args_tokeniser.h"
 #include "simulation_args_group_app.h"
+#include "simulation_args_argument_group.h"
+#include "simulation_args_core_argument_group.h"
 
 #include "dual_port_ram_driver.h"
 #include "dual_port_ram_top_sequence.h"

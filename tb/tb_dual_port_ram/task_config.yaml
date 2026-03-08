@@ -23,6 +23,6 @@ tb_header_src_files:
     - "dual_port_ram_verification/testcases/directed/dual_port_ram_directed_testcases.h"
     - "dual_port_ram_verification/testcases/random/dual_port_ram_random_testcases.h"
 external_objects:
-  - "{@output:simulation_lib:lib_simulation_lib.a}"
   - "{@output:simulation_utils:lib_simulation_utils.a}"
+  - "{@output:simulation_lib:lib_simulation_lib.a}"
 output_executable: tb_dual_port_ram.out

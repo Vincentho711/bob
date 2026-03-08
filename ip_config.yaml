@@ -44,7 +44,8 @@ tasks:
     depends_on: []
 
   simulation_utils:
-    depends_on: []
+    depends_on:
+      - simulation_lib
 
   tb_hello_world_top:
     depends_on:

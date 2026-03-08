@@ -2,6 +2,8 @@ task_name : "simulation_utils"
 task_type : "cpp_compile"
 lib_type : "static"
 lib_name : "lib_simulation_utils.a"
+include_header_dirs:
+  - "$(get_task_dir(simulation_lib))/core"
 src_files:
   - "args/simulation_args_type_converter.h"
   - "args/simulation_args_argument_descriptor.h"
@@ -12,3 +14,6 @@ src_files:
   - "args/simulation_args_help_formatter.h"
   - "args/simulation_args_help_formatter.cpp"
   - "args/simulation_args_group_app.h"
+  - "args/simulation_args_argument_group.h"
+  - "args/simulation_args_core_argument_group.h"
+  - "args/simulation_args_core_argument_group.cpp"

@@ -1,0 +1,39 @@
+#include "simulation_args_core_argument_group.h"
+#include "simulation_logging_utils.h"
+#include <random>
+
+void simulation::args::CoreArgumentGroup::register_args(GroupApp& app){
+    app.add_argument<uint64_t>("seed", seed_, "RNG seed. 0 = randomise and log chosen value.", uint64_t{1});
+    app.add_enum_argument("verbosity", verbosity_str_, "Log verbosity level.", {"debug", "info", "warning", "error", "fatal"}, "info");
+    app.add_argument<std::string>("logfile-path", logfile_path_str_, "Specify the path of the output logfile.", std::string(""));
+    app.add_flag("waves", waves_, "Enable waveform dump.");
+    app.add_flag("dry-run", dry_run_, "Resolve and print all args, then exit without simulating.");
+}
+
+void simulation::args::CoreArgumentGroup::post_parse_resolve() {
+    // Verbosity -> LoggerConfig
+    static const std::unordered_map<std::string, simulation::LogLevel> kLevelMap = {
+        {"debug", simulation::LogLevel::DEBUG},
+        {"info", simulation::LogLevel::INFO},
+        {"warning", simulation::LogLevel::WARNING},
+        {"error", simulation::LogLevel::ERROR},
+        {"fatal", simulation::LogLevel::FATAL},
+    };
+    if (auto it = kLevelMap.find(verbosity_str_); it != kLevelMap.end()) {
+        simulation::LoggerConfig::instance().set_min_log_level(it->second);
+    }
+    // Logfile
+    if (!logfile_path_str_.empty()) {
+        simulation::LoggerConfig::instance().set_log_file(logfile_path_str_, simulation::OutputMode::BOTH);
+    }
+    // Seed resolution
+    if (seed_ == 0) {
+        // Generate random seed, truly random with std where possible
+        seed_ = std::random_device{}();
+        simulation::log_info("CoreArgs", "Seed 0 specified - randomised seed: " + std::to_string(seed_));
+    }
+}
+
+[[nodiscard]] std::string_view simulation::args::CoreArgumentGroup::description() const {
+    return "Core simulation arguments (always present in every testbench)";
+}
