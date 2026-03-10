@@ -130,6 +130,7 @@ public:
 
         arg_desc.serialise = [ptr]() -> std::string { return *ptr; };
         registry_.register_argument(std::move(arg_desc));
+        return *this;
     }
 
 private:

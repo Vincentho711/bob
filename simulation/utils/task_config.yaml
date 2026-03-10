@@ -17,3 +17,5 @@ src_files:
   - "args/simulation_args_argument_group.h"
   - "args/simulation_args_core_argument_group.h"
   - "args/simulation_args_core_argument_group.cpp"
+  - "args/simulation_args_argument_parser.h"
+  - "args/simulation_args_argument_parser.cpp"

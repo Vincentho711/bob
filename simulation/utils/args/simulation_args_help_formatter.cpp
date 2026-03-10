@@ -51,12 +51,12 @@ void simulation::args::HelpFormatter::print_help(std::string_view program_name, 
             }
             out << "\n";
         }
-
-        out << "\nEnvironment variable overrides:\n"
-            << "  Every option exposes a SIM_<PREFIX>_<n> env var equivalent.\n"
-            << "  Example: SIM_UART0_BAUD_RATE=115200\n"
-            << "  Precedence: default < env var < command line\n\n";
     }
+
+    out << "\nEnvironment variable overrides:\n"
+        << "  Every option exposes a SIM_<PREFIX>_<NAME> env var equivalent.\n"
+        << "  Example: SIM_UART0_BAUD_RATE=115200\n"
+        << "  Precedence: default < env var < command line\n\n";
 }
 
 void simulation::args::HelpFormatter::print_resolved(const ArgumentRegistry& registry, std::ostream& out) {
