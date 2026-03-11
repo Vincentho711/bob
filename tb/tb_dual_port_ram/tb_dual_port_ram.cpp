@@ -20,6 +20,8 @@
 #include "simulation_args_group_app.h"
 #include "simulation_args_argument_group.h"
 #include "simulation_args_core_argument_group.h"
+#include "simulation_args_argument_parser.h"
+#include "simulation_args_argument_context.h"
 
 #include "dual_port_ram_driver.h"
 #include "dual_port_ram_top_sequence.h"
@@ -29,6 +31,7 @@
 #include "dual_port_ram_scoreboard.h"
 #include "testcases/directed/dual_port_ram_directed_testcases.h"
 
+#include <stdexcept>
 #include <verilated.h>
 #include <verilated_vcd_c.h>
 
@@ -151,8 +154,9 @@ class BaseChecker : public simulation::SimulationComponent<Vdual_port_ram>{
 
 class SimulationEnvironment {
 public:
-    SimulationEnvironment(uint32_t seed, uint64_t max_time)
+    SimulationEnvironment(uint64_t seed, bool waves, uint64_t max_time)
         : seed_(seed),
+          waves_(waves),
           max_time_(max_time),
           logger_("SimEnv"),
           sim_context_(nullptr) {
@@ -327,6 +331,7 @@ private:
     // Simulation parameters
     const int32_t TRACE_DEPTH = 5;
     const uint64_t seed_;
+    const bool waves_;
     const uint64_t max_time_;
 
     // Logger for this class
@@ -360,7 +365,40 @@ private:
     std::vector<simulation::Task<>> coro_tasks;
 };
 
-int main() {
+int main(int argc, char** argv) {
+    // ============================================================================
+    // Configure SimulationArgumentParser first
+    // ============================================================================
+    simulation::args::SimulationArgumentParser arg_parser("tb_dual_port_ram");
+    try {
+        arg_parser.add_group(std::make_unique<simulation::args::CoreArgumentGroup>());
+        arg_parser.parse(argc, argv);
+        arg_parser.resolve();
+
+        simulation::args::SimulationArgumentContext::set(arg_parser);
+
+
+    } catch (const std::invalid_argument& e) {
+        std::cerr << std::format(
+            "Argument error while parsing CLI arguments:\n  {}\n",
+            e.what()
+        );
+        return EXIT_FAILURE;
+    } catch (const std::runtime_error& e) {
+        std::cerr << std::format(
+            "Runtime error during initialisation:\n  {}\n",
+            e.what()
+        );
+        return EXIT_FAILURE;
+    } catch (const std::exception& e) {
+        std::cerr << std::format(
+            "Unhandled exception:\n  {}\n",
+            e.what()
+        );
+        return EXIT_FAILURE;
+    }
+    const auto& core_args = arg_parser.get<simulation::args::CoreArgumentGroup>();
+
     // ============================================================================
     // Global Logger Configuration (affects all loggers in the simulation)
     // ============================================================================
@@ -376,7 +414,7 @@ int main() {
     // ============================================================================
     simulation::Logger main_logger("Main");
     try {
-        SimulationEnvironment sim_env(124U, 10000000U);
+        SimulationEnvironment sim_env(core_args.seed(), core_args.waves(), 10000000U);
         sim_env.start_sim_kernel();
 
         main_logger.test_passed("Simulation Passed");
