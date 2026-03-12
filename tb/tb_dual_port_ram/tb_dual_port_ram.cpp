@@ -29,6 +29,7 @@
 #include "dual_port_ram_tlm_queue.h"
 #include "dual_port_ram_monitor.h"
 #include "dual_port_ram_scoreboard.h"
+#include "dual_port_ram_tb_argument_group.h"
 #include "testcases/directed/dual_port_ram_directed_testcases.h"
 
 #include <stdexcept>
@@ -187,17 +188,20 @@ public:
         // Initialise Verilator
         // ========================================================================
         auto verilator_ctx = logger_.scoped_context("Verilator");
-        Verilated::traceEverOn(true);
-        Verilated::randSeed(seed);
-
         // Create DUT as shared pointer
         dut_ = std::make_shared<Vdual_port_ram>();
+        Verilated::randSeed(seed);
 
-        // Set up waveform tracing
-        trace_= std::make_shared<VerilatedVcdC>();
-        dut_->trace(trace_.get(), TRACE_DEPTH);
-        trace_->open("tb_dual_port_ram.vcd");
-        logger_.info("Waveform tracing enabled: tb_dual_port_ram.vcd");
+        if (waves) {
+            const auto& tb_args = simulation::args::SimulationArgumentContext::get<DualPortRamArgumentGroup>();
+            Verilated::traceEverOn(true);
+            // Set up waveform tracing
+            trace_= std::make_shared<VerilatedVcdC>();
+            dut_->trace(trace_.get(), TRACE_DEPTH);
+            trace_->open(std::string(tb_args.trace_file()).c_str());
+            logger_.info("Waveform tracing enabled: " + std::string(tb_args.trace_file()));
+        }
+
 
         // ========================================================================
         // Initialise clocking components
@@ -372,6 +376,7 @@ int main(int argc, char** argv) {
     simulation::args::SimulationArgumentParser arg_parser("tb_dual_port_ram");
     try {
         arg_parser.add_group(std::make_unique<simulation::args::CoreArgumentGroup>());
+        arg_parser.add_group(std::make_unique<DualPortRamArgumentGroup>());
         arg_parser.parse(argc, argv);
         arg_parser.resolve();
 
@@ -398,6 +403,9 @@ int main(int argc, char** argv) {
         return EXIT_FAILURE;
     }
     const auto& core_args = arg_parser.get<simulation::args::CoreArgumentGroup>();
+    const auto& tb_args = arg_parser.get<DualPortRamArgumentGroup>();
+
+    const bool waves = core_args.waves() || tb_args.waves_implied();
 
     // ============================================================================
     // Global Logger Configuration (affects all loggers in the simulation)
@@ -406,7 +414,7 @@ int main(int argc, char** argv) {
 
     // Example configurations:
     // global_log_config.set_log_file("simulation.log", simulation::OutputMode::SEPARATE_LEVELS);
-    global_log_config.set_stdout_min_level(simulation::LogLevel::INFO);   // Console: less verbose
+    // global_log_config.set_stdout_min_level(simulation::LogLevel::INFO);   // Console: less verbose
     // global_log_config.set_file_min_level(simulation::LogLevel::DEBUG);    // File: captur
 
     // ============================================================================
@@ -414,7 +422,7 @@ int main(int argc, char** argv) {
     // ============================================================================
     simulation::Logger main_logger("Main");
     try {
-        SimulationEnvironment sim_env(core_args.seed(), core_args.waves(), 10000000U);
+        SimulationEnvironment sim_env(core_args.seed(), waves, 10000000U);
         sim_env.start_sim_kernel();
 
         main_logger.test_passed("Simulation Passed");

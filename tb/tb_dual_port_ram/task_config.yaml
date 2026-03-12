@@ -18,6 +18,7 @@ tb_cpp_src_files:
   - "dual_port_ram_verification/dual_port_ram_tlm_queue.cpp"
   - "dual_port_ram_verification/dual_port_ram_monitor.cpp"
   - "dual_port_ram_verification/dual_port_ram_scoreboard.cpp"
+  - "dual_port_ram_verification/dual_port_ram_tb_argument_group.cpp"
   - "tb_dual_port_ram.cpp"
 tb_header_src_files:
     - "dual_port_ram_verification/testcases/directed/dual_port_ram_directed_testcases.h"
