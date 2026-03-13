@@ -10,8 +10,9 @@ module dual_port_ram
     output wire  [DATA_WIDTH-1:0] rd_data_o
 );
     localparam int DEPTH = 1 << ADDR_WIDTH;
-    reg [DATA_WIDTH-1:0] mem [DEPTH];
+    logic [DATA_WIDTH-1:0] mem [DEPTH];
 
+    // read-before-write is deliberate
     assign rd_data_o = mem[rd_addr_i];
 
     always_ff @(posedge wr_clk_i) begin

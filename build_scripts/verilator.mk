@@ -42,7 +42,8 @@ endif
 # Verilator trace to allow waveform to be dumped, can be --trace or --trace-fst
 VERILATOR_TRACE_ARGS ?= --trace
 # Extra args, like assigning random values to 'x' values to catch uninitialised behaviour
-VERILATOR_EXTRA_ARGS ?= --x-assign unique --x-initial unique
+# --assert to enable assertion evaluation
+VERILATOR_EXTRA_ARGS ?= --x-assign unique --x-initial unique --assert
 EXTERNAL_OBJECTS ?=
 INCLUDE_DIRS ?=
 
