@@ -197,14 +197,14 @@ public:
         rd_clk_ = std::make_shared<simulation::Clock<Vhello_world_top>>("rd_clk", 4000U, dut_, rd_clk_drive_fn);
 
         // Set up simulation components
-        sim_kernal_ = std::make_unique<simulation::SimulationKernel<Vhello_world_top, VerilatedVcdC>>(dut_, trace_);
+        sim_kernel_ = std::make_unique<simulation::SimulationKernel<Vhello_world_top, VerilatedVcdC>>(dut_, trace_);
 
         // Register clocking componenets with simulation kernal
-        sim_kernal_->register_clock(wr_clk_);
-        sim_kernal_->register_clock(rd_clk_);
+        sim_kernel_->register_clock(wr_clk_);
+        sim_kernel_->register_clock(rd_clk_);
 
         // Initialise - clocks self-schedule their first events
-        sim_kernal_->initialise();
+        sim_kernel_->initialise();
 
         // Set up verification components
         checker_ = std::make_shared<BaseChecker>(wr_clk_, rd_clk_);
@@ -230,11 +230,11 @@ public:
         }
     }
 
-    void start_sim_kernal() {
+    void start_sim_kernel() {
         auto run_ctx = logger_.scoped_context("SimulationRun");
         logger_.info("Starting simulation kernel...");
         // Pass a pointer of coro_tasks to the simulation kernal for error handling
-        sim_kernal_->root_tasks = &coro_tasks;
+        sim_kernel_->root_tasks = &coro_tasks;
         try {
             {
                 auto startup_ctx = logger_.scoped_context("TaskStartup");
@@ -244,7 +244,7 @@ public:
             }
             {
                 auto exec_ctx = logger_.scoped_context("Execution");
-                sim_kernal_->run(max_time_);
+                sim_kernel_->run(max_time_);
             }
         } catch (...) {
             throw;
@@ -265,7 +265,7 @@ private:
     std::shared_ptr<VerilatedVcdC> trace_;
 
     // Simulation components
-    std::unique_ptr<simulation::SimulationKernal<Vhello_world_top, VerilatedVcdC>> sim_kernal_;
+    std::unique_ptr<simulation::SimulationKernel<Vhello_world_top, VerilatedVcdC>> sim_kernel_;
 
     // Clocking components
     std::shared_ptr<simulation::Clock<Vhello_world_top>> wr_clk_;
@@ -293,7 +293,7 @@ int main() {
     simulation::Logger main_logger("Main");
     try {
         SimulationEnvironment sim_env(123U, 10000000U);
-        sim_env.start_sim_kernal();
+        sim_env.start_sim_kernel();
         main_logger.test_passed("Simulation Passed");
         return 0;
     } catch (const simulation::VerificationError &e) {
