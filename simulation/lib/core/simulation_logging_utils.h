@@ -651,6 +651,70 @@ namespace simulation {
         }
     }
 
+    inline void log_test_max_time_reached(const std::string& component_name, uint64_t max_time_ps_val) {
+        auto& config = LoggerConfig::instance();
+        const LogLevel level = LogLevel::WARNING;
+
+        const bool send_to_stdout = (level >= config.get_stdout_min_level() &&
+                                   config.get_output_mode() != OutputMode::FILE_ONLY);
+        const bool send_to_file   = (config.is_file_output_enabled() &&
+                                   level >= config.get_file_min_level() &&
+                                   config.get_output_mode() != OutputMode::STDOUT_ONLY);
+
+        if (!send_to_stdout && !send_to_file) return;
+
+        auto build_message = [&](bool use_colours) -> std::string {
+            std::ostringstream s;
+            if (config.show_timestamp()) {
+                if (use_colours) {
+                    s << colours::DIM;
+                }
+                s << "@" << format_timestamp(current_time_ps, config.get_timestamp_precision()) << "ps";
+                if (use_colours) {
+                    s << colours::RESET;
+                }
+                s << " ";
+            }
+            if (use_colours) {
+                s << colours::BRIGHT_YELLOW;
+            }
+            s << "[WARNING]";
+            if (use_colours) {
+                s << colours::RESET;
+            }
+            s << " ";
+            if (!component_name.empty()) {
+                if (use_colours) {
+                    s << colours::BRIGHT_BLUE;
+                }
+                s << "[" << component_name << "]";
+                if (use_colours) {
+                    s << colours::RESET;
+                }
+                s << " ";
+            }
+
+            if (use_colours) {
+                s << colours::BOLD << colours::BRIGHT_YELLOW;
+            }
+            s << "⚠ Max simulation time reached (" << max_time_ps_val
+              << "ps) — tasks may be incomplete";
+            if (use_colours) { 
+                s << colours::RESET;
+            }
+            return s.str();
+        };
+
+        if (send_to_stdout) {
+            config.write_to_stdout("");
+            config.write_to_stdout(build_message(config.use_stdout_colours()));
+        }
+        if (send_to_file) {
+            config.write_to_file("");
+            config.write_to_file(build_message(false));
+        }
+    }
+
     class Logger {
     public:
         explicit Logger(std::string component_name) 
@@ -771,6 +835,10 @@ namespace simulation {
 
         void test_failed(const std::string& message = "Test Failed") const {
             log_test_failed(component_name_, message);
+        }
+
+        void test_max_time_reached(uint64_t max_time_ps_val) const {
+            log_test_max_time_reached(component_name_, max_time_ps_val);
         }
 
     private:

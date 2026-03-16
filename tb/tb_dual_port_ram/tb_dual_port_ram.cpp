@@ -309,12 +309,13 @@ public:
         }
     }
 
-    void start_sim_kernel() {
+  simulation::RunResult start_sim_kernel() {
         auto run_ctx = logger_.scoped_context("SimulationRun");
         logger_.info("Starting simulation kernel...");
         // Pass a pointer of coro_tasks to the simulation kernel for error handling
         sim_kernel_->root_tasks = &coro_tasks;
         // Resume all root level coroutines as they are not started upon creation
+        simulation::RunResult result = simulation::RunResult::Completed;
         try {
             {
                 auto startup_ctx = logger_.scoped_context("TaskStartup");
@@ -324,11 +325,12 @@ public:
             }
             {
                 auto exec_ctx = logger_.scoped_context("Execution");
-                sim_kernel_->run(max_time_);
+                result = sim_kernel_->run(max_time_);
             }
         } catch (...) {
             throw;
         }
+        return result;
     }
 
 private:
@@ -375,7 +377,11 @@ int main(int argc, char** argv) {
     // ============================================================================
     simulation::args::SimulationArgumentParser arg_parser("tb_dual_port_ram");
     try {
-        arg_parser.add_group(std::make_unique<simulation::args::CoreArgumentGroup>());
+        arg_parser.add_group(std::make_unique<simulation::args::CoreArgumentGroup>(
+            simulation::args::CoreArgumentDefaults{
+                .max_time_ps = 100'000'000   // Override default max_time for this testbench
+            }
+        ));
         arg_parser.add_group(std::make_unique<DualPortRamArgumentGroup>());
         arg_parser.parse(argc, argv);
         arg_parser.resolve();
@@ -406,6 +412,7 @@ int main(int argc, char** argv) {
     const auto& tb_args = arg_parser.get<DualPortRamArgumentGroup>();
 
     const bool waves = core_args.waves() || tb_args.waves_implied();
+    const uint64_t max_time_ps = core_args.max_time_ps();
 
     // ============================================================================
     // Global Logger Configuration (affects all loggers in the simulation)
@@ -422,8 +429,12 @@ int main(int argc, char** argv) {
     // ============================================================================
     simulation::Logger main_logger("Main");
     try {
-        SimulationEnvironment sim_env(core_args.seed(), waves, 10000000U);
-        sim_env.start_sim_kernel();
+        SimulationEnvironment sim_env(core_args.seed(), waves, max_time_ps);
+        simulation::RunResult run_result = sim_env.start_sim_kernel();
+
+        if (run_result == simulation::RunResult::MaxTimeReached) {
+            main_logger.test_max_time_reached(core_args.max_time_ps());
+        }
 
         main_logger.test_passed("Simulation Passed");
         return 0;

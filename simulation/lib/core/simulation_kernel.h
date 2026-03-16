@@ -9,9 +9,15 @@
 
 namespace simulation {
 
+    enum class RunResult : uint8_t {
+      Completed,        // Scheduler drained naturally - all tasks finished
+      MaxTimeReached    // Scheduler stopped because max-time is reached
+    };
+
     template <typename DutType, typename TraceType>
     class SimulationKernel {
     public:
+
         uint64_t time = 0U;
         std::vector<std::shared_ptr<simulation::Clock<DutType>>> clocks;
         // Raw pointer reference to all the root tasks
@@ -31,7 +37,7 @@ namespace simulation {
             }
         }
 
-        void run(uint64_t max_time) {
+        RunResult run(uint64_t max_time) {
             uint64_t last_waveform_time = 0;
             while (scheduler_.has_events()) {
                 uint64_t next_time = scheduler_.peek_next_time();
@@ -39,7 +45,7 @@ namespace simulation {
                 if (next_time >= max_time) {
                     time = max_time;
                     simulation::current_time_ps = time;
-                    break;
+                    return RunResult::MaxTimeReached;
                 }
 
                 // Advnace simulation time to next event
@@ -95,6 +101,7 @@ namespace simulation {
                     last_waveform_time = time;
                 }
             }
+            return RunResult::Completed;
         }
 
         EventScheduler<DutType>& get_scheduler() {

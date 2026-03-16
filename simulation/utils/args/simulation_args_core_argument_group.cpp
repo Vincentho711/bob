@@ -1,13 +1,16 @@
 #include "simulation_args_core_argument_group.h"
 #include "simulation_logging_utils.h"
+#include <cstdint>
+#include <limits>
 #include <random>
 
 void simulation::args::CoreArgumentGroup::register_args(GroupApp& app){
-    app.add_argument<uint64_t>("seed", seed_, "RNG seed. 0 = randomise and log chosen value.", uint64_t{1});
-    app.add_enum_argument("verbosity", verbosity_str_, "Log verbosity level.", {"debug", "info", "warning", "error", "fatal"}, "info");
-    app.add_argument<std::string>("logfile-path", logfile_path_str_, "Specify the path of the output logfile.", std::string(""));
+    app.add_argument<uint64_t>("seed", seed_, "RNG seed. 0 = randomise and log chosen value.", seed_);
+    app.add_enum_argument("verbosity", verbosity_str_, "Log verbosity level.", {"debug", "info", "warning", "error", "fatal"}, verbosity_str_);
+    app.add_argument<std::string>("logfile-path", logfile_path_str_, "Specify the path of the output logfile.", logfile_path_str_);
     app.add_flag("waves", waves_, "Enable waveform dump.");
     app.add_flag("dry-run", dry_run_, "Resolve and print all args, then exit without simulating.");
+    app.add_argument<uint64_t>("max-time", max_time_ps_, "Max simulation time in ps. 0 = unlimited.", max_time_ps_);
 }
 
 void simulation::args::CoreArgumentGroup::post_parse_resolve() {
@@ -31,6 +34,11 @@ void simulation::args::CoreArgumentGroup::post_parse_resolve() {
         // Generate random seed, truly random with std where possible
         seed_ = std::random_device{}();
         simulation::log_info("CoreArgs", "Seed 0 specified - randomised seed: " + std::to_string(seed_));
+    }
+    // Modify max-time to ensure max-time=0 means running until all tasks complete.
+    if (max_time_ps_ == 0) {
+        max_time_ps_ = std::numeric_limits<uint64_t>::max();
+        simulation::log_info("CoreArgs", "max-time 0 specified - running until all tasks complete.");
     }
 }
 

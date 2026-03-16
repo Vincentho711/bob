@@ -7,9 +7,20 @@
 
 namespace simulation::args {
 
+struct CoreArgumentDefaults {
+    uint64_t    max_time_ps = 0;
+    uint64_t    seed        = 1;
+    std::string verbosity   = "info";
+};
+
 class CoreArgumentGroup final : public ArgumentGroup {
 public:
-    CoreArgumentGroup() : ArgumentGroup("") {} // empty_prefix = top-level namespace
+    explicit CoreArgumentGroup(CoreArgumentDefaults defaults = {})
+        : ArgumentGroup(""), // empty_prefix = top-level namespace
+          seed_         (defaults.seed),
+          verbosity_str_(defaults.verbosity),
+          max_time_ps_  (defaults.max_time_ps) {}
+
     void register_args(GroupApp& app) override;
     void post_parse_resolve() override;
     [[nodiscard]] std::string_view description() const override;
@@ -19,6 +30,7 @@ public:
     [[nodiscard]] bool dry_run() const noexcept { return dry_run_; }
     [[nodiscard]] std::string_view verbosity_str() const noexcept { return verbosity_str_; }
     [[nodiscard]] std::string_view logfile_path_str() const noexcept { return logfile_path_str_; }
+    [[nodiscard]] uint64_t max_time_ps() const noexcept { return max_time_ps_; }
 
 private:
     uint64_t seed_ = 1;
@@ -26,6 +38,7 @@ private:
     bool waves_ = false;
     bool dry_run_ = false;
     std::string logfile_path_str_;
+    uint64_t max_time_ps_;
 
 };
 }
