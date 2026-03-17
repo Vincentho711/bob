@@ -38,4 +38,11 @@ simulation::Task<> DualPortRamTopSequence::body() {
     auto random_write_read_random_seq = std::make_unique<Seq_Random_Write_Read_Random>(wr_addr_width_, wr_data_width_, global_seed_, 0.9f, 0.8f, 1000);
     co_await p_sequencer->start_sequence(std::move(random_write_read_random_seq));
     log_info("---------------------------------------");
+
+    // Flush pipeline to ensure that all write transactions propagate to output
+    // Design has a pipeline depth of 1, wait 5 rd cycles.
+    log_info("------End of DualPortRamTopSequence------");
+    log_debug("Wait for 5 read cycles to flush out transactions.");
+    co_await wait_rd_cycles(5U);
+    log_info("---------------------------------------");
 };

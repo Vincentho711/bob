@@ -30,6 +30,7 @@ simulation::Task<> DualPortRamMonitor::run_phase() {
 simulation::Task<> DualPortRamMonitor::wr_port_run() {
     auto wr_ctx = wr_logger_.scoped_context("WriteMonitor");
     while (true) {
+        if (this->is_draining()) co_return;
         co_await wr_clk_->rising_edge(simulation::Phase::Monitor);
         wr_logger_.debug("Waiting for capturing write transaction");
 
@@ -51,6 +52,7 @@ simulation::Task<> DualPortRamMonitor::wr_port_run() {
 simulation::Task<> DualPortRamMonitor::rd_port_run() {
     auto rd_ctx = rd_logger_.scoped_context("ReadMonitor");
     while (true) {
+        if (this->is_draining()) co_return;
         co_await rd_clk_->rising_edge(simulation::Phase::Monitor);
         rd_logger_.debug("Waiting for capturing read transaction");
 

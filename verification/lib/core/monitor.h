@@ -6,6 +6,7 @@
 #include "simulation_task_symmetric_transfer.h"
 #include "simulation_logging_utils.h"
 #include "simulation_component.h"
+#include "simulation_context.h"
 
 template <typename TransactionT, typename DutType>
 class BaseMonitor : public simulation::SimulationComponent<DutType> {
@@ -46,6 +47,11 @@ public:
 
     void log_message_txn(uint64_t txn_id, const std::string& message) const {
         this->logger_.warning_txn(txn_id, message);
+    }
+
+protected:
+    bool is_draining() const noexcept {
+        return simulation::SimulationDrainContext::instance().is_draining();
     }
 };
 #endif // MONITOR_H

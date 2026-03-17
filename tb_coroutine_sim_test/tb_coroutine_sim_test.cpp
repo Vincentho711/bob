@@ -209,18 +209,19 @@ public:
         // Set up verification components
         checker_ = std::make_shared<BaseChecker>(wr_clk_, rd_clk_);
 
-        // Set up task components
-        coro_tasks.push_back(primary_checker_wr_task());
-        coro_tasks.push_back(primary_checker_rd_task());
-        // when_all() and when_all_ready() testcases
-        coro_tasks.push_back(checker_->when_all_ready_non_void_tuple_top());
-        coro_tasks.push_back(checker_->when_all_ready_non_void_vector_top());
-        coro_tasks.push_back(checker_->when_all_ready_void_tuple_top());
-        coro_tasks.push_back(checker_->when_all_ready_void_vector_top());
-        coro_tasks.push_back(checker_->when_all_non_void_tuple_top());
-        coro_tasks.push_back(checker_->when_all_non_void_vector_top());
-        coro_tasks.push_back(checker_->when_all_void_tuple_top());
-        coro_tasks.push_back(checker_->when_all_void_vector_top());
+        // Active tasks: finite when_all tests; gate simulation termination
+        active_tasks_.push_back(checker_->when_all_ready_non_void_tuple_top());
+        active_tasks_.push_back(checker_->when_all_ready_non_void_vector_top());
+        active_tasks_.push_back(checker_->when_all_ready_void_tuple_top());
+        active_tasks_.push_back(checker_->when_all_ready_void_vector_top());
+        active_tasks_.push_back(checker_->when_all_non_void_tuple_top());
+        active_tasks_.push_back(checker_->when_all_non_void_vector_top());
+        active_tasks_.push_back(checker_->when_all_void_tuple_top());
+        active_tasks_.push_back(checker_->when_all_void_vector_top());
+
+        // Reactive tasks: infinite clock-edge loops; destroyed when active tasks complete
+        reactive_tasks_.push_back(primary_checker_wr_task());
+        reactive_tasks_.push_back(primary_checker_rd_task());
 
     }
 
@@ -233,14 +234,14 @@ public:
     void start_sim_kernel() {
         auto run_ctx = logger_.scoped_context("SimulationRun");
         logger_.info("Starting simulation kernel...");
-        // Pass a pointer of coro_tasks to the simulation kernal for error handling
-        sim_kernel_->root_tasks = &coro_tasks;
+        // Wire active and reactive task vectors to the kernel
+        sim_kernel_->active_tasks   = &active_tasks_;
+        sim_kernel_->reactive_tasks = &reactive_tasks_;
         try {
             {
                 auto startup_ctx = logger_.scoped_context("TaskStartup");
-                for (simulation::Task<> &task: coro_tasks) {
-                    task.start();
-                }
+                for (simulation::Task<>& task : active_tasks_)   task.start();
+                for (simulation::Task<>& task : reactive_tasks_) task.start();
             }
             {
                 auto exec_ctx = logger_.scoped_context("Execution");
@@ -274,8 +275,9 @@ private:
     // Verification components
     std::shared_ptr<BaseChecker> checker_;
 
-    // Task componenets
-    std::vector<simulation::Task<>> coro_tasks;
+    // Task components
+    std::vector<simulation::Task<>> active_tasks_;    // finite tasks; gate termination
+    std::vector<simulation::Task<>> reactive_tasks_;  // infinite tasks; destroyed on drain
 
     // Set up root tasks that might trigger other tasks,testing wrapping of task within a task
     simulation::Task<> primary_checker_wr_task() {

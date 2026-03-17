@@ -277,22 +277,26 @@ public:
         {
             auto task_ctx = logger_.scoped_context("TaskSetup");
             logger_.debug("Creating coroutine tasks...");
-            coro_tasks.emplace_back(checker_->test_same_phase_event());
-            // coro_tasks.emplace_back(checker_->when_all_ready_return_value_top_task());
-            // coro_tasks.emplace_back(checker_->when_all_return_value_top_task());
-            coro_tasks.emplace_back(checker_->empty_top_task());
-            coro_tasks.emplace_back(checker_->async_test_task());
-            // coro_tasks.emplace_back(checker_->print_at_wr_clk_edges());
-            coro_tasks.emplace_back(sequencer_->start_sequence(std::move(top_seq_)));
-            coro_tasks.emplace_back(driver_->wr_driver_run());
-            coro_tasks.emplace_back(driver_->rd_driver_run());
-            coro_tasks.emplace_back(monitor_->wr_port_run());
-            coro_tasks.emplace_back(monitor_->rd_port_run());
-            coro_tasks.emplace_back(scoreboard_->run_write_capture());
-            coro_tasks.emplace_back(scoreboard_->run_read_capture());
-            coro_tasks.emplace_back(scoreboard_->update_ram_model());
+            // Active tasks: finite, gate simulation termination
+            active_tasks_.emplace_back(checker_->test_same_phase_event());
+            // active_tasks_.emplace_back(checker_->when_all_ready_return_value_top_task());
+            // active_tasks_.emplace_back(checker_->when_all_return_value_top_task());
+            active_tasks_.emplace_back(checker_->empty_top_task());
+            active_tasks_.emplace_back(checker_->async_test_task());
+            // active_tasks_.emplace_back(checker_->print_at_wr_clk_edges());
+            active_tasks_.emplace_back(sequencer_->start_sequence(std::move(top_seq_)));
 
-            logger_.info("Created " + std::to_string(coro_tasks.size()) + " coroutine tasks");
+            // Reactive tasks: infinite while(true) loops, destroyed when active tasks complete
+            reactive_tasks_.emplace_back(driver_->wr_driver_run());
+            reactive_tasks_.emplace_back(driver_->rd_driver_run());
+            reactive_tasks_.emplace_back(monitor_->wr_port_run());
+            reactive_tasks_.emplace_back(monitor_->rd_port_run());
+            reactive_tasks_.emplace_back(scoreboard_->run_write_capture());
+            reactive_tasks_.emplace_back(scoreboard_->run_read_capture());
+            reactive_tasks_.emplace_back(scoreboard_->update_ram_model());
+
+            logger_.info("Created " + std::to_string(active_tasks_.size()) + " active tasks, " +
+                         std::to_string(reactive_tasks_.size()) + " reactive tasks");
         }
 
         logger_.info("===========================================");
@@ -312,16 +316,16 @@ public:
   simulation::RunResult start_sim_kernel() {
         auto run_ctx = logger_.scoped_context("SimulationRun");
         logger_.info("Starting simulation kernel...");
-        // Pass a pointer of coro_tasks to the simulation kernel for error handling
-        sim_kernel_->root_tasks = &coro_tasks;
+        // Wire active and reactive task vectors to the kernel
+        sim_kernel_->active_tasks   = &active_tasks_;
+        sim_kernel_->reactive_tasks = &reactive_tasks_;
         // Resume all root level coroutines as they are not started upon creation
         simulation::RunResult result = simulation::RunResult::Completed;
         try {
             {
                 auto startup_ctx = logger_.scoped_context("TaskStartup");
-                for (simulation::Task<> &task : coro_tasks) {
-                    task.start();
-                }
+                for (simulation::Task<>& task : active_tasks_)   task.start();
+                for (simulation::Task<>& task : reactive_tasks_) task.start();
             }
             {
                 auto exec_ctx = logger_.scoped_context("Execution");
@@ -367,8 +371,9 @@ private:
     // Sequence components
     std::unique_ptr<DualPortRamTopSequence> top_seq_;
 
-    // Task componenets
-    std::vector<simulation::Task<>> coro_tasks;
+    // Task components
+    std::vector<simulation::Task<>> active_tasks_;    // finite tasks; gate termination
+    std::vector<simulation::Task<>> reactive_tasks_;  // infinite tasks; destroyed on drain
 };
 
 int main(int argc, char** argv) {

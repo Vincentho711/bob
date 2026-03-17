@@ -4,16 +4,21 @@
 #include <memory>
 #include <coroutine>
 #include "simulation_task_symmetric_transfer.h"
+#include "simulation_context.h"
 
 namespace simulation {
 
 template <typename TransactionT>
-class TLMQueue {
+class TLMQueue : public simulation::IDrainableQueue {
 public:
     using TxnPtr= std::shared_ptr<TransactionT>;
     using handle_t = std::coroutine_handle<>;
 
-    explicit TLMQueue(const std::string& name) : name_(name) {}
+    explicit TLMQueue(const std::string& name) : name_(name) {
+        simulation::SimulationDrainContext::instance().register_drain_queue(this);
+    }
+
+    bool empty() const noexcept override { return txn_queue_.empty(); }
 
     // --- Non-blocking interface ---
 

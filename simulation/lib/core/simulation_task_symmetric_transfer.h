@@ -124,6 +124,8 @@ namespace simulation {
             }
         }
 
+        bool done() const noexcept { return !handle_ || handle_.done(); }
+
         void check_exception() const {
             if (handle_ && handle_.done()) {
                 handle_.promise().result();
