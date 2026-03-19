@@ -19,6 +19,7 @@ src_files:
   - "core/sequencer.cpp"
   - "core/sequence.h"
   - "core/sequence.cpp"
+  - "core/test_registry.h"
   - "coverage/coverpoint.cpp"
   - "coverage/coverpoint.h"
   - "coverage/covergroup.cpp"

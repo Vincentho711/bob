@@ -11,10 +11,10 @@ rtl_src_files:
 tb_cpp_src_files:
   - "dual_port_ram_verification/testcases/directed/dual_port_ram_directed_testcases.cpp"
   - "dual_port_ram_verification/testcases/random/dual_port_ram_random_testcases.cpp"
+  - "dual_port_ram_verification/tests/dual_port_ram_test_default_top_sequence.cpp"
   - "dual_port_ram_verification/dual_port_ram_driver.cpp"
   - "dual_port_ram_verification/dual_port_ram_sequence.cpp"
   - "dual_port_ram_verification/dual_port_ram_sequencer.cpp"
-  - "dual_port_ram_verification/dual_port_ram_top_sequence.cpp"
   - "dual_port_ram_verification/dual_port_ram_tlm_queue.cpp"
   - "dual_port_ram_verification/dual_port_ram_monitor.cpp"
   - "dual_port_ram_verification/dual_port_ram_scoreboard.cpp"
@@ -23,6 +23,7 @@ tb_cpp_src_files:
 tb_header_src_files:
     - "dual_port_ram_verification/testcases/directed/dual_port_ram_directed_testcases.h"
     - "dual_port_ram_verification/testcases/random/dual_port_ram_random_testcases.h"
+    - "dual_port_ram_verification/tests/dual_port_ram_test_default_top_sequence.h"
 external_objects:
   - "{@output:simulation_utils:lib_simulation_utils.a}"
   - "{@output:simulation_lib:lib_simulation_lib.a}"

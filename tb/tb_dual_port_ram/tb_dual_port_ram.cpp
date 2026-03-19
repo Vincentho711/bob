@@ -24,13 +24,13 @@
 #include "simulation_args_argument_context.h"
 
 #include "dual_port_ram_driver.h"
-#include "dual_port_ram_top_sequence.h"
 #include "dual_port_ram_sequencer.h"
 #include "dual_port_ram_tlm_queue.h"
 #include "dual_port_ram_monitor.h"
 #include "dual_port_ram_scoreboard.h"
 #include "dual_port_ram_tb_argument_group.h"
 #include "testcases/directed/dual_port_ram_directed_testcases.h"
+#include "tests/dual_port_ram_test_default_top_sequence.h"
 
 #include <stdexcept>
 #include <verilated.h>
@@ -266,7 +266,7 @@ public:
             const auto dual_port_ram_module_data_width = Vdual_port_ram_dual_port_ram::DATA_WIDTH;
             const uint32_t addr_width_arg = static_cast<uint32_t>(dual_port_ram_module_addr_width);
             const uint32_t data_width_arg = static_cast<uint32_t>(dual_port_ram_module_data_width);
-            top_seq_ = std::make_unique<DualPortRamTopSequence>(addr_width_arg, data_width_arg, seed_);
+            top_seq_ = std::make_unique<DualPortRamTestDefaultTopSequence>(addr_width_arg, data_width_arg, seed_);
             logger_.info("Top sequence configured (ADDR_WIDTH=" + std::to_string(addr_width_arg) +
                         ", DATA_WIDTH=" + std::to_string(data_width_arg) + ")");
         }
@@ -369,7 +369,7 @@ private:
     std::shared_ptr<DualPortRamScoreboard> scoreboard_;
 
     // Sequence components
-    std::unique_ptr<DualPortRamTopSequence> top_seq_;
+    std::unique_ptr<DualPortRamTestDefaultTopSequence> top_seq_;
 
     // Task components
     std::vector<simulation::Task<>> active_tasks_;    // finite tasks; gate termination
