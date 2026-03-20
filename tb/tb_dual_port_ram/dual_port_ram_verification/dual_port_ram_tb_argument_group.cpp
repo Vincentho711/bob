@@ -4,6 +4,7 @@
 
 void DualPortRamArgumentGroup::register_args(simulation::args::GroupApp& app) {
     app.add_argument<std::string>("trace-file", trace_file_, "VCD waveform output filename.", std::string{"tb_dual_port_ram.vcd"});
+    app.add_enum_argument("test", test_name_, "Test to run", available_test_, "default");
 }
 
 std::string_view DualPortRamArgumentGroup::description() const {

@@ -29,8 +29,7 @@
 #include "dual_port_ram_monitor.h"
 #include "dual_port_ram_scoreboard.h"
 #include "dual_port_ram_tb_argument_group.h"
-#include "testcases/directed/dual_port_ram_directed_testcases.h"
-#include "tests/dual_port_ram_test_default_top_sequence.h"
+#include "dual_port_ram_test_registry.h"
 
 #include <stdexcept>
 #include <verilated.h>
@@ -258,7 +257,7 @@ public:
         }
 
         // ========================================================================
-        // Set up top sequence to execute
+        // Set up top sequence to execute, selected by command line argument "test"
         // ========================================================================
         {
             auto seq_ctx = logger_.scoped_context("SequenceSetup");
@@ -266,7 +265,15 @@ public:
             const auto dual_port_ram_module_data_width = Vdual_port_ram_dual_port_ram::DATA_WIDTH;
             const uint32_t addr_width_arg = static_cast<uint32_t>(dual_port_ram_module_addr_width);
             const uint32_t data_width_arg = static_cast<uint32_t>(dual_port_ram_module_data_width);
-            top_seq_ = std::make_unique<DualPortRamTestDefaultTopSequence>(addr_width_arg, data_width_arg, seed_);
+
+            DualPortRamTestRegistry test_registry;
+            register_dual_port_ram_tests(test_registry, addr_width_arg, data_width_arg, seed_);
+
+            const auto& tb_args = simulation::args::SimulationArgumentContext::get<DualPortRamArgumentGroup>();
+            const std::string test_name = tb_args.test_name();
+            logger_.info("Selected test: " + test_name);
+            top_seq_ = test_registry.create(test_name);
+
             logger_.info("Top sequence configured (ADDR_WIDTH=" + std::to_string(addr_width_arg) +
                         ", DATA_WIDTH=" + std::to_string(data_width_arg) + ")");
         }
@@ -369,7 +376,7 @@ private:
     std::shared_ptr<DualPortRamScoreboard> scoreboard_;
 
     // Sequence components
-    std::unique_ptr<DualPortRamTestDefaultTopSequence> top_seq_;
+    std::unique_ptr<DualPortRamBaseSequence> top_seq_;
 
     // Task components
     std::vector<simulation::Task<>> active_tasks_;    // finite tasks; gate termination
@@ -387,7 +394,7 @@ int main(int argc, char** argv) {
                 .max_time_ps = 100'000'000   // Override default max_time for this testbench
             }
         ));
-        arg_parser.add_group(std::make_unique<DualPortRamArgumentGroup>());
+        arg_parser.add_group(std::make_unique<DualPortRamArgumentGroup>(dual_port_ram_test_names()));
         arg_parser.parse(argc, argv);
         arg_parser.resolve();
 
