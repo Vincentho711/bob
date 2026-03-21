@@ -254,8 +254,6 @@ public:
             tlm_wr_queue_ = std::make_shared<DualPortRamTLMWrQueue>();
             tlm_rd_queue_ = std::make_shared<DualPortRamTLMRdQueue>();
             sequencer_ = std::make_shared<DualPortRamSequencer>(wr_clk_, rd_clk_);
-            sequencer_->addr_width = addr_width_arg;
-            sequencer_->data_width = data_width_arg;
             // top_sequence_ = std::make_unique<DualPortRamTopSequence>();
             driver_ = std::make_shared<DualPortRamDriver>(sequencer_, wr_clk_, rd_clk_);
             monitor_ = std::make_shared<DualPortRamMonitor>(wr_clk_, rd_clk_, tlm_wr_queue_, tlm_rd_queue_);

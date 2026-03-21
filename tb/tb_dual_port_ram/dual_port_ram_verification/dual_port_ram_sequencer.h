@@ -15,10 +15,6 @@ public:
     std::deque<TxnPtr> write_queue;
     std::deque<TxnPtr> read_queue;
 
-    // DUT configuration — set once after construction, read by all sequences
-    uint32_t addr_width = 0;
-    uint32_t data_width = 0;
-
     // Resources available to all sequences running on this sequencer
     std::shared_ptr<ClockT> wr_clk;
     std::shared_ptr<ClockT> rd_clk;

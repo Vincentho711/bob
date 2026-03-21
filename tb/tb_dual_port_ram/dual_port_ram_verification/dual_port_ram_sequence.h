@@ -5,6 +5,7 @@
 #include "sequence.h"
 #include "simulation_task_symmetric_transfer.h"
 #include "Vdual_port_ram.h"
+#include "Vdual_port_ram_dual_port_ram.h"
 #include <memory>
 
 class DualPortRamBaseSequence : public BaseSequence<Vdual_port_ram, DualPortRamTransaction, DualPortRamSequencer> {
@@ -29,7 +30,7 @@ public:
     simulation::Task<> wait_rd_cycles(uint32_t n);
 
 protected:
-    uint32_t wr_addr_width() const { return p_sequencer->addr_width; }
-    uint32_t wr_data_width() const { return p_sequencer->data_width; }
+    static constexpr uint32_t wr_addr_width() { return Vdual_port_ram_dual_port_ram::ADDR_WIDTH; }
+    static constexpr uint32_t wr_data_width() { return Vdual_port_ram_dual_port_ram::DATA_WIDTH; }
 };
 #endif // DUAL_PORT_RAM_SEQUENCE_H
