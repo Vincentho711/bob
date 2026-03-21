@@ -1,12 +1,12 @@
 #include "dual_port_ram_sequence.h"
 #include "dual_port_ram_payload.h"
+#include "simulation_args_core_argument_group.h"
+#include "simulation_args_argument_context.h"
 
-DualPortRamBaseSequence::DualPortRamBaseSequence(uint32_t wr_addr_width,
-                                                 uint32_t wr_data_width,
-                                                 uint64_t global_seed,
-                                                 const std::string &name)
-    : BaseSequence(name, global_seed), wr_addr_width_(wr_addr_width),
-      wr_data_width_(wr_data_width) {}
+DualPortRamBaseSequence::DualPortRamBaseSequence(const std::string &name)
+    : BaseSequence(name,
+          simulation::args::SimulationArgumentContext::get<
+              simulation::args::CoreArgumentGroup>().seed()) {}
 
 [[nodiscard]]
 DualPortRamBaseSequence::TxnPtr DualPortRamBaseSequence::dispatch_write(uint32_t addr, uint32_t data) {

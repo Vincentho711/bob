@@ -20,13 +20,13 @@ simulation::Task<> Init_Reset_Sequence::body() {
 simulation::Task<> Seq_Directed_WriteRead_All_Address_Increment::body() {
     auto wr_rd_inc_ctx = this->logger_.scoped_context("Write Read All Address Increment");
     this->log_info("Starting Write Read All Address Increment Sequence");
-    for (uint32_t i = 0; i < (1U << wr_addr_width_); ++i) {
+    for (uint32_t i = 0; i < (1U << wr_addr_width()); ++i) {
         uint32_t addr = i;
-        uint32_t data = std::min(0x100U + i, static_cast<uint32_t>((1ULL << wr_data_width_) - 1));
+        uint32_t data = std::min(0x100U + i, static_cast<uint32_t>((1ULL << wr_data_width()) - 1));
         this->log_debug(std::format("Write transaction issued. addr=0x{:X}, data=0x{:X}", addr, data));
         co_await write(addr, data);
     }
-    for (uint32_t i = 0 ; i < (1U << wr_addr_width_); ++i) {
+    for (uint32_t i = 0 ; i < (1U << wr_addr_width()); ++i) {
         uint32_t addr = i;
         this->log_debug(std::format("Read transaction issued. addr=0x{:X}", addr));
         co_await read(addr);
@@ -37,13 +37,13 @@ simulation::Task<> Seq_Directed_WriteRead_All_Address_Increment::body() {
 simulation::Task<> Seq_Directed_WriteRead_All_Address_Decrement::body() {
     auto wr_rd_dec_ctx = this->logger_.scoped_context("Write Read All Address Decrement");
     this->log_info("Starting Write Read All Address Decrement Sequence");
-    for (uint32_t i = ((1U << wr_addr_width_) - 1); i != std::numeric_limits<uint32_t>::max(); --i) {
+    for (uint32_t i = ((1U << wr_addr_width()) - 1); i != std::numeric_limits<uint32_t>::max(); --i) {
         uint32_t addr = i;
-        uint32_t data = std::min(0x200U + i, static_cast<uint32_t>((1ULL << wr_data_width_) - 1));
+        uint32_t data = std::min(0x200U + i, static_cast<uint32_t>((1ULL << wr_data_width()) - 1));
         this->log_debug(std::format("Write transaction issued. addr=0x{:X}, data=0x{:X}", addr, data));
         co_await write(addr, data);
     }
-    for (uint32_t i = ((1U << wr_addr_width_) - 1); i != std::numeric_limits<uint32_t>::max(); --i) {
+    for (uint32_t i = ((1U << wr_addr_width()) - 1); i != std::numeric_limits<uint32_t>::max(); --i) {
         uint32_t addr = i;
         this->log_debug(std::format("Read transaction issued. addr=0x{:X}", addr));
         co_await read(addr);

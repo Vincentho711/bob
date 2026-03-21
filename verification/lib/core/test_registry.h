@@ -7,6 +7,11 @@
 #include <unordered_map>
 #include <vector>
 
+// Generic test registry.
+//
+// BaseSeqT - the base sequence type for this testbench (e.g. DualPortRamBaseSequence).
+// Factory lambdas take no arguments; DUT configuration is read by sequences
+// at body() time via their sequencer (p_sequencer).
 template <typename BaseSeqT>
 class TestRegistry {
 public:
@@ -16,13 +21,14 @@ public:
         if (entries_.count(name)) {
             throw std::invalid_argument("Test '" + name + "' is already registered.");
         }
-        // First registered test (or explicit is_default) becomes the default.
+        // First registered test, or explicit is_default=true, becomes the default.
         if (is_default || default_name_.empty()) {
             default_name_ = name;
         }
         entries_.emplace(name, Entry{std::move(factory)});
     }
 
+    // Instantiate the named test.
     std::unique_ptr<BaseSeqT> create(const std::string& name) const {
         auto it = entries_.find(name);
         if (it == entries_.end()) {
@@ -33,6 +39,7 @@ public:
         return it->second.factory();
     }
 
+    // Returns all registered test names (order is unspecified — unordered_map).
     std::vector<std::string> test_names() const {
         std::vector<std::string> names;
         names.reserve(entries_.size());

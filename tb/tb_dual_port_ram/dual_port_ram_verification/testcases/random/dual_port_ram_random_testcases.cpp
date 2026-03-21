@@ -2,8 +2,8 @@
 #include "simulation_when_all.h"
 #include <stdexcept>
 
-Seq_Random_Write_Random::Seq_Random_Write_Random(uint32_t addr_width, uint32_t data_width, uint64_t global_seed, float wr_en_rate, uint32_t iterations, const std::string &name)
-        : DualPortRamBaseSequence(addr_width, data_width, global_seed, name), iterations_(iterations) {
+Seq_Random_Write_Random::Seq_Random_Write_Random(float wr_en_rate, uint32_t iterations, const std::string &name)
+        : DualPortRamBaseSequence(name), iterations_(iterations) {
     if (wr_en_rate < 0.0f || wr_en_rate > 1.0f) {
         this->log_error("wr_en_rate:" + std::to_string(wr_en_rate) +
                   " must be >= 0.0 and <= 1.0");
@@ -17,8 +17,8 @@ simulation::Task<> Seq_Random_Write_Random::body() {
     this->log_info("Starting Random Write Sequence");
     for (uint32_t iter = 0; iter < iterations_; ++iter) {
         if (rand_prob(wr_en_rate_)) {
-            uint32_t addr = rand_uint(0, (1U << wr_addr_width_) - 1);
-            uint32_t data = rand_uint(0, (1ULL << wr_data_width_) - 1);
+            uint32_t addr = rand_uint(0, (1U << wr_addr_width()) - 1);
+            uint32_t data = rand_uint(0, (1ULL << wr_data_width()) - 1);
             this->log_debug(std::format("Write transaction issued. addr=0x{:X}, data=0x{:X}", addr, data));
             co_await write(addr, data);
         } else {
@@ -28,8 +28,8 @@ simulation::Task<> Seq_Random_Write_Random::body() {
     this->log_info("Finished Random Write Sequence");
 }
 
-Seq_Random_Read_Random::Seq_Random_Read_Random(uint32_t addr_width, uint32_t data_width, uint64_t global_seed, float change_rate, uint32_t iterations, const std::string &name)
-        : DualPortRamBaseSequence(addr_width, data_width, global_seed, name), iterations_(iterations) {
+Seq_Random_Read_Random::Seq_Random_Read_Random(float change_rate, uint32_t iterations, const std::string &name)
+        : DualPortRamBaseSequence(name), iterations_(iterations) {
     if (change_rate < 0.0f || change_rate > 1.0f) {
         this->log_error("change_rate:" + std::to_string(change_rate) +
                   " must be >= 0.0 and <= 1.0");
@@ -43,7 +43,7 @@ simulation::Task<> Seq_Random_Read_Random::body() {
     this->log_info("Starting Random Read Sequence");
     for (uint32_t iter = 0; iter < iterations_; ++iter) {
         if (rand_prob(change_rate_)) {
-            uint32_t addr = rand_uint(0, (1U << wr_addr_width_) - 1);
+            uint32_t addr = rand_uint(0, (1U << wr_addr_width()) - 1);
             this->log_debug(std::format("Read transaction issued. addr=0x{:X}", addr));
             co_await read(addr);
         } else {
@@ -53,8 +53,8 @@ simulation::Task<> Seq_Random_Read_Random::body() {
     this->log_info("Finished Random Read Sequence");
 }
 
-Seq_Random_Write_Read_Random::Seq_Random_Write_Read_Random(uint32_t addr_width, uint32_t data_width, uint64_t global_seed, float wr_en_rate, float rd_change_rate, uint32_t iterations, const std::string &name)
-        : DualPortRamBaseSequence(addr_width, data_width, global_seed, name), global_seed_(global_seed), iterations_(iterations) {
+Seq_Random_Write_Read_Random::Seq_Random_Write_Read_Random(float wr_en_rate, float rd_change_rate, uint32_t iterations, const std::string &name)
+        : DualPortRamBaseSequence(name), iterations_(iterations) {
     if (wr_en_rate < 0.0f || wr_en_rate > 1.0f) {
         this->log_error("wr_en_rate:" + std::to_string(wr_en_rate) +
                   " must be >= 0.0 and <= 1.0");
@@ -71,9 +71,7 @@ Seq_Random_Write_Read_Random::Seq_Random_Write_Read_Random(uint32_t addr_width, 
 
 simulation::Task<> Seq_Random_Write_Read_Random::run_write_task() {
     // Create sequence in the coroutine frame (ensures proper lifetime)
-    Seq_Random_Write_Random write_seq(
-        wr_addr_width_, wr_data_width_, global_seed_, wr_en_rate_, iterations_
-    );
+    Seq_Random_Write_Random write_seq(wr_en_rate_, iterations_);
 
     // Share the sequencer pointer
     write_seq.p_sequencer = this->p_sequencer;
@@ -84,9 +82,7 @@ simulation::Task<> Seq_Random_Write_Read_Random::run_write_task() {
 
 simulation::Task<> Seq_Random_Write_Read_Random::run_read_task() {
     // Create sequence in the coroutine frame (ensures proper lifetime)
-    Seq_Random_Read_Random read_seq(
-        wr_addr_width_, wr_data_width_, global_seed_, rd_change_rate_, iterations_
-    );
+    Seq_Random_Read_Random read_seq(rd_change_rate_, iterations_);
 
     // Share the sequencer pointer
     read_seq.p_sequencer = this->p_sequencer;

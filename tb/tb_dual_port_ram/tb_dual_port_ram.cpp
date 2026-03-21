@@ -154,7 +154,8 @@ class BaseChecker : public simulation::SimulationComponent<Vdual_port_ram>{
 
 class SimulationEnvironment {
 public:
-    SimulationEnvironment(uint64_t seed, bool waves, uint64_t max_time)
+    SimulationEnvironment(uint64_t seed, bool waves, uint64_t max_time,
+                          const DualPortRamTestRegistry& test_registry)
         : seed_(seed),
           waves_(waves),
           max_time_(max_time),
@@ -240,6 +241,12 @@ public:
         }
 
         // ========================================================================
+        // Read DUT parameters from generated model
+        // ========================================================================
+        const uint32_t addr_width_arg = static_cast<uint32_t>(Vdual_port_ram_dual_port_ram::ADDR_WIDTH);
+        const uint32_t data_width_arg = static_cast<uint32_t>(Vdual_port_ram_dual_port_ram::DATA_WIDTH);
+
+        // ========================================================================
         // Set up verification components
         // ========================================================================
         {
@@ -247,6 +254,8 @@ public:
             tlm_wr_queue_ = std::make_shared<DualPortRamTLMWrQueue>();
             tlm_rd_queue_ = std::make_shared<DualPortRamTLMRdQueue>();
             sequencer_ = std::make_shared<DualPortRamSequencer>(wr_clk_, rd_clk_);
+            sequencer_->addr_width = addr_width_arg;
+            sequencer_->data_width = data_width_arg;
             // top_sequence_ = std::make_unique<DualPortRamTopSequence>();
             driver_ = std::make_shared<DualPortRamDriver>(sequencer_, wr_clk_, rd_clk_);
             monitor_ = std::make_shared<DualPortRamMonitor>(wr_clk_, rd_clk_, tlm_wr_queue_, tlm_rd_queue_);
@@ -261,14 +270,6 @@ public:
         // ========================================================================
         {
             auto seq_ctx = logger_.scoped_context("SequenceSetup");
-            const auto dual_port_ram_module_addr_width = Vdual_port_ram_dual_port_ram::ADDR_WIDTH;
-            const auto dual_port_ram_module_data_width = Vdual_port_ram_dual_port_ram::DATA_WIDTH;
-            const uint32_t addr_width_arg = static_cast<uint32_t>(dual_port_ram_module_addr_width);
-            const uint32_t data_width_arg = static_cast<uint32_t>(dual_port_ram_module_data_width);
-
-            DualPortRamTestRegistry test_registry;
-            register_dual_port_ram_tests(test_registry, addr_width_arg, data_width_arg, seed_);
-
             const auto& tb_args = simulation::args::SimulationArgumentContext::get<DualPortRamArgumentGroup>();
             const std::string test_name = tb_args.test_name();
             logger_.info("Selected test: " + test_name);
@@ -387,6 +388,11 @@ int main(int argc, char** argv) {
     // ============================================================================
     // Configure SimulationArgumentParser first
     // ============================================================================
+    // Populate the test registry before argument parsing so test_names() can
+    // feed --tb.test valid_values (for --help and parse-time validation).
+    DualPortRamTestRegistry test_registry;
+    register_dual_port_ram_tests(test_registry);
+
     simulation::args::SimulationArgumentParser arg_parser("tb_dual_port_ram");
     try {
         arg_parser.add_group(std::make_unique<simulation::args::CoreArgumentGroup>(
@@ -394,7 +400,7 @@ int main(int argc, char** argv) {
                 .max_time_ps = 100'000'000   // Override default max_time for this testbench
             }
         ));
-        arg_parser.add_group(std::make_unique<DualPortRamArgumentGroup>(dual_port_ram_test_names()));
+        arg_parser.add_group(std::make_unique<DualPortRamArgumentGroup>(test_registry.test_names()));
         arg_parser.parse(argc, argv);
         arg_parser.resolve();
 
@@ -441,7 +447,7 @@ int main(int argc, char** argv) {
     // ============================================================================
     simulation::Logger main_logger("Main");
     try {
-        SimulationEnvironment sim_env(core_args.seed(), waves, max_time_ps);
+        SimulationEnvironment sim_env(core_args.seed(), waves, max_time_ps, test_registry);
         simulation::RunResult run_result = sim_env.start_sim_kernel();
 
         if (run_result == simulation::RunResult::MaxTimeReached) {

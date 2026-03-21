@@ -12,7 +12,7 @@ public:
     using TxnType = DualPortRamTransaction;
     using TxnPtr = std::shared_ptr<TxnType>;
 
-    explicit DualPortRamBaseSequence(uint32_t wr_addr_width, uint32_t wr_data_width, uint64_t global_seed, const std::string& name);
+    explicit DualPortRamBaseSequence(const std::string& name);
 
     [[nodiscard]]
     TxnPtr dispatch_write(uint32_t addr, uint32_t data);
@@ -29,7 +29,7 @@ public:
     simulation::Task<> wait_rd_cycles(uint32_t n);
 
 protected:
-    uint32_t wr_addr_width_;
-    uint32_t wr_data_width_;
+    uint32_t wr_addr_width() const { return p_sequencer->addr_width; }
+    uint32_t wr_data_width() const { return p_sequencer->data_width; }
 };
 #endif // DUAL_PORT_RAM_SEQUENCE_H

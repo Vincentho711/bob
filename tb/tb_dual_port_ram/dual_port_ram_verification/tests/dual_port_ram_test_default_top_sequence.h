@@ -5,13 +5,9 @@
 
 class DualPortRamTestDefaultTopSequence : public DualPortRamBaseSequence {
 public:
-    DualPortRamTestDefaultTopSequence(uint32_t addr_width, uint32_t data_width, uint64_t global_seed, const std::string &name = "DualPortRamTopSequence") :
-        DualPortRamBaseSequence(addr_width, data_width, global_seed, name), global_seed_(global_seed) {};
+    explicit DualPortRamTestDefaultTopSequence(const std::string &name = "DualPortRamTestDefaultTopSequence")
+        : DualPortRamBaseSequence(name) {}
 
     simulation::Task<> body() override;
-
-private:
-    uint64_t global_seed_;
-
 };
 #endif // DUAL_PORT_RAM_TEST_DEFAULT_TOP_SEQUENCE_H
