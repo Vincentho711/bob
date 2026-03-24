@@ -28,7 +28,10 @@ public:
         simulation::SimulationComponent<DutType>(name),
         sequence_id_(next_sequence_id()),
         seed_(derive_seed(global_seed, sequence_id_)),
-        rng_(seed_) {}
+        rng_(seed_) {
+        this->log_debug(std::format("seed=0x{:016x} (global=0x{:x}, id={})",
+                                    seed_, global_seed, sequence_id_));
+    }
 
     virtual ~BaseSequence() = default;
     virtual simulation::Task<> body() = 0;
@@ -125,17 +128,17 @@ protected:
     }
 
     static uint64_t derive_seed(uint64_t global_seed, uint64_t sequence_id) {
-        // SplitMix64-style mixing
-        uint64_t x = global_seed + 0x9e3779b97f4a7c15ULL;
-        x ^= sequence_id + (x << 6) + (x >> 2);
-        return x;
+        // Combine global seed and sequence ID, then apply the SplitMix64 finalizer
+        // for full 64-bit avalanche. Constants are from the SplitMix64 paper.
+        uint64_t x = global_seed ^ (sequence_id * 0x9e3779b97f4a7c15ULL);
+        x = (x ^ (x >> 30)) * 0xbf58476d1ce4e5b9ULL;
+        x = (x ^ (x >> 27)) * 0x94d049bb133111ebULL;
+        return x ^ (x >> 31);
     }
 private:
     const uint64_t sequence_id_;
     const uint64_t seed_;
     std::mt19937_64 rng_;
-
-    static std::atomic<uint64_t> global_sequence_counter_;
 
 protected:
     static uint64_t next_sequence_id() {
