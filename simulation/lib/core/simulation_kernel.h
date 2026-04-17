@@ -6,6 +6,7 @@
 #include "simulation_clock.h"
 #include "simulation_event_scheduler.h"
 #include "simulation_task_symmetric_transfer.h"
+#include "simulation_progress_reporter.h"
 
 namespace simulation {
 
@@ -44,61 +45,81 @@ namespace simulation {
             drain_ctx.reset();
             const bool had_active = active_tasks && !active_tasks->empty();
 
+            auto& pr = simulation::ProgressReporter::instance();
+            pr.run_start();
+
             uint64_t last_waveform_time = 0;
-            while (scheduler_.has_events()) {
-                uint64_t next_time = scheduler_.peek_next_time();
-                // Check if we have exceeded max time
-                if (next_time >= max_time) {
-                    time = max_time;
+            try {
+                while (scheduler_.has_events()) {
+                    uint64_t next_time = scheduler_.peek_next_time();
+                    // Check if we have exceeded max time
+                    if (next_time >= max_time) {
+                        time = max_time;
+                        simulation::current_time_ps = time;
+                        pr.run_end("max_time");
+                        return RunResult::MaxTimeReached;
+                    }
+
+                    // Advance simulation time to next event
+                    time = next_time;
                     simulation::current_time_ps = time;
-                    return RunResult::MaxTimeReached;
-                }
+                    scheduler_.set_current_time(time);
 
-                // Advance simulation time to next event
-                time = next_time;
-                simulation::current_time_ps = time;
-                scheduler_.set_current_time(time);
+                    // Get all events at this time
+                    auto batch = scheduler_.get_next_batch();
 
-                // Get all events at this time
-                auto batch = scheduler_.get_next_batch();
+                    // Process all clock events at this time first
+                    for (const auto& clock_event : batch.clock_events) {
+                        clock_event.clock->execute_step(clock_event.step, time);
+                    }
+                    check_all_exceptions_();
 
-                // Process all clock events at this time first
-                for (const auto& clock_event : batch.clock_events) {
-                    clock_event.clock->execute_step(clock_event.step, time);
-                }
-                check_all_exceptions_();
+                    // Process async events
+                    for (const auto& async_event : batch.async_events) {
+                        async_event.callback();
+                        // After each async event, eval to propagate combinational changes
+                        dut_->eval();
+                    }
+                    check_all_exceptions_();
 
-                // Process async events
-                for (const auto& async_event : batch.async_events) {
-                    async_event.callback();
-                    // After each async event, eval to propagate combinational changes
+                    // Process async immediate events
+                    scheduler_.process_async_immediate_events();
+
+                    // Final evaluation to ensure changes are reflected
                     dut_->eval();
+                    check_all_exceptions_();
+
+                    // Dump waveform if enabled
+                    if (trace_) {
+                        trace_->dump(time);
+                        last_waveform_time = time;
+                    }
+
+                    // Emit a heartbeat; reporter rate-limits internally so per-iteration
+                    // cost is a steady_clock::now() + compare.
+                    pr.heartbeat();
+
+                    // Termination check: arm drain once all active tasks have co_returned,
+                    // then exit as soon as every registered TLM queue is empty.
+                    if (had_active && all_active_tasks_done_()) {
+                        if (!drain_ctx.is_draining()) drain_ctx.set_draining(true);
+                        if (drain_ctx.all_drain_queues_empty()) break;
+                    }
                 }
-                check_all_exceptions_();
-
-                // Process async immediate events
-                scheduler_.process_async_immediate_events();
-
-                // Final evaluation to ensure changes are reflected
-                dut_->eval();
-                check_all_exceptions_();
-
-                // Dump waveform if enabled
-                if (trace_) {
-                    trace_->dump(time);
-                    last_waveform_time = time;
+            } catch (...) {
+                try {
+                    std::rethrow_exception(std::current_exception());
+                } catch (const std::exception& e) {
+                    pr.run_end("error", e.what());
+                } catch (...) {
+                    pr.run_end("error", "unknown exception");
                 }
-
-                // Termination check: arm drain once all active tasks have co_returned,
-                // then exit as soon as every registered TLM queue is empty.
-                if (had_active && all_active_tasks_done_()) {
-                    if (!drain_ctx.is_draining()) drain_ctx.set_draining(true);
-                    if (drain_ctx.all_drain_queues_empty()) break;
-                }
+                throw;
             }
 
             // Destroy reactive task handles (suspended coroutines are torn down here).
             if (reactive_tasks) reactive_tasks->clear();
+            pr.run_end("completed");
             return RunResult::Completed;
         }
 

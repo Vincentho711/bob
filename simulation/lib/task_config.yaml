@@ -6,6 +6,8 @@ src_files:
   - "core/simulation_context.h"
   - "core/simulation_component.h"
   - "core/simulation_kernel.h"
+  - "core/simulation_progress_reporter.h"
+  - "core/simulation_progress_reporter.cpp"
   - "core/simulation_clock.h"
   - "core/simulation_event.h"
   - "core/simulation_event.cpp"

@@ -35,7 +35,7 @@ simulation::Task<> DualPortRamTestDefaultTopSequence::body() {
     co_await p_sequencer->start_sequence(std::move(random_read_random_seq));
     log_info("---------------------------------------");
 
-    auto random_write_read_random_seq = std::make_unique<Seq_Random_Write_Read_Random>(0.9f, 0.8f, 1000);
+    auto random_write_read_random_seq = std::make_unique<Seq_Random_Write_Read_Random>(0.9f, 0.8f, 100000);
     co_await p_sequencer->start_sequence(std::move(random_write_read_random_seq));
     log_info("---------------------------------------");
 

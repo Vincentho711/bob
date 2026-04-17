@@ -1,9 +1,11 @@
 #ifndef SEQUENCER_H
 #define SEQUENCER_H
 #include "simulation_object_pool.h"
+#include "simulation_progress_reporter.h"
 #include "simulation_task_symmetric_transfer.h"
 #include "transaction.h"
 #include <string>
+#include <string_view>
 #include <iostream>
 #include <memory>
 
@@ -32,8 +34,22 @@ public:
         // Assign the shared_ptr to the sequence object
         seq->p_sequencer = concrete_sequencer_ptr;
 
-        // Execute
-        co_await seq->body();
+        // RAII guard: fires seq_end on every exit path, including coroutine-frame
+        // unwind when body() throws. Must outlive the co_await.
+        struct SeqScope {
+            uint64_t id;
+            std::string_view status{"completed"};
+            ~SeqScope() { simulation::ProgressReporter::instance().seq_end(id, status); }
+        };
+        simulation::ProgressReporter::instance().seq_start(
+            seq->sequence_id(), seq->get_name(), seq->seed());
+        SeqScope scope{seq->sequence_id()};
+        try {
+            co_await seq->body();
+        } catch (...) {
+            scope.status = "failed";
+            throw;
+        }
     }
 };
 

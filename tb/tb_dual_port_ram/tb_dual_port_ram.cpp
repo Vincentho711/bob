@@ -20,8 +20,10 @@
 #include "simulation_args_group_app.h"
 #include "simulation_args_argument_group.h"
 #include "simulation_args_core_argument_group.h"
+#include "simulation_args_progress_argument_group.h"
 #include "simulation_args_argument_parser.h"
 #include "simulation_args_argument_context.h"
+#include "simulation_progress_reporter.h"
 
 #include "dual_port_ram_driver.h"
 #include "dual_port_ram_sequencer.h"
@@ -177,6 +179,23 @@ public:
         // Configure timestamp display
         log_config.set_show_timestamp(true);
         // log_config.set_timestamp_precision(3);  // Show as 1000.000ps
+
+        // ========================================================================
+        // Configure automatic progress tracking. Must happen before any sequence
+        // construction so that seq_start events see a ready reporter.
+        // ========================================================================
+        {
+            const auto& prog_args = simulation::args::SimulationArgumentContext::get<simulation::args::ProgressArgumentGroup>();
+            const auto& tb_args   = simulation::args::SimulationArgumentContext::get<DualPortRamArgumentGroup>();
+            simulation::ProgressReporter::instance().configure(
+                std::filesystem::path(prog_args.dir()),
+                std::string(tb_args.test_name()),
+                seed,
+                max_time,
+                prog_args.heartbeat_ms(),
+                prog_args.enabled(),
+                std::string(prog_args.batch_id()));
+        }
 
         logger_.info("===========================================");
         logger_.info("Starting Dual Port RAM Simulation");
@@ -398,6 +417,7 @@ int main(int argc, char** argv) {
                 .max_time_ps = 100'000'000   // Override default max_time for this testbench
             }
         ));
+        arg_parser.add_group(std::make_unique<simulation::args::ProgressArgumentGroup>());
         arg_parser.add_group(std::make_unique<DualPortRamArgumentGroup>(test_registry.test_names()));
         arg_parser.parse(argc, argv);
         arg_parser.resolve();
@@ -455,6 +475,7 @@ int main(int argc, char** argv) {
         main_logger.test_passed("Simulation Passed");
         return 0;
     } catch (const simulation::VerificationError &e) {
+        simulation::ProgressReporter::instance().run_end("error", e.what());
         main_logger.test_failed(std::format("Verification error: {}", e.what()));
         main_logger.error(std::format("Component: {}", e.get_component_name()));
         main_logger.error(std::format("Timestamp: {}ps", e.get_timestamp()));
@@ -462,12 +483,15 @@ int main(int argc, char** argv) {
         main_logger.error(std::format("{}:{}: in function {}", location.file_name(), location.line(), location.function_name()));
         return 1;
     } catch (const std::runtime_error &e) {
+        simulation::ProgressReporter::instance().run_end("error", e.what());
         main_logger.test_failed(std::string("Runtime Error: ") + e.what());
         return 1;
     } catch (const std::exception &e) {
+        simulation::ProgressReporter::instance().run_end("error", e.what());
         main_logger.test_failed(std::string("Runtime Error: ") + e.what());
         return 2;
     } catch (...) {
+        simulation::ProgressReporter::instance().run_end("error", "unknown exception");
         main_logger.test_failed("Unknown simulation error occurred");
         return 1;
     }
