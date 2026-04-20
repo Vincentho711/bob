@@ -1,3 +1,4 @@
+#include <filesystem>
 #include <memory>
 #include <coroutine>
 #include <iostream>
@@ -186,15 +187,14 @@ public:
         // ========================================================================
         {
             const auto& prog_args = simulation::args::SimulationArgumentContext::get<simulation::args::ProgressArgumentGroup>();
+            const auto& core_args = simulation::args::SimulationArgumentContext::get<simulation::args::CoreArgumentGroup>();
             const auto& tb_args   = simulation::args::SimulationArgumentContext::get<DualPortRamArgumentGroup>();
             simulation::ProgressReporter::instance().configure(
-                std::filesystem::path(prog_args.dir()),
+                std::filesystem::path(core_args.output_dir()),
                 std::string(tb_args.test_name()),
                 seed,
                 max_time,
-                prog_args.heartbeat_ms(),
-                prog_args.enabled(),
-                std::string(prog_args.batch_id()));
+                prog_args.heartbeat_ms());
         }
 
         logger_.info("===========================================");
@@ -212,13 +212,16 @@ public:
         Verilated::randSeed(seed);
 
         if (waves) {
-            const auto& tb_args = simulation::args::SimulationArgumentContext::get<DualPortRamArgumentGroup>();
+            const auto& core_args = simulation::args::SimulationArgumentContext::get<simulation::args::CoreArgumentGroup>();
+            const std::string vcd_name = std::string(core_args.binary_name()) + ".vcd";
+            const std::string vcd_path = core_args.output_dir().empty()
+                ? vcd_name
+                : std::string(core_args.output_dir()) + "/" + vcd_name;
             Verilated::traceEverOn(true);
-            // Set up waveform tracing
-            trace_= std::make_shared<VerilatedVcdC>();
+            trace_ = std::make_shared<VerilatedVcdC>();
             dut_->trace(trace_.get(), TRACE_DEPTH);
-            trace_->open(std::string(tb_args.trace_file()).c_str());
-            logger_.info("Waveform tracing enabled: " + std::string(tb_args.trace_file()));
+            trace_->open(vcd_path.c_str());
+            logger_.info("Waveform tracing enabled: " + vcd_path);
         }
 
 
@@ -410,9 +413,11 @@ int main(int argc, char** argv) {
     DualPortRamTestRegistry test_registry;
     register_dual_port_ram_tests(test_registry);
 
-    simulation::args::SimulationArgumentParser arg_parser("tb_dual_port_ram");
+    const std::string binary_name = std::filesystem::path(argv[0]).stem().string();
+    simulation::args::SimulationArgumentParser arg_parser(binary_name);
     try {
         arg_parser.add_group(std::make_unique<simulation::args::CoreArgumentGroup>(
+            binary_name,
             simulation::args::CoreArgumentDefaults{
                 .max_time_ps = 100'000'000   // Override default max_time for this testbench
             }
@@ -447,7 +452,7 @@ int main(int argc, char** argv) {
     const auto& core_args = arg_parser.get<simulation::args::CoreArgumentGroup>();
     const auto& tb_args = arg_parser.get<DualPortRamArgumentGroup>();
 
-    const bool waves = core_args.waves() || tb_args.waves_implied();
+    const bool waves = core_args.waves();
     const uint64_t max_time_ps = core_args.max_time_ps();
 
     // ============================================================================

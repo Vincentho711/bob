@@ -4,8 +4,6 @@
 #include "simulation_logging_utils.h"
 
 #include <cstdio>
-#include <ctime>
-#include <format>
 #include <system_error>
 #include <unistd.h>
 
@@ -23,20 +21,17 @@ ProgressReporter::~ProgressReporter() {
     }
 }
 
-void ProgressReporter::configure(std::filesystem::path base_dir,
+void ProgressReporter::configure(std::filesystem::path output_dir,
                                  std::string test_name,
                                  uint64_t seed,
                                  uint64_t max_time_ps,
-                                 uint32_t heartbeat_ms,
-                                 bool enabled,
-                                 std::string batch_id) {
-    if (!enabled) {
+                                 uint32_t heartbeat_ms) {
+    if (output_dir.empty()) {
         enabled_ = false;
         return;
     }
 
     test_name_ = std::move(test_name);
-    batch_id_  = std::move(batch_id);
     seed_ = seed;
     max_time_ps_ = max_time_ps;
     heartbeat_interval_ = std::chrono::milliseconds(heartbeat_ms);
@@ -47,39 +42,14 @@ void ProgressReporter::configure(std::filesystem::path base_dir,
         hostname_ = (gethostname(buf, sizeof(buf) - 1) == 0) ? buf : "unknown";
     }
 
-    // UTC timestamp with seconds precision -> strftime. Prefer this over the
-    // chrono formatters because libstdc++ support is uneven across toolchains.
-    char ts_buf[32] = {0};
     {
         const auto now = std::chrono::system_clock::now();
         ts_start_utc_us_ = static_cast<uint64_t>(
             std::chrono::duration_cast<std::chrono::microseconds>(
                 now.time_since_epoch()).count());
-        const std::time_t t = std::chrono::system_clock::to_time_t(now);
-        std::tm tm_utc{};
-#if defined(_WIN32)
-        gmtime_s(&tm_utc, &t);
-#else
-        gmtime_r(&t, &tm_utc);
-#endif
-        std::strftime(ts_buf, sizeof(ts_buf), "%Y%m%dT%H%M%SZ", &tm_utc);
     }
 
-    const std::string seed_hex = std::format("{:016x}", seed_);
-    run_id_ = std::string(ts_buf) + "_" + test_name_ + "_" + seed_hex;
-    run_dir_ = base_dir / run_id_;
-
-    std::error_code ec;
-    std::filesystem::create_directories(run_dir_, ec);
-    if (ec) {
-        simulation::log_warning("ProgressReporter",
-            "Failed to create run directory '" + run_dir_.string() +
-            "': " + ec.message() + ". Progress tracking disabled.");
-        enabled_ = false;
-        return;
-    }
-
-    const std::filesystem::path jsonl_path = run_dir_ / "progress.jsonl";
+    const std::filesystem::path jsonl_path = output_dir / "progress.jsonl";
     out_.open(jsonl_path, std::ios::app);
     if (!out_.is_open()) {
         simulation::log_warning("ProgressReporter",
@@ -168,10 +138,6 @@ void ProgressReporter::write_event_(std::string_view type,
     line.append("\"schema_version\":");
     line.append(std::to_string(PROGRESS_SCHEMA_VERSION));
 
-    line.append(",\"run_id\":\"");
-    json_escape_append_(line, run_id_);
-    line.push_back('"');
-
     line.append(",\"t\":\"");
     json_escape_append_(line, type);
     line.push_back('"');
@@ -200,13 +166,12 @@ void ProgressReporter::run_start() {
     if (!enabled_ || run_started_) return;
     run_started_ = true;
     write_event_("run_start", "default", {
-        JsonField{"test_name",        JsonKind::Str, 0, 0, false, test_name_},
-        JsonField{"seed",             JsonKind::U64, seed_},
-        JsonField{"max_time_ps",      JsonKind::U64, max_time_ps_},
-        JsonField{"batch_id",         JsonKind::Str, 0, 0, false, batch_id_},
-        JsonField{"hostname",         JsonKind::Str, 0, 0, false, hostname_},
-        JsonField{"pid",              JsonKind::U64, pid_},
-        JsonField{"ts_start_utc_us",  JsonKind::U64, ts_start_utc_us_},
+        JsonField{"test_name",       JsonKind::Str, 0, 0, false, test_name_},
+        JsonField{"seed",            JsonKind::U64, seed_},
+        JsonField{"max_time_ps",     JsonKind::U64, max_time_ps_},
+        JsonField{"hostname",        JsonKind::Str, 0, 0, false, hostname_},
+        JsonField{"pid",             JsonKind::U64, pid_},
+        JsonField{"ts_start_utc_us", JsonKind::U64, ts_start_utc_us_},
     });
 }
 

@@ -25,21 +25,18 @@ public:
     ProgressReporter(ProgressReporter&&) = delete;
     ProgressReporter& operator=(ProgressReporter&&) = delete;
 
-    // Must be called before any run_start / seq_start / heartbeat. Creates the
-    // run directory (base_dir / run_id) and opens progress.jsonl in append mode.
+    // Must be called before any run_start / seq_start / heartbeat. Writes
+    // progress.jsonl directly into output_dir (caller is responsible for
+    // creating the directory). An empty output_dir leaves the reporter disabled.
     // On any filesystem error, logs a single warning and leaves the reporter
     // disabled; all subsequent calls become no-ops.
-    void configure(std::filesystem::path base_dir,
+    void configure(std::filesystem::path output_dir,
                    std::string test_name,
                    uint64_t seed,
                    uint64_t max_time_ps,
-                   uint32_t heartbeat_ms,
-                   bool enabled,
-                   std::string batch_id = "");
+                   uint32_t heartbeat_ms);
 
     [[nodiscard]] bool enabled() const noexcept { return enabled_; }
-    [[nodiscard]] const std::string& run_id() const noexcept { return run_id_; }
-    [[nodiscard]] const std::filesystem::path& run_dir() const noexcept { return run_dir_; }
 
     void run_start();
     void seq_start(uint64_t seq_id,
@@ -80,15 +77,12 @@ private:
 
     bool enabled_ = false;
     std::ofstream out_;
-    std::string run_id_;
-    std::filesystem::path run_dir_;
 
     std::string test_name_;
     uint64_t seed_ = 0;
     uint64_t max_time_ps_ = 0;
 
     // run_start metadata captured at configure() time
-    std::string batch_id_;
     std::string hostname_;
     uint64_t    pid_ = 0;
     uint64_t    ts_start_utc_us_ = 0;

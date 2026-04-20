@@ -1,0 +1,16 @@
+batch_id: "dev_regression"
+binary: "./build/tb_dual_port_ram/tb_dual_port_ram.out"
+output_dir: "runs"
+max_time_ps: 100000000000   # 100 ms default; overrideable per entry
+
+runs:
+  - test: default
+    count: 10              # 4 randomly-generated seeds
+
+  - test: directed
+    seeds: [1, 2, 3]      # explicit seeds
+
+resources:                # ignored by LocalBackend; used by SlurmBackend when implemented
+  cpus: 1
+  mem_mb: 1024
+  time_limit_min: 10
