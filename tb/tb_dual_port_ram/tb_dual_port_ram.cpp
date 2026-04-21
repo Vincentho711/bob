@@ -419,7 +419,7 @@ int main(int argc, char** argv) {
         arg_parser.add_group(std::make_unique<simulation::args::CoreArgumentGroup>(
             binary_name,
             simulation::args::CoreArgumentDefaults{
-                .max_time_ps = 100'000'000   // Override default max_time for this testbench
+                .max_time_ps = 100'000'000'000   // Override default max_time for this testbench
             }
         ));
         arg_parser.add_group(std::make_unique<simulation::args::ProgressArgumentGroup>());

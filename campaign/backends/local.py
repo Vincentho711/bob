@@ -26,6 +26,10 @@ class LocalBackend:
         self._executor  = ThreadPoolExecutor(max_workers=max_workers or os.cpu_count() or 1)
         self._futures:  dict[str, Future]             = {}
         self._done:     dict[str, JobStatus]          = {}
+        # _started is written by worker threads (GIL-safe set.add) and read by
+        # poll() on the main thread to distinguish queued-but-not-yet-started
+        # futures from jobs that have actually spawned a process.
+        self._started:   set[str]                     = set()
         # _procs is written by worker threads and read by cancel() on the main
         # thread, so access is guarded by a lock.
         self._procs:     dict[str, subprocess.Popen] = {}
@@ -54,7 +58,7 @@ class LocalBackend:
             if jid in self._done:
                 result[jid] = self._done[jid]
             elif jid in self._futures:
-                result[jid] = JobStatus.RUNNING
+                result[jid] = JobStatus.RUNNING if jid in self._started else JobStatus.PENDING
             else:
                 result[jid] = JobStatus.PENDING
         return result
@@ -64,6 +68,7 @@ class LocalBackend:
             future = self._futures.pop(jid, None)
             if future:
                 future.cancel()
+            self._started.discard(jid)
             with self._procs_lock:
                 proc = self._procs.pop(jid, None)
             if proc:
@@ -86,6 +91,7 @@ class LocalBackend:
     # ------------------------------------------------------------------
 
     def _run_job(self, spec: JobSpec) -> JobStatus:
+        self._started.add(spec.job_id)
         # output_dir is created by the binary via --output-dir; we create the
         # parent (batch_dir) so the temp stderr file has somewhere to land.
         spec.output_dir.parent.mkdir(parents=True, exist_ok=True)

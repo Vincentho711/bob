@@ -89,7 +89,7 @@ private:
 
     std::chrono::steady_clock::time_point start_wall_{};
     std::chrono::steady_clock::time_point last_heartbeat_{};
-    std::chrono::milliseconds heartbeat_interval_{500};
+    std::chrono::milliseconds heartbeat_interval_{2000};
 
     // Per-domain stack of currently-running sequence IDs. Push on seq_start,
     // pop on seq_end. Lets us emit parent_id without any TB-author input.

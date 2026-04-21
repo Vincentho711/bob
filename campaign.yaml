@@ -5,7 +5,7 @@ max_time_ps: 100000000000   # 100 ms default; overrideable per entry
 
 runs:
   - test: default
-    count: 10              # 4 randomly-generated seeds
+    count: 30              # 30 randomly-generated seeds
 
   - test: directed
     seeds: [1, 2, 3]      # explicit seeds

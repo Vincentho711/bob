@@ -8,10 +8,11 @@ from __future__ import annotations
 
 import sys
 import time
+from collections import Counter
 from pathlib import Path
 
 from rich import box
-from rich.console import Console
+from rich.console import Console, Group
 from rich.live import Live
 from rich.table import Table
 from rich.text import Text
@@ -20,6 +21,7 @@ from campaign.job_spec import JobSpec, JobStatus
 
 
 _HUNG_THRESHOLD_S: float = 10.0
+_PASSED_COLLAPSE_THRESHOLD: int = 10
 
 _STATUS_STYLE: dict[JobStatus, str] = {
     JobStatus.PENDING:  "dim",
@@ -30,6 +32,28 @@ _STATUS_STYLE: dict[JobStatus, str] = {
     JobStatus.TIMEOUT:  "yellow",
     JobStatus.UNKNOWN:  "dim",
 }
+
+_STATUS_SORT_ORDER: dict[JobStatus, int] = {
+    JobStatus.RUNNING:  0,
+    JobStatus.FAILED:   1,
+    JobStatus.ERROR:    1,
+    JobStatus.TIMEOUT:  1,
+    JobStatus.PENDING:  2,
+    JobStatus.PASSED:   3,
+    JobStatus.UNKNOWN:  3,
+}
+
+
+def _sort_key(
+    spec: JobSpec,
+    statuses: dict[str, JobStatus],
+    job_start: dict[str, float],
+    now: float,
+) -> tuple[int, float]:
+    status  = statuses.get(spec.job_id, JobStatus.PENDING)
+    rank    = _STATUS_SORT_ORDER.get(status, 3)
+    elapsed = (now - job_start[spec.job_id]) if spec.job_id in job_start else 0.0
+    return (rank, -elapsed)  # negative elapsed → longest running first within RUNNING
 
 
 def _progress_path(spec: JobSpec) -> Path:
@@ -72,7 +96,7 @@ class _Renderer:
         statuses:  dict[str, JobStatus],
         job_start: dict[str, float],
         job_end:   dict[str, float],
-    ) -> Table:
+    ) -> Group:
         elapsed       = time.monotonic() - self._batch_start
         mins, secs    = divmod(int(elapsed), 60)
         done          = sum(1 for s in statuses.values() if s.is_terminal)
@@ -96,7 +120,8 @@ class _Renderer:
         table.add_column("NOTE",   no_wrap=True)
 
         now = time.monotonic()
-        for spec in self._specs:
+        passed_rows: list[tuple[str, str, str]] = []
+        for spec in sorted(self._specs, key=lambda s: _sort_key(s, statuses, job_start, now)):
             jid    = spec.job_id
             status = statuses.get(jid, JobStatus.PENDING)
             style  = _STATUS_STYLE.get(status, "")
@@ -109,18 +134,47 @@ class _Renderer:
                 wall = "-"
 
             age  = _mtime_age_s(self._progress_paths[jid]) if status is JobStatus.RUNNING else None
-            hung = age is not None and age > self._hung_threshold_s
-            note = Text("HUNG", style="bold red") if hung else Text("")
+            if age is None:
+                note = Text("")
+            elif age >= self._hung_threshold_s:
+                note = Text(f"HUNG {age:.1f}s", style="bold red")
+            else:
+                note = Text(f"{age:.1f}s", style="dim cyan")
 
-            table.add_row(
-                spec.test_name,
-                spec.seed_hex,
-                Text(status.value, style=style),
-                wall,
-                note,
-            )
+            if status is JobStatus.PASSED:
+                passed_rows.append((spec.test_name, spec.seed_hex, wall))
+            else:
+                table.add_row(
+                    spec.test_name,
+                    spec.seed_hex,
+                    Text(status.value, style=style),
+                    wall,
+                    note,
+                )
 
-        return table
+        n_passed = len(passed_rows)
+        if n_passed <= _PASSED_COLLAPSE_THRESHOLD:
+            for test_name, seed_hex, wall in passed_rows:
+                table.add_row(test_name, seed_hex, Text("passed", style="green"), wall, Text(""))
+        elif n_passed:
+            table.add_row(Text(f"… {n_passed} passed", style="dim green"), "", "", "", "")
+
+        counts = Counter(statuses.values())
+        _BAR_ITEMS = [
+            (JobStatus.RUNNING,  "cyan",     "● running"),
+            (JobStatus.PENDING,  "dim",      "○ pending"),
+            (JobStatus.PASSED,   "green",    "✓ passed"),
+            (JobStatus.FAILED,   "bold red", "✗ failed"),
+            (JobStatus.ERROR,    "bold red", "! error"),
+            (JobStatus.TIMEOUT,  "yellow",   "⏱ timeout"),
+        ]
+        bar = Text()
+        for i, (st, style, label) in enumerate(_BAR_ITEMS):
+            if i:
+                bar.append("   ")
+            bar.append(f"{label}: {counts.get(st, 0)}", style=style)
+
+        return Group(bar, table)
 
 
 class CampaignTUI:
