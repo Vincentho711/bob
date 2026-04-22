@@ -4,6 +4,7 @@ __pycache__/
 build/
 runs/
 **/*.log
+**/*.out
 
 # Ignore all . files/dirs
 .*/

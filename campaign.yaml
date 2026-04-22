@@ -2,6 +2,7 @@ batch_id: "dev_regression"
 binary: "./build/tb_dual_port_ram/tb_dual_port_ram.out"
 output_dir: "runs"
 max_time_ps: 100000000000   # 100 ms default; overrideable per entry
+heartbeat_ms: 2000          # progress.jsonl heartbeat interval
 
 runs:
   - test: default

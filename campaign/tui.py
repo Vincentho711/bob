@@ -20,7 +20,8 @@ from rich.text import Text
 from campaign.job_spec import JobSpec, JobStatus
 
 
-_HUNG_THRESHOLD_S: float = 10.0
+# Default hung threshold — campaign_runner overrides this with max(10, heartbeat_ms/1000 * 10).
+_HUNG_THRESHOLD_S: float = 20.0
 _PASSED_COLLAPSE_THRESHOLD: int = 10
 
 _STATUS_STYLE: dict[JobStatus, str] = {

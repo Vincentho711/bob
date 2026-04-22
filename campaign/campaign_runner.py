@@ -8,12 +8,12 @@ Options:
     --workers  N               Max concurrent jobs for local backend (default: cpu_count)
     --poll-interval  SECS      Seconds between status polls (default: 5)
     --dry-run                  Print job specs without executing
+    --validate                 Validate plan and check binary; do not run
 """
 from __future__ import annotations
 
 import argparse
 import json
-import os
 import secrets
 import sys
 import time
@@ -21,11 +21,10 @@ from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
 
-import yaml
-
 from campaign.backends.local import LocalBackend
 from campaign.backends.slurm import SlurmBackend
 from campaign.job_spec import JobSpec, JobStatus
+from campaign.plan import Plan, check_runtime, load_plan
 from campaign.run_record import build_run_record
 from campaign.tui import CampaignTUI
 
@@ -39,30 +38,24 @@ def _utc_now_str() -> str:
 
 
 # ---------------------------------------------------------------------------
-# Plan loading
+# Spec expansion
 # ---------------------------------------------------------------------------
 
-def _load_plan(plan_path: Path) -> dict:
-    with open(plan_path) as f:
-        return yaml.safe_load(f)
-
-
-def _expand_specs(plan: dict, batch_run_id: str, batch_dir: Path) -> list[JobSpec]:
+def _expand_specs(plan: Plan, batch_run_id: str, batch_dir: Path) -> list[JobSpec]:
     """Expand plan entries into one JobSpec per (test, seed) pair."""
-    binary     = Path(plan["binary"])
-    max_time_ps_global = plan.get("max_time_ps", 100_000_000)
-    resources  = plan.get("resources", {})
+    binary             = plan.binary
+    max_time_ps_global = plan.max_time_ps
+    heartbeat_ms       = plan.heartbeat_ms
+    resources          = plan.resources.model_dump()
 
     specs: list[JobSpec] = []
-    for entry in plan.get("runs", []):
-        test     = entry["test"]
-        max_time = entry.get("max_time_ps", max_time_ps_global)
+    for entry in plan.runs:
+        test     = entry.test
+        max_time = entry.max_time_ps if entry.max_time_ps is not None else max_time_ps_global
 
-        seeds: list[int] = []
-        if "seeds" in entry:
-            seeds = [int(s, 0) if isinstance(s, str) else int(s) for s in entry["seeds"]]
-        if "count" in entry:
-            seeds += [secrets.randbelow(2**64) for _ in range(int(entry["count"]))]
+        seeds = list(entry.seeds)
+        if entry.count > 0:
+            seeds += [secrets.randbelow(2**64) for _ in range(entry.count)]
 
         for seed in seeds:
             seed_hex = f"{seed:016x}"
@@ -74,6 +67,7 @@ def _expand_specs(plan: dict, batch_run_id: str, batch_dir: Path) -> list[JobSpe
                 f"--seed={seed}",
                 f"--max-time={max_time}",
                 f"--output-dir={run_dir}",
+                f"--progress.heartbeat-ms={heartbeat_ms}",
             ]
             specs.append(JobSpec(
                 job_id=job_id,
@@ -151,7 +145,7 @@ def _print_failures(failures: list[dict]) -> None:
 
 def _write_summary(batch_dir: Path, specs: list[JobSpec],
                    statuses: dict[str, JobStatus],
-                   batch_run_id: str, plan_path: Path, binary: str,
+                   batch_run_id: str, plan_path: Path, binary: Path,
                    started_at: str, finished_at: str) -> dict:
     records = [build_run_record(spec, statuses.get(spec.job_id, JobStatus.UNKNOWN))
                for spec in specs]
@@ -165,7 +159,7 @@ def _write_summary(batch_dir: Path, specs: list[JobSpec],
     summary = {
         "batch_id":    batch_run_id,
         "plan":        str(plan_path.resolve()),
-        "binary":      str(Path(binary).resolve()),
+        "binary":      str(binary.resolve()),
         "started_at":  started_at,
         "finished_at": finished_at,
         "counts": {
@@ -202,21 +196,37 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--workers",       type=int, default=None, help="Max concurrent jobs (local backend)")
     parser.add_argument("--poll-interval", type=float, default=5.0, metavar="SECS")
     parser.add_argument("--dry-run",       action="store_true", help="Print job specs without executing")
+    parser.add_argument("--validate",      action="store_true", help="Validate plan and check binary; do not run")
     parser.add_argument("--no-tui",        action="store_true", help="Disable live terminal UI (auto-disabled when not a TTY)")
     args = parser.parse_args(argv)
 
-    plan = _load_plan(args.plan)
+    plan = load_plan(args.plan)
 
-    batch_id     = plan.get("batch_id", "batch")
-    output_dir   = Path(plan.get("output_dir", "runs"))
-    batch_run_id = f"{batch_id}_{_utc_now_str()}"
-    batch_dir    = output_dir / batch_run_id
+    if args.validate:
+        errors = check_runtime(plan)
+        if errors:
+            for e in errors:
+                print(f"  FAIL  {e}", file=sys.stderr)
+            return 1
+        n_jobs = sum(len(e.seeds) + e.count for e in plan.runs)
+        print(f"Plan OK — {n_jobs} jobs would be generated from {len(plan.runs)} run entries")
+        return 0
+
+    errors = check_runtime(plan)
+    if errors:
+        print("Pre-flight checks failed:", file=sys.stderr)
+        for e in errors:
+            print(f"  {e}", file=sys.stderr)
+        return 1
+
+    batch_id         = plan.batch_id
+    output_dir       = plan.output_dir
+    heartbeat_ms     = plan.heartbeat_ms
+    batch_run_id     = f"{batch_id}_{_utc_now_str()}"
+    batch_dir        = output_dir / batch_run_id
+    hung_threshold_s = max(10.0, heartbeat_ms / 1000 * 10)
 
     specs = _expand_specs(plan, batch_run_id, batch_dir)
-
-    if not specs:
-        print("No jobs generated from plan.", file=sys.stderr)
-        return 1
 
     if args.dry_run:
         print(f"Dry run — batch: {batch_run_id}  ({len(specs)} jobs):")
@@ -235,7 +245,6 @@ def main(argv: list[str] | None = None) -> int:
         backend = LocalBackend(max_workers=args.workers)
 
     all_job_ids = [s.job_id for s in specs]
-    binary = plan.get("binary", "")
 
     print(f"Submitting {len(specs)} jobs (backend={args.backend}) ...")
     for spec in specs:
@@ -246,7 +255,8 @@ def main(argv: list[str] | None = None) -> int:
 
     tui: CampaignTUI | None = None
     try:
-        with CampaignTUI(specs, batch_run_id, enabled=not args.no_tui) as tui:
+        with CampaignTUI(specs, batch_run_id, enabled=not args.no_tui,
+                         hung_threshold_s=hung_threshold_s) as tui:
             while True:
                 statuses = backend.poll(all_job_ids)
                 tui.update(statuses)
@@ -276,7 +286,7 @@ def main(argv: list[str] | None = None) -> int:
     finished_at = datetime.now(timezone.utc).isoformat()
 
     summary = _write_summary(batch_dir, specs, statuses,
-                             batch_run_id, args.plan, binary,
+                             batch_run_id, args.plan, plan.binary,
                              started_at, finished_at)
     c = summary["counts"]
     return 0 if c["failed"] == 0 and c["error"] == 0 else 1
