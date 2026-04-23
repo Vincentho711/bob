@@ -60,6 +60,37 @@ def build_run_record(spec: JobSpec, status: JobStatus) -> dict:
     return record
 
 
+def write_wall_timeout_event(
+    progress_path: Path, wall_timeout_s: int | None, elapsed_us: int
+) -> None:
+    """Append a synthetic run_end event after a wall-clock kill.
+
+    Written by LocalBackend so that build_run_record and summarise.py can
+    surface the cause of failure via error_msg without any special-casing.
+    Best-effort — OSError is silently swallowed so a write failure does not
+    mask the original timeout.
+    """
+    msg = (
+        f"killed: wall-clock timeout after {wall_timeout_s}s"
+        if wall_timeout_s is not None
+        else "killed: wall-clock timeout"
+    )
+    event = {
+        "schema_version": 2,
+        "t":          "run_end",
+        "ts_wall_us": elapsed_us,
+        "ts_sim_ps":  None,
+        "status":     "wall_timeout",
+        "msg":        msg,
+        "seq_count":  None,
+    }
+    try:
+        with open(progress_path, "a") as f:
+            f.write(json.dumps(event) + "\n")
+    except OSError:
+        pass
+
+
 def _finalise(spec: JobSpec, err_path: Path) -> JobStatus:
     """Handle post-process cleanup and write reproduce.sh.
 
@@ -84,6 +115,8 @@ def _finalise(spec: JobSpec, err_path: Path) -> JobStatus:
         if s == "completed":
             return JobStatus.PASSED
         elif s == "max_time":
+            return JobStatus.TIMEOUT
+        elif s == "wall_timeout":
             return JobStatus.TIMEOUT
         return JobStatus.FAILED
     else:

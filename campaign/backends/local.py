@@ -2,11 +2,12 @@ from __future__ import annotations
 
 import subprocess
 import threading
+import time
 from concurrent.futures import Future, ThreadPoolExecutor, wait as futures_wait, FIRST_COMPLETED
 from pathlib import Path
 
 from campaign.job_spec import JobSpec, JobStatus
-from campaign.run_record import _finalise as finalise_run
+from campaign.run_record import _finalise as finalise_run, write_wall_timeout_event
 
 
 class LocalBackend:
@@ -96,11 +97,36 @@ class LocalBackend:
         # parent (batch_dir) so the temp stderr file has somewhere to land.
         spec.output_dir.parent.mkdir(parents=True, exist_ok=True)
         err_path = spec.output_dir.parent / f".{spec.job_id}.err"
+        wall_timed_out = False
+        job_start_mono = time.monotonic()
         with open(err_path, "w") as err_fh:
             proc = subprocess.Popen(spec.args, stdout=subprocess.DEVNULL, stderr=err_fh)
             with self._procs_lock:
                 self._procs[spec.job_id] = proc
-            proc.wait()
+            try:
+                proc.wait(timeout=spec.wall_timeout_s)
+            except subprocess.TimeoutExpired:
+                wall_timed_out = True
+                proc.terminate()
+                try:
+                    proc.wait(timeout=5)   # grace period — binary may flush buffers
+                except subprocess.TimeoutExpired:
+                    proc.kill()
+                    proc.wait()
         with self._procs_lock:
             self._procs.pop(spec.job_id, None)
+        if wall_timed_out:
+            elapsed_us = int((time.monotonic() - job_start_mono) * 1_000_000)
+            if spec.output_dir.exists():
+                write_wall_timeout_event(
+                    spec.output_dir / "progress.jsonl",
+                    spec.wall_timeout_s,
+                    elapsed_us,
+                )
+            status = finalise_run(spec, err_path)
+            # Flaw 1: killed before output_dir was created — finalise returns ERROR,
+            # correct to TIMEOUT so the cause is not misreported.
+            if status is JobStatus.ERROR and not spec.output_dir.exists():
+                return JobStatus.TIMEOUT
+            return status
         return finalise_run(spec, err_path)

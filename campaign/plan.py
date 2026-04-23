@@ -29,7 +29,8 @@ class RunEntry(BaseModel):
     test:        str
     count:       int       = Field(0, ge=0)
     seeds:       list[int] = Field(default_factory=list)
-    max_time_ps: int | None = None  # None → inherits Plan.max_time_ps
+    max_time_ps:    int | None = None  # None → inherits Plan.max_time_ps
+    wall_timeout_s: int | None = Field(None, gt=0)  # None → inherits Plan.wall_timeout_s
 
     @field_validator("seeds", mode="before")
     @classmethod
@@ -66,6 +67,7 @@ class Plan(BaseModel):
     max_time_ps:    int       = Field(100_000_000_000, gt=0)
     heartbeat_ms:   int       = Field(2000, gt=0)
     runs:           list[RunEntry] = Field(min_length=1)
+    wall_timeout_s: int | None = Field(None, gt=0)  # None = no wall-clock limit
     resources:      Resources = Field(default_factory=Resources)
 
 
@@ -82,6 +84,18 @@ def load_plan(plan_path: Path) -> Plan:
             lines.append(f"  [{loc}] {err['msg']}")
         print("\n".join(lines), file=sys.stderr)
         sys.exit(1)
+
+
+def check_warnings(plan: Plan) -> list[str]:
+    """Non-fatal advisories about the plan configuration."""
+    warnings: list[str] = []
+    if plan.wall_timeout_s is None and all(
+        e.wall_timeout_s is None for e in plan.runs
+    ):
+        warnings.append(
+            "wall_timeout_s not set — hung jobs will block the batch indefinitely"
+        )
+    return warnings
 
 
 def check_runtime(plan: Plan) -> list[str]:

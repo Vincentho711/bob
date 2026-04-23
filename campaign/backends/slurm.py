@@ -19,6 +19,9 @@ class SlurmBackend:
       FAILED/TIMEOUT/OOM->FAILED/TIMEOUT, PENDING/->PENDING.
     - resources dict keys: cpus, mem_mb, time_limit_min map to
       --cpus-per-task, --mem, --time respectively.
+    - wall_timeout_s on JobSpec should map to sbatch --time (in minutes,
+      rounded up) so Slurm enforces the limit natively rather than requiring
+      a polling-based kill loop.
     """
 
     def submit(self, spec: JobSpec) -> str:

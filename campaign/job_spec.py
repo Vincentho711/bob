@@ -32,7 +32,8 @@ class JobSpec:
     output_dir: Path          # full run directory path passed as --output-dir
     test_name:  str
     seed:       int
-    resources:  dict = field(default_factory=dict)
+    resources:      dict     = field(default_factory=dict)
+    wall_timeout_s: int | None = None
 
     @property
     def seed_hex(self) -> str:

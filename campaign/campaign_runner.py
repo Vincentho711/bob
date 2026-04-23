@@ -24,7 +24,7 @@ from pathlib import Path
 from campaign.backends.local import LocalBackend
 from campaign.backends.slurm import SlurmBackend
 from campaign.job_spec import JobSpec, JobStatus
-from campaign.plan import Plan, check_runtime, load_plan
+from campaign.plan import Plan, check_runtime, check_warnings, load_plan
 from campaign.run_record import build_run_record
 from campaign.tui import CampaignTUI
 
@@ -53,6 +53,11 @@ def _expand_specs(plan: Plan, batch_run_id: str, batch_dir: Path) -> list[JobSpe
         test     = entry.test
         max_time = entry.max_time_ps if entry.max_time_ps is not None else max_time_ps_global
 
+        wall_timeout_s = (
+            entry.wall_timeout_s
+            if entry.wall_timeout_s is not None
+            else plan.wall_timeout_s
+        )
         seeds = list(entry.seeds)
         if entry.count > 0:
             seeds += [secrets.randbelow(2**64) for _ in range(entry.count)]
@@ -77,6 +82,7 @@ def _expand_specs(plan: Plan, batch_run_id: str, batch_dir: Path) -> list[JobSpe
                 test_name=test,
                 seed=seed,
                 resources=resources,
+                wall_timeout_s=wall_timeout_s,
             ))
 
     return specs
@@ -208,6 +214,8 @@ def main(argv: list[str] | None = None) -> int:
             for e in errors:
                 print(f"  FAIL  {e}", file=sys.stderr)
             return 1
+        for w in check_warnings(plan):
+            print(f"  WARN  {w}", file=sys.stderr)
         n_jobs = sum(len(e.seeds) + e.count for e in plan.runs)
         print(f"Plan OK — {n_jobs} jobs would be generated from {len(plan.runs)} run entries")
         return 0
@@ -218,6 +226,8 @@ def main(argv: list[str] | None = None) -> int:
         for e in errors:
             print(f"  {e}", file=sys.stderr)
         return 1
+    for w in check_warnings(plan):
+        print(f"  WARN  {w}", file=sys.stderr)
 
     batch_id         = plan.batch_id
     output_dir       = plan.output_dir

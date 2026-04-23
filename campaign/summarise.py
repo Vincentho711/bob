@@ -163,6 +163,8 @@ def _infer_status(spec: JobSpec) -> JobStatus:
         return JobStatus.PASSED
     elif s == "max_time":
         return JobStatus.TIMEOUT
+    elif s == "wall_timeout":
+        return JobStatus.TIMEOUT
     return JobStatus.FAILED
 
 
