@@ -13,6 +13,16 @@
 #include "simulation_exceptions.h"
 #include "simulation_logging_utils.h"
 
+#include "simulation_args_type_converter.h"
+#include "simulation_args_argument_descriptor.h"
+#include "simulation_args_tokeniser.h"
+#include "simulation_args_group_app.h"
+#include "simulation_args_argument_group.h"
+#include "simulation_args_core_argument_group.h"
+#include "simulation_args_progress_argument_group.h"
+#include "simulation_args_argument_parser.h"
+#include "simulation_args_argument_context.h"
+
 #include <verilated.h>
 #include <verilated_vcd_c.h>
 
@@ -289,10 +299,46 @@ private:
     }
 };
 
-int main() {
+int main(int argc, char** argv) {
     auto& global_log_config = simulation::LoggerConfig::instance();
     global_log_config.set_stdout_min_level(simulation::LogLevel::INFO);
     simulation::Logger main_logger("Main");
+
+    const std::string binary_name = std::filesystem::path(argv[0]).stem().string();
+    simulation::args::SimulationArgumentParser arg_parser(binary_name);
+    try {
+        arg_parser.add_group(std::make_unique<simulation::args::CoreArgumentGroup>(
+            binary_name,
+            simulation::args::CoreArgumentDefaults{
+                .max_time_ps = 100'000'000'000   // Override default max_time for this testbench
+            }
+        ));
+        arg_parser.parse(argc, argv);
+        arg_parser.resolve();
+
+        simulation::args::SimulationArgumentContext::set(arg_parser);
+
+
+    } catch (const std::invalid_argument& e) {
+        std::cerr << std::format(
+            "Argument error while parsing CLI arguments:\n  {}\n",
+            e.what()
+        );
+        return EXIT_FAILURE;
+    } catch (const std::runtime_error& e) {
+        std::cerr << std::format(
+            "Runtime error during initialisation:\n  {}\n",
+            e.what()
+        );
+        return EXIT_FAILURE;
+    } catch (const std::exception& e) {
+        std::cerr << std::format(
+            "Unhandled exception:\n  {}\n",
+            e.what()
+        );
+        return EXIT_FAILURE;
+    }
+
     try {
         SimulationEnvironment sim_env(123U, 10000000U);
         sim_env.start_sim_kernel();

@@ -56,6 +56,7 @@ tasks:
   tb_coroutine_sim_test:
     depends_on:
       - simulation_lib
+      - simulation_utils
 
   tb_dual_port_ram:
     depends_on:
