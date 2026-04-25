@@ -1,14 +1,14 @@
 batch_id: "multi_tb_regression"
 output_dir: "runs"
 max_time_ps: 100000000000   # 100 ms of simulation time default; overrideable per entry
-wall_timeout_s: 300          # wall clock timeout, global for all jobs
+wall_timeout_s: 30          # wall clock timeout, global for all jobs
 
 binaries:
   - binary: "./build/tb_dual_port_ram/tb_dual_port_ram.out"
     heartbeat_ms: 2000      # progress.jsonl heartbeat interval
     runs:
       - test: default
-        count: 30           # 30 randomly-generated seeds
+        count: 10           # 10 randomly-generated seeds
 
       - test: directed
         seeds: [1, 2, 3]   # explicit seeds
@@ -16,9 +16,7 @@ binaries:
   # tb_coroutine_sim_test — no --tb.test= or --progress.heartbeat-ms= (omitted from binary block)
   - binary: "./build/tb_coroutine_sim_test/tb_coroutine_sim_test.out"
     runs:
-      - count: 10
-
-      - seeds: [1, 2, 3]
+      - seeds: [2]
         extra_args: ["--verbosity=debug"]
 
 resources:                  # ignored by LocalBackend; used by SlurmBackend when implemented

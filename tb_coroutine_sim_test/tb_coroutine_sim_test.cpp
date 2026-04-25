@@ -178,21 +178,23 @@ class BaseChecker {
 
 class SimulationEnvironment {
 public:
-    SimulationEnvironment(uint64_t seed, uint64_t max_time)
+    SimulationEnvironment(uint64_t seed, uint64_t max_time, bool waves, const std::string& output_dir)
         : seed_(seed),
           max_time_(max_time),
           logger_("SimEnv") {
-        // Initialise Verilator
-        Verilated::traceEverOn(true);
         Verilated::randSeed(seed);
 
         // Create DUT as shared pointer
         dut_ = std::make_shared<Vhello_world_top>();
 
-        // Set up waveform tracing
-        trace_= std::make_shared<VerilatedVcdC>();
-        dut_->trace(trace_.get(), TRACE_DEPTH);
-        trace_->open("tb_coroutine_sim_test.vcd");
+        if (waves) {
+            const std::string vcd_name = "tb_coroutine_sim_test.vcd";
+            const std::string vcd_path = output_dir.empty() ? vcd_name : output_dir + "/" + vcd_name;
+            Verilated::traceEverOn(true);
+            trace_ = std::make_shared<VerilatedVcdC>();
+            dut_->trace(trace_.get(), TRACE_DEPTH);
+            trace_->open(vcd_path.c_str());
+        }
 
         // Initialise clocking components
         std::function<void(bool)> wr_clk_drive_fn = [this](bool level) {
@@ -339,8 +341,13 @@ int main(int argc, char** argv) {
         return EXIT_FAILURE;
     }
 
+    const auto& core_args = arg_parser.get<simulation::args::CoreArgumentGroup>();
     try {
-        SimulationEnvironment sim_env(123U, 10000000U);
+        SimulationEnvironment sim_env(
+            123U, 10000000U,
+            core_args.waves(),
+            std::string(core_args.output_dir())
+        );
         sim_env.start_sim_kernel();
         main_logger.test_passed("Simulation Passed");
         return 0;

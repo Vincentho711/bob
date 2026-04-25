@@ -47,11 +47,11 @@ tasks:
     depends_on:
       - simulation_lib
 
-  tb_hello_world_top:
-    depends_on:
-      - verification_lib
-      - verification_utils
-      - tb_verification_framework
+  # tb_hello_world_top:
+  #   depends_on:
+  #     - verification_lib
+  #     - verification_utils
+  #     - tb_verification_framework
 
   tb_coroutine_sim_test:
     depends_on:

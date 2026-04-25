@@ -34,6 +34,7 @@ class JobSpec:
     seed:       int
     resources:      dict     = field(default_factory=dict)
     wall_timeout_s: int | None = None
+    git_sha:        str | None = None  # HEAD SHA at batch start; None if not in a git repo
 
     @property
     def seed_hex(self) -> str:

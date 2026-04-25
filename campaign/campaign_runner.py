@@ -15,6 +15,7 @@ from __future__ import annotations
 import argparse
 import json
 import secrets
+import subprocess
 import sys
 import time
 from collections import Counter
@@ -37,11 +38,21 @@ def _utc_now_str() -> str:
     return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
 
 
+def _capture_git_sha() -> str | None:
+    """Return HEAD SHA, or None if not in a git repo or git is unavailable."""
+    try:
+        return subprocess.check_output(
+            ["git", "rev-parse", "HEAD"], stderr=subprocess.DEVNULL, text=True
+        ).strip()
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return None
+
+
 # ---------------------------------------------------------------------------
 # Spec expansion
 # ---------------------------------------------------------------------------
 
-def _expand_specs(plan: Plan, batch_run_id: str, batch_dir: Path) -> list[JobSpec]:
+def _expand_specs(plan: Plan, batch_run_id: str, batch_dir: Path, git_sha: str | None) -> list[JobSpec]:
     """Expand plan entries into one JobSpec per (binary, test, seed) combination."""
     max_time_ps_global = plan.max_time_ps
     resources          = plan.resources.model_dump()
@@ -93,6 +104,7 @@ def _expand_specs(plan: Plan, batch_run_id: str, batch_dir: Path) -> list[JobSpe
                     seed=seed,
                     resources=resources,
                     wall_timeout_s=wall_timeout_s,
+                    git_sha=git_sha,
                 ))
 
     return specs
@@ -132,7 +144,9 @@ def _status_line(statuses: dict[str, JobStatus], total: int, elapsed: float) -> 
 
 def _print_table(specs: list[JobSpec], records: list[dict]) -> None:
     rec_by_id = {r["job_id"]: r for r in records}
-    header = f"\n{'BINARY':<28} {'TEST':<16} {'SEED':<18} {'STATUS':<10} {'WALL(s)':>8}  {'SIM(ps)':>12}  {'SEQ':>5}  MSG"
+    bin_w  = max((len(s.binary.stem) for s in specs), default=6)
+    bin_w  = max(bin_w, len("BINARY"))
+    header = f"\n{'BINARY':<{bin_w}} {'TEST':<16} {'SEED':<18} {'STATUS':<10} {'WALL(s)':>8}  {'SIM(ps)':>12}  {'SEQ':>5}  MSG"
     print(header)
     print("-" * max(len(header), 80))
     for spec in specs:
@@ -142,7 +156,7 @@ def _print_table(specs: list[JobSpec], records: list[dict]) -> None:
         sim_ps = str(r.get("sim_time_ps") or "-")
         seq    = str(r.get("seq_count") or "-")
         msg    = (r.get("error_msg") or "")[:60]
-        print(f"{spec.binary.stem:<20} {(spec.test_name or ''):<16} {spec.seed_hex:<18} {status:<10} {wall:>8}  {sim_ps:>12}  {seq:>5}  {msg}")
+        print(f"{spec.binary.stem:<{bin_w}} {(spec.test_name or ''):<16} {spec.seed_hex:<18} {status:<10} {wall:>8}  {sim_ps:>12}  {seq:>5}  {msg}")
 
 
 def _print_failures(failures: list[dict]) -> None:
@@ -178,6 +192,7 @@ def _write_summary(batch_dir: Path, specs: list[JobSpec],
         "batch_id":    batch_run_id,
         "plan":        str(plan_path.resolve()),
         "binaries":    binaries,
+        "git_sha":     specs[0].git_sha if specs else None,
         "started_at":  started_at,
         "finished_at": finished_at,
         "counts": {
@@ -250,10 +265,11 @@ def main(argv: list[str] | None = None) -> int:
     heartbeat_values = [b.heartbeat_ms for b in plan.binaries if b.heartbeat_ms is not None]
     hung_threshold_s = max(10.0, min(heartbeat_values) / 1000 * 10) if heartbeat_values else 10.0
 
-    specs = _expand_specs(plan, batch_run_id, batch_dir)
+    git_sha = _capture_git_sha()
+    specs   = _expand_specs(plan, batch_run_id, batch_dir, git_sha)
 
     if args.dry_run:
-        print(f"Dry run — batch: {batch_run_id}  ({len(specs)} jobs):")
+        print(f"Dry run — batch: {batch_run_id}  ({len(specs)} jobs)  git: {git_sha or 'n/a'}:")
         for spec in specs:
             print(f"  {spec.job_id}")
             print(f"    {' '.join(spec.args)}")

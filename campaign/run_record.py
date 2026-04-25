@@ -173,11 +173,32 @@ def _write_reproduce_script(run_dir: Path, spec: JobSpec) -> None:
     repro_args.append("--waves")
     repro_args.append("--output-dir=${output_dir}")
 
+    git_header: list[str] = []
+    git_guard:  list[str] = []
+    if spec.git_sha:
+        git_header = [
+            f"# Git SHA: {spec.git_sha}",
+            "# To reproduce exactly: git checkout <sha>, rebuild the binary, then run this script.",
+            "",
+        ]
+        git_guard = [
+            'if command -v git >/dev/null 2>&1; then',
+            '  _current_sha=$(git rev-parse HEAD 2>/dev/null || true)',
+            f'  if [ -n "$_current_sha" ] && [ "$_current_sha" != "{spec.git_sha}" ]; then',
+            f'    echo "WARNING: current HEAD ($_current_sha) differs from recorded SHA ({spec.git_sha})" >&2',
+            '    echo "         Rebuild from that commit for exact reproduction." >&2',
+            '  fi',
+            'fi',
+            "",
+        ]
+
     lines = [
         "#!/usr/bin/env bash",
+        *git_header,
         f"# Reproduce: test={spec.test_name}  seed=0x{spec.seed_hex}",
         f"# Original batch job: {spec.job_id}",
         "set -euo pipefail",
+        *git_guard,
         'script_dir="$(cd "$(dirname "$0")" && pwd)"',
         'output_dir="${script_dir}/repro"',
         "",

@@ -51,11 +51,13 @@ def _manifest_to_spec(entry: dict) -> JobSpec:
 
 
 def _print_table(records: list[dict]) -> None:
-    header = f"\n{'BINARY':<20} {'TEST':<16} {'SEED':<18} {'STATUS':<10} {'WALL(s)':>8}  {'SIM(ps)':>12}  {'SEQ':>5}  MSG"
+    binaries = [Path(r.get("binary", "")).stem if r.get("binary") else "" for r in records]
+    bin_w    = max((len(b) for b in binaries), default=6)
+    bin_w    = max(bin_w, len("BINARY"))
+    header   = f"\n{'BINARY':<{bin_w}} {'TEST':<16} {'SEED':<18} {'STATUS':<10} {'WALL(s)':>8}  {'SIM(ps)':>12}  {'SEQ':>5}  MSG"
     print(header)
     print("-" * max(len(header), 80))
-    for r in records:
-        binary = Path(r.get("binary", "")).stem if r.get("binary") else ""
+    for r, binary in zip(records, binaries):
         test   = r.get("test") or ""
         seed   = r.get("seed", "-")
         status = r.get("status", "unknown")
@@ -63,7 +65,7 @@ def _print_table(records: list[dict]) -> None:
         sim_ps = str(r.get("sim_time_ps") or "-")
         seq    = str(r.get("seq_count") or "-")
         msg    = (r.get("error_msg") or "")[:60]
-        print(f"{binary:<20} {test:<16} {seed:<18} {status:<10} {wall:>8}  {sim_ps:>12}  {seq:>5}  {msg}")
+        print(f"{binary:<{bin_w}} {test:<16} {seed:<18} {status:<10} {wall:>8}  {sim_ps:>12}  {seq:>5}  {msg}")
 
 
 def _print_failures(failures: list[dict]) -> None:
