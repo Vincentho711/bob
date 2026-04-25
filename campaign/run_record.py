@@ -21,6 +21,7 @@ def build_run_record(spec: JobSpec, status: JobStatus) -> dict:
     binary_name = spec.binary.stem
     record: dict = {
         "job_id":      spec.job_id,
+        "binary":      str(spec.binary.resolve()) if spec.binary != Path("") else None,
         "test":        spec.test_name,
         "seed":        f"0x{spec.seed_hex}",
         "status":      status.value,
@@ -52,7 +53,8 @@ def build_run_record(spec: JobSpec, status: JobStatus) -> dict:
 
     run_end = _read_run_end(str(run_dir / "progress.jsonl"))
     if run_end:
-        record["duration_s"]  = round(run_end.get("ts_wall_us", 0) / 1e6, 3)
+        ts_wall_us = run_end.get("ts_wall_us")
+        record["duration_s"]  = round(ts_wall_us / 1e6, 3) if ts_wall_us is not None else None
         record["sim_time_ps"] = run_end.get("ts_sim_ps")
         record["seq_count"]   = run_end.get("seq_count")
         record["error_msg"]   = run_end.get("msg") or None
@@ -91,12 +93,36 @@ def write_wall_timeout_event(
         pass
 
 
-def _finalise(spec: JobSpec, err_path: Path) -> JobStatus:
+def _write_exit_event(progress_path: Path, returncode: int) -> None:
+    """Write a synthetic run_end for binaries that don't emit progress events.
+
+    Mirrors write_wall_timeout_event so that summarise.py can derive status
+    from progress.jsonl without special-casing no-progress binaries.
+    Best-effort — OSError is silently swallowed.
+    """
+    event = {
+        "schema_version": 2,
+        "t":          "run_end",
+        "ts_wall_us": None,
+        "ts_sim_ps":  None,
+        "status":     "completed" if returncode == 0 else "failed",
+        "msg":        None if returncode == 0 else f"exited with code {returncode}",
+        "seq_count":  None,
+    }
+    try:
+        with open(progress_path, "w") as f:
+            f.write(json.dumps(event) + "\n")
+    except OSError:
+        pass
+
+
+def _finalise(spec: JobSpec, err_path: Path, *, returncode: int | None = None) -> JobStatus:
     """Handle post-process cleanup and write reproduce.sh.
 
     Called by LocalBackend from a worker thread after proc.wait() returns.
     err_path is the captured stderr temp file. Returns the terminal JobStatus
-    derived from progress.jsonl.
+    derived from progress.jsonl, falling back to returncode for binaries that
+    do not emit progress events.
     """
     binary_name = spec.binary.stem
     run_dir = spec.output_dir
@@ -108,8 +134,14 @@ def _finalise(spec: JobSpec, err_path: Path) -> JobStatus:
         except OSError:
             pass
         _write_reproduce_script(run_dir, spec)
-        run_end = _read_run_end(str(run_dir / "progress.jsonl"))
+        progress_path = run_dir / "progress.jsonl"
+        run_end = _read_run_end(str(progress_path))
         if run_end is None:
+            # No progress events — fall back to process exit code if available,
+            # and write a synthetic run_end so post-hoc summarise works correctly.
+            if returncode is not None:
+                _write_exit_event(progress_path, returncode)
+                return JobStatus.PASSED if returncode == 0 else JobStatus.FAILED
             return JobStatus.ERROR
         s = run_end.get("status", "")
         if s == "completed":

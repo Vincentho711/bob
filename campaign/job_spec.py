@@ -26,11 +26,11 @@ class JobStatus(Enum):
 
 @dataclass
 class JobSpec:
-    job_id:     str           # "{batch_id}_{test}_{seed:016x}"
+    job_id:     str           # "{batch_run_id}_{binary_stem}[_{test}]_{seed:016x}"
     binary:     Path
     args:       list[str]     # complete argv (binary + all flags)
     output_dir: Path          # full run directory path passed as --output-dir
-    test_name:  str
+    test_name:  str | None    # None for binaries with no --tb.test=
     seed:       int
     resources:      dict     = field(default_factory=dict)
     wall_timeout_s: int | None = None
@@ -42,6 +42,7 @@ class JobSpec:
     def to_manifest_line(self) -> str:
         return json.dumps({
             "job_id":   self.job_id,
+            "binary":   str(self.binary.resolve()),
             "test":     self.test_name,
             "seed":     self.seed,
             "seed_hex": self.seed_hex,

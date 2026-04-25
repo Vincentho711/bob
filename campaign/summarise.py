@@ -42,7 +42,7 @@ def _manifest_to_spec(entry: dict) -> JobSpec:
     """Reconstruct a minimal JobSpec from a manifest entry (enough for build_run_record)."""
     return JobSpec(
         job_id=entry["job_id"],
-        binary=Path(""),        # not needed for record building
+        binary=Path(entry.get("binary", "")),
         args=[],
         output_dir=Path(entry["run_dir"]),
         test_name=entry["test"],
@@ -51,17 +51,19 @@ def _manifest_to_spec(entry: dict) -> JobSpec:
 
 
 def _print_table(records: list[dict]) -> None:
-    header = f"\n{'TEST':<20} {'SEED':<18} {'STATUS':<10} {'WALL(s)':>8}  {'SIM(ps)':>12}  {'SEQ':>5}  MSG"
+    header = f"\n{'BINARY':<20} {'TEST':<16} {'SEED':<18} {'STATUS':<10} {'WALL(s)':>8}  {'SIM(ps)':>12}  {'SEQ':>5}  MSG"
     print(header)
     print("-" * max(len(header), 80))
     for r in records:
+        binary = Path(r.get("binary", "")).stem if r.get("binary") else ""
+        test   = r.get("test") or ""
         seed   = r.get("seed", "-")
         status = r.get("status", "unknown")
         wall   = f"{r['duration_s']:.2f}" if r.get("duration_s") is not None else "-"
         sim_ps = str(r.get("sim_time_ps") or "-")
         seq    = str(r.get("seq_count") or "-")
         msg    = (r.get("error_msg") or "")[:60]
-        print(f"{r['test']:<20} {seed:<18} {status:<10} {wall:>8}  {sim_ps:>12}  {seq:>5}  {msg}")
+        print(f"{binary:<20} {test:<16} {seed:<18} {status:<10} {wall:>8}  {sim_ps:>12}  {seq:>5}  {msg}")
 
 
 def _print_failures(failures: list[dict]) -> None:
@@ -106,7 +108,7 @@ def summarise(batch_dir: Path) -> int:
     summary = {
         "batch_id":    existing.get("batch_id", batch_dir.name),
         "plan":        existing.get("plan", None),
-        "binary":      existing.get("binary", None),
+        "binaries":    existing.get("binaries", [existing["binary"]] if existing.get("binary") else []),
         "started_at":  existing.get("started_at", None),
         "finished_at": existing.get("finished_at", now),
         "counts": {
@@ -129,7 +131,7 @@ def summarise(batch_dir: Path) -> int:
     _print_table(records)
     _print_failures(failures)
     print(f"\n{passed}/{total} passed  |  summary: {summary_path.resolve()}")
-    return 0 if counts.get("failed", 0) == 0 and counts.get("missing", 0) == 0 else 1
+    return 0 if counts.get("failed", 0) == 0 and counts.get("error", 0) == 0 and counts.get("timeout", 0) == 0 else 1
 
 
 def _infer_status(spec: JobSpec) -> JobStatus:

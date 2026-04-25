@@ -91,6 +91,10 @@ class _Renderer:
         self._progress_paths: dict[str, Path] = {
             s.job_id: _progress_path(s) for s in specs
         }
+        # Per-binary progress tracking (order of first appearance preserved).
+        self._binary_stems: list[str] = list(dict.fromkeys(s.binary.stem for s in specs))
+        self._binary_total: Counter   = Counter(s.binary.stem for s in specs)
+        self._job_binary:   dict[str, str] = {s.job_id: s.binary.stem for s in specs}
 
     def build(
         self,
@@ -114,18 +118,21 @@ class _Renderer:
             show_footer=False,
             expand=False,
         )
-        table.add_column("TEST",   no_wrap=True, min_width=18)
+        table.add_column("BINARY", no_wrap=True, min_width=16)
+        table.add_column("TEST",   no_wrap=True, min_width=12)
         table.add_column("SEED",   no_wrap=True, min_width=18, style="dim")
         table.add_column("STATUS", no_wrap=True, min_width=9)
         table.add_column("WALL",   no_wrap=True, justify="right", min_width=7)
         table.add_column("NOTE",   no_wrap=True)
 
         now = time.monotonic()
-        passed_rows: list[tuple[str, str, str]] = []
+        passed_rows: list[tuple[str, str, str, str]] = []
         for spec in sorted(self._specs, key=lambda s: _sort_key(s, statuses, job_start, now)):
-            jid    = spec.job_id
-            status = statuses.get(jid, JobStatus.PENDING)
-            style  = _STATUS_STYLE.get(status, "")
+            jid       = spec.job_id
+            status    = statuses.get(jid, JobStatus.PENDING)
+            style     = _STATUS_STYLE.get(status, "")
+            binary_col = spec.binary.stem
+            test_col   = spec.test_name or ""
 
             if jid in job_end:
                 wall = f"{job_end[jid] - job_start.get(jid, job_end[jid]):.1f}s"
@@ -143,10 +150,11 @@ class _Renderer:
                 note = Text(f"{age:.1f}s", style="dim cyan")
 
             if status is JobStatus.PASSED:
-                passed_rows.append((spec.test_name, spec.seed_hex, wall))
+                passed_rows.append((binary_col, test_col, spec.seed_hex, wall))
             else:
                 table.add_row(
-                    spec.test_name,
+                    binary_col,
+                    test_col,
                     spec.seed_hex,
                     Text(status.value, style=style),
                     wall,
@@ -155,10 +163,10 @@ class _Renderer:
 
         n_passed = len(passed_rows)
         if n_passed <= _PASSED_COLLAPSE_THRESHOLD:
-            for test_name, seed_hex, wall in passed_rows:
-                table.add_row(test_name, seed_hex, Text("passed", style="green"), wall, Text(""))
+            for binary_col, test_col, seed_hex, wall in passed_rows:
+                table.add_row(binary_col, test_col, seed_hex, Text("passed", style="green"), wall, Text(""))
         elif n_passed:
-            table.add_row(Text(f"… {n_passed} passed", style="dim green"), "", "", "", "")
+            table.add_row(Text(f"… {n_passed} passed", style="dim green"), "", "", "", "", "")
 
         counts = Counter(statuses.values())
         _BAR_ITEMS = [
@@ -175,7 +183,21 @@ class _Renderer:
                 bar.append("   ")
             bar.append(f"{label}: {counts.get(st, 0)}", style=style)
 
-        return Group(bar, table)
+        binary_done = Counter(
+            self._job_binary[jid]
+            for jid, st in statuses.items()
+            if st.is_terminal
+        )
+        per_binary = Text()
+        for i, stem in enumerate(self._binary_stems):
+            if i:
+                per_binary.append("   ")
+            done_n  = binary_done[stem]
+            total_n = self._binary_total[stem]
+            color   = "green" if done_n == total_n else "cyan" if done_n > 0 else "dim"
+            per_binary.append(f"{stem} {done_n}/{total_n}", style=color)
+
+        return Group(per_binary, bar, table)
 
 
 class CampaignTUI:

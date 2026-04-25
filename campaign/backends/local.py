@@ -123,10 +123,10 @@ class LocalBackend:
                     spec.wall_timeout_s,
                     elapsed_us,
                 )
-            status = finalise_run(spec, err_path)
+            status = finalise_run(spec, err_path, returncode=proc.returncode)
             # Flaw 1: killed before output_dir was created — finalise returns ERROR,
             # correct to TIMEOUT so the cause is not misreported.
             if status is JobStatus.ERROR and not spec.output_dir.exists():
                 return JobStatus.TIMEOUT
             return status
-        return finalise_run(spec, err_path)
+        return finalise_run(spec, err_path, returncode=proc.returncode)

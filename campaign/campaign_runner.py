@@ -42,48 +42,58 @@ def _utc_now_str() -> str:
 # ---------------------------------------------------------------------------
 
 def _expand_specs(plan: Plan, batch_run_id: str, batch_dir: Path) -> list[JobSpec]:
-    """Expand plan entries into one JobSpec per (test, seed) pair."""
-    binary             = plan.binary
+    """Expand plan entries into one JobSpec per (binary, test, seed) combination."""
     max_time_ps_global = plan.max_time_ps
-    heartbeat_ms       = plan.heartbeat_ms
     resources          = plan.resources.model_dump()
 
     specs: list[JobSpec] = []
-    for entry in plan.runs:
-        test     = entry.test
-        max_time = entry.max_time_ps if entry.max_time_ps is not None else max_time_ps_global
+    for bin_entry in plan.binaries:
+        binary       = bin_entry.binary
+        heartbeat_ms = bin_entry.heartbeat_ms
 
-        wall_timeout_s = (
-            entry.wall_timeout_s
-            if entry.wall_timeout_s is not None
-            else plan.wall_timeout_s
-        )
-        seeds = list(entry.seeds)
-        if entry.count > 0:
-            seeds += [secrets.randbelow(2**64) for _ in range(entry.count)]
+        for entry in bin_entry.runs:
+            test_name      = entry.test
+            max_time       = entry.max_time_ps if entry.max_time_ps is not None else max_time_ps_global
+            wall_timeout_s = (
+                entry.wall_timeout_s
+                if entry.wall_timeout_s is not None
+                else plan.wall_timeout_s
+            )
 
-        for seed in seeds:
-            seed_hex = f"{seed:016x}"
-            job_id   = f"{batch_run_id}_{test}_{seed_hex}"
-            run_dir  = batch_dir / job_id
-            args = [
-                str(binary),
-                f"--tb.test={test}",
-                f"--seed={seed}",
-                f"--max-time={max_time}",
-                f"--output-dir={run_dir}",
-                f"--progress.heartbeat-ms={heartbeat_ms}",
-            ]
-            specs.append(JobSpec(
-                job_id=job_id,
-                binary=binary,
-                args=args,
-                output_dir=run_dir,
-                test_name=test,
-                seed=seed,
-                resources=resources,
-                wall_timeout_s=wall_timeout_s,
-            ))
+            seeds = list(entry.seeds)
+            if entry.count > 0:
+                seeds += [secrets.randbelow(2**64) for _ in range(entry.count)]
+
+            for seed in seeds:
+                seed_hex = f"{seed:016x}"
+                if entry.test is not None:
+                    job_id = f"{batch_run_id}_{binary.stem}_{entry.test}_{seed_hex}"
+                else:
+                    job_id = f"{batch_run_id}_{binary.stem}_{seed_hex}"
+                run_dir = batch_dir / job_id
+
+                args = [str(binary)]
+                if entry.test is not None:
+                    args.append(f"--tb.test={entry.test}")
+                args += [
+                    f"--seed={seed}",
+                    f"--max-time={max_time}",
+                    f"--output-dir={run_dir}",
+                ]
+                if heartbeat_ms is not None:
+                    args.append(f"--progress.heartbeat-ms={heartbeat_ms}")
+                args.extend(entry.extra_args)
+
+                specs.append(JobSpec(
+                    job_id=job_id,
+                    binary=binary,
+                    args=args,
+                    output_dir=run_dir,
+                    test_name=test_name,
+                    seed=seed,
+                    resources=resources,
+                    wall_timeout_s=wall_timeout_s,
+                ))
 
     return specs
 
@@ -122,7 +132,7 @@ def _status_line(statuses: dict[str, JobStatus], total: int, elapsed: float) -> 
 
 def _print_table(specs: list[JobSpec], records: list[dict]) -> None:
     rec_by_id = {r["job_id"]: r for r in records}
-    header = f"\n{'TEST':<20} {'SEED':<18} {'STATUS':<10} {'WALL(s)':>8}  {'SIM(ps)':>12}  {'SEQ':>5}  MSG"
+    header = f"\n{'BINARY':<28} {'TEST':<16} {'SEED':<18} {'STATUS':<10} {'WALL(s)':>8}  {'SIM(ps)':>12}  {'SEQ':>5}  MSG"
     print(header)
     print("-" * max(len(header), 80))
     for spec in specs:
@@ -132,7 +142,7 @@ def _print_table(specs: list[JobSpec], records: list[dict]) -> None:
         sim_ps = str(r.get("sim_time_ps") or "-")
         seq    = str(r.get("seq_count") or "-")
         msg    = (r.get("error_msg") or "")[:60]
-        print(f"{spec.test_name:<20} {spec.seed_hex:<18} {status:<10} {wall:>8}  {sim_ps:>12}  {seq:>5}  {msg}")
+        print(f"{spec.binary.stem:<20} {(spec.test_name or ''):<16} {spec.seed_hex:<18} {status:<10} {wall:>8}  {sim_ps:>12}  {seq:>5}  {msg}")
 
 
 def _print_failures(failures: list[dict]) -> None:
@@ -151,7 +161,7 @@ def _print_failures(failures: list[dict]) -> None:
 
 def _write_summary(batch_dir: Path, specs: list[JobSpec],
                    statuses: dict[str, JobStatus],
-                   batch_run_id: str, plan_path: Path, binary: Path,
+                   batch_run_id: str, plan_path: Path,
                    started_at: str, finished_at: str) -> dict:
     records = [build_run_record(spec, statuses.get(spec.job_id, JobStatus.UNKNOWN))
                for spec in specs]
@@ -162,10 +172,12 @@ def _write_summary(batch_dir: Path, specs: list[JobSpec],
 
     failures = [r for r in records if r["status"] != "passed"]
 
+    binaries = list(dict.fromkeys(str(s.binary.resolve()) for s in specs))
+
     summary = {
         "batch_id":    batch_run_id,
         "plan":        str(plan_path.resolve()),
-        "binary":      str(binary.resolve()),
+        "binaries":    binaries,
         "started_at":  started_at,
         "finished_at": finished_at,
         "counts": {
@@ -216,8 +228,9 @@ def main(argv: list[str] | None = None) -> int:
             return 1
         for w in check_warnings(plan):
             print(f"  WARN  {w}", file=sys.stderr)
-        n_jobs = sum(len(e.seeds) + e.count for e in plan.runs)
-        print(f"Plan OK — {n_jobs} jobs would be generated from {len(plan.runs)} run entries")
+        n_jobs    = sum(len(e.seeds) + e.count for b in plan.binaries for e in b.runs)
+        n_entries = sum(len(b.runs) for b in plan.binaries)
+        print(f"Plan OK — {n_jobs} jobs from {n_entries} run entries across {len(plan.binaries)} binaries")
         return 0
 
     errors = check_runtime(plan)
@@ -229,12 +242,13 @@ def main(argv: list[str] | None = None) -> int:
     for w in check_warnings(plan):
         print(f"  WARN  {w}", file=sys.stderr)
 
-    batch_id         = plan.batch_id
-    output_dir       = plan.output_dir
-    heartbeat_ms     = plan.heartbeat_ms
-    batch_run_id     = f"{batch_id}_{_utc_now_str()}"
-    batch_dir        = output_dir / batch_run_id
-    hung_threshold_s = max(10.0, heartbeat_ms / 1000 * 10)
+    batch_id     = plan.batch_id
+    output_dir   = plan.output_dir
+    batch_run_id = f"{batch_id}_{_utc_now_str()}"
+    batch_dir    = output_dir / batch_run_id
+
+    heartbeat_values = [b.heartbeat_ms for b in plan.binaries if b.heartbeat_ms is not None]
+    hung_threshold_s = max(10.0, min(heartbeat_values) / 1000 * 10) if heartbeat_values else 10.0
 
     specs = _expand_specs(plan, batch_run_id, batch_dir)
 
@@ -296,10 +310,10 @@ def main(argv: list[str] | None = None) -> int:
     finished_at = datetime.now(timezone.utc).isoformat()
 
     summary = _write_summary(batch_dir, specs, statuses,
-                             batch_run_id, args.plan, plan.binary,
+                             batch_run_id, args.plan,
                              started_at, finished_at)
     c = summary["counts"]
-    return 0 if c["failed"] == 0 and c["error"] == 0 else 1
+    return 0 if c["failed"] == 0 and c["error"] == 0 and c["timeout"] == 0 else 1
 
 
 if __name__ == "__main__":

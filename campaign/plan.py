@@ -23,14 +23,15 @@ class Resources(BaseModel):
 
 
 class RunEntry(BaseModel):
-    """One entry in the 'runs' list: a test name plus seed source(s)."""
+    """One entry in a binary's 'runs' list: optional test name plus seed source(s)."""
     model_config = ConfigDict(extra="forbid")
 
-    test:        str
-    count:       int       = Field(0, ge=0)
-    seeds:       list[int] = Field(default_factory=list)
-    max_time_ps:    int | None = None  # None → inherits Plan.max_time_ps
-    wall_timeout_s: int | None = Field(None, gt=0)  # None → inherits Plan.wall_timeout_s
+    test:           str | None  = None
+    count:          int         = Field(0, ge=0)
+    seeds:          list[int]   = Field(default_factory=list)
+    max_time_ps:    int | None  = None  # None → inherits Plan.max_time_ps
+    wall_timeout_s: int | None  = Field(None, gt=0)  # None → inherits Plan.wall_timeout_s
+    extra_args:     list[str]   = Field(default_factory=list)
 
     @field_validator("seeds", mode="before")
     @classmethod
@@ -56,18 +57,25 @@ class RunEntry(BaseModel):
         return self
 
 
+class BinaryEntry(BaseModel):
+    """One binary with its own heartbeat setting and list of run entries."""
+    model_config = ConfigDict(extra="forbid")
+
+    binary:       Path
+    heartbeat_ms: int | None     = None  # None → omit --progress.heartbeat-ms=
+    runs:         list[RunEntry] = Field(min_length=1)
+
+
 class Plan(BaseModel):
     """Top-level campaign plan schema."""
     model_config = ConfigDict(extra="forbid")
 
     schema_version: int       = 1
     batch_id:       str       = "batch"
-    binary:         Path
     output_dir:     Path      = Path("runs")
     max_time_ps:    int       = Field(100_000_000_000, gt=0)
-    heartbeat_ms:   int       = Field(2000, gt=0)
-    runs:           list[RunEntry] = Field(min_length=1)
     wall_timeout_s: int | None = Field(None, gt=0)  # None = no wall-clock limit
+    binaries:       list[BinaryEntry] = Field(min_length=1)
     resources:      Resources = Field(default_factory=Resources)
 
 
@@ -90,7 +98,9 @@ def check_warnings(plan: Plan) -> list[str]:
     """Non-fatal advisories about the plan configuration."""
     warnings: list[str] = []
     if plan.wall_timeout_s is None and all(
-        e.wall_timeout_s is None for e in plan.runs
+        e.wall_timeout_s is None
+        for b in plan.binaries
+        for e in b.runs
     ):
         warnings.append(
             "wall_timeout_s not set — hung jobs will block the batch indefinitely"
@@ -102,17 +112,18 @@ def check_runtime(plan: Plan) -> list[str]:
     """Check environment prerequisites. Returns a list of error strings (empty = ok).
 
     Separate from schema validation because these depend on the filesystem,
-    not the YAML content. Binary path is CWD-relative, matching existing behaviour.
+    not the YAML content. Binary paths are CWD-relative, matching existing behaviour.
     """
     errors: list[str] = []
 
-    if not plan.binary.is_file():
-        errors.append(
-            f"binary not found: {plan.binary}\n"
-            f"  Resolved: {plan.binary.resolve()}"
-        )
-    elif not os.access(plan.binary, os.X_OK):
-        errors.append(f"binary not executable: {plan.binary.resolve()}")
+    for b in plan.binaries:
+        if not b.binary.is_file():
+            errors.append(
+                f"binary not found: {b.binary}\n"
+                f"  Resolved: {b.binary.resolve()}"
+            )
+        elif not os.access(b.binary, os.X_OK):
+            errors.append(f"binary not executable: {b.binary.resolve()}")
 
     output_parent = plan.output_dir if plan.output_dir.exists() else plan.output_dir.parent
     if output_parent.exists() and not os.access(output_parent, os.W_OK):
