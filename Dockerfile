@@ -7,6 +7,7 @@ FROM ubuntu:24.04
 #   verilator : 5.020  (apt package 5.020-1)
 #   gcc / g++ : 13.3.0 (Ubuntu 24.04 default via gcc metapackage)
 #   ar        : 2.42   (binutils, Ubuntu 24.04 default)
+#   make      : 4.3    (Ubuntu 24.04 default)
 #   python    : 3.12   (Ubuntu 24.04 default)
 #   uv        : 0.9.2  (pinned below via official image)
 
@@ -17,6 +18,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     g++ \
     binutils \
+    make \
     python3.12 \
     python3.12-venv \
     curl \
@@ -28,6 +30,6 @@ COPY --from=ghcr.io/astral-sh/uv:0.9.2 /uv /usr/local/bin/uv
 
 # Validate tool installation at build time
 RUN verilator --version && gcc --version && g++ --version && ar --version && \
-    python3.12 --version && uv --version
+    make --version && python3.12 --version && uv --version
 
 WORKDIR /workspace
