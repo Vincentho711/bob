@@ -1,9 +1,20 @@
 name: CI
 
 on:
+  # Commits that don't touch the environment spec run CI directly.
   push:
     branches: [main]
+    paths-ignore:
+      - Dockerfile
+      - pyproject.toml
+      - uv.lock
   pull_request:
+    branches: [main]
+  # Commits that DO change the environment spec trigger build-image.yml first.
+  # CI runs here only after that build succeeds, picking up the fresh image.
+  workflow_run:
+    workflows: ["Build and Push Environment Image"]
+    types: [completed]
     branches: [main]
 
 env:
@@ -13,11 +24,19 @@ env:
 
 jobs:
   test-and-build:
+    # When triggered by workflow_run, only proceed if the image build succeeded.
+    if: |
+      github.event_name != 'workflow_run' ||
+      github.event.workflow_run.conclusion == 'success'
     runs-on: self-hosted
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          # workflow_run supplies the SHA that triggered the image build; use it
+          # explicitly so CI tests the exact commit the image was built from.
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
 
       # On a cluster node with NFS, set BOB_SIF_PATH in the runner's environment
       # (e.g. /nfs/images/bob-env-current.sif) to skip the pull step entirely.
@@ -60,12 +79,12 @@ jobs:
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             EXTRA_FLAGS="--dry-run"
           else
-            EXTRA_FLAGS=""
+            EXTRA_FLAGS=""  # push and workflow_run both mean merged to main
           fi
           apptainer exec \
             --bind "$GITHUB_WORKSPACE" --pwd "$GITHUB_WORKSPACE" \
             "$SIF" \
-            python -m campaign.campaign_runner --plan campaign.yaml $EXTRA_FLAGS
+            uv run python -m campaign.campaign_runner --plan campaign.yaml $EXTRA_FLAGS
 
       - name: Upload campaign results
         if: always()
