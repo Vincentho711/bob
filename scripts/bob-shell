@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# Launch an interactive shell inside the canonical bob build environment.
+#
+# The environment is an Apptainer container (.sif) built from the repo's
+# Dockerfile. Your home directory and current working directory are
+# auto-mounted — build artifacts land in your scratch space as normal.
+#
+# Usage: bob-shell [apptainer-shell-flags]
+# Example: bob-shell --cleanenv
+
+set -euo pipefail
+
+SIF="${BOB_SIF_PATH:-/nfs/images/bob-env-current.sif}"
+
+if [ ! -f "${SIF}" ]; then
+    echo "Error: .sif not found at ${SIF}" >&2
+    echo "Set BOB_SIF_PATH to the correct path, or ask an admin to run scripts/update-env.sh" >&2
+    exit 1
+fi
+
+exec apptainer shell "$@" "${SIF}"

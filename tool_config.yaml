@@ -1,5 +1,5 @@
 gcc:
-  # Linux
+  # Linux — version 13.3.0 (Ubuntu 24.04 default; pinned in Dockerfile)
   path: /usr/bin/gcc
   # macOS latest
   # path: /opt/homebrew/bin/gcc
@@ -7,7 +7,7 @@ gcc:
     common: ["-Wall", "-Wextra"]
 
 g++:
-  # Linux
+  # Linux — version 13.3.0 (Ubuntu 24.04 default; pinned in Dockerfile)
   path: /usr/bin/g++
   # macOS latest
   # path: /opt/homebrew/bin/g++
@@ -16,7 +16,7 @@ g++:
     linux: ["-fsanitize=address,undefined", "-pg"]
 
 verilator:
-  # Linux
+  # Linux — version 5.020 (apt package 5.020-1; pinned in Dockerfile)
   path: /usr/bin/verilator
   # macOS deprecated
   # path: /opt/homebrew/bin/verilator
@@ -26,6 +26,7 @@ verilator:
     common: []
 
 ar:
+  # Linux — version 2.42 (binutils, Ubuntu 24.04 default; pinned in Dockerfile)
   path: /usr/bin/ar
   default_flags :
     common: []

@@ -1,0 +1,76 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  # OCI image used to pull the Apptainer .sif when BOB_SIF_PATH is not set.
+  # Update this tag when a new environment image is deployed.
+  BOB_ENV_IMAGE: ghcr.io/vincentho711/bob-env:latest
+
+jobs:
+  test-and-build:
+    runs-on: self-hosted
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # On a cluster node with NFS, set BOB_SIF_PATH in the runner's environment
+      # (e.g. /nfs/images/bob-env-current.sif) to skip the pull step entirely.
+      # On a single server without NFS, the .sif is pulled from GHCR each run
+      # and cached by the runner between runs.
+      - name: Set up Apptainer image
+        run: |
+          if [ -n "${BOB_SIF_PATH}" ] && [ -f "${BOB_SIF_PATH}" ]; then
+            echo "Using shared .sif: ${BOB_SIF_PATH}"
+            echo "SIF=${BOB_SIF_PATH}" >> "$GITHUB_ENV"
+          else
+            echo "Pulling from GHCR: ${{ env.BOB_ENV_IMAGE }}"
+            apptainer pull --force bob-env.sif docker://${{ env.BOB_ENV_IMAGE }}
+            echo "SIF=$(pwd)/bob-env.sif" >> "$GITHUB_ENV"
+          fi
+
+      - name: Install Python dependencies
+        run: |
+          apptainer exec \
+            --bind "$GITHUB_WORKSPACE" --pwd "$GITHUB_WORKSPACE" \
+            "$SIF" \
+            uv sync --frozen
+
+      - name: Run tests
+        run: |
+          apptainer exec \
+            --bind "$GITHUB_WORKSPACE" --pwd "$GITHUB_WORKSPACE" \
+            "$SIF" \
+            uv run pytest pytests/ -v
+
+      - name: Build all tasks
+        run: |
+          apptainer exec \
+            --bind "$GITHUB_WORKSPACE" --pwd "$GITHUB_WORKSPACE" \
+            "$SIF" \
+            uv run python main_cli.py build --all
+
+      - name: Campaign regression (dry run on PRs, full run on main)
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            EXTRA_FLAGS="--dry-run"
+          else
+            EXTRA_FLAGS=""
+          fi
+          apptainer exec \
+            --bind "$GITHUB_WORKSPACE" --pwd "$GITHUB_WORKSPACE" \
+            "$SIF" \
+            python -m campaign.campaign_runner --plan campaign.yaml $EXTRA_FLAGS
+
+      - name: Upload campaign results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: campaign-results-${{ github.run_id }}
+          path: runs/
+          if-no-files-found: ignore
