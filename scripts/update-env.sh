@@ -17,6 +17,7 @@ SIF_NAME="bob-env-${IMAGE_TAG}.sif"
 SIF_PATH="${NFS_IMAGE_DIR}/${SIF_NAME}"
 SYMLINK="${NFS_IMAGE_DIR}/bob-env-current.sif"
 
+mkdir -p "${NFS_IMAGE_DIR}"
 echo "==> Pulling ${IMAGE_REPO}:${IMAGE_TAG} from GHCR..."
 apptainer pull "${SIF_PATH}" "docker://${IMAGE_REPO}:${IMAGE_TAG}"
 
