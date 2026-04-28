@@ -6,6 +6,9 @@ on:
   pull_request:
     branches: [main]
 
+env:
+  IMAGE_REPO: ghcr.io/vincentho711/bob-env
+
 jobs:
   # ── Job 1 ────────────────────────────────────────────────────────────────────
   # Build and push the environment image when the environment spec changes.
@@ -53,7 +56,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/${{ github.repository_owner }}/bob-env
+          images: ${{ env.IMAGE_REPO }}
           # sha tag is listed first so outputs.version = sha-<hash> (used by
           # downstream jobs). latest is only pushed on merges to main, not PRs.
           tags: |
@@ -69,7 +72,7 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=registry,ref=ghcr.io/${{ github.repository_owner }}/bob-env:latest
+          cache-from: type=registry,ref=${{ env.IMAGE_REPO }}:latest
           cache-to: type=inline
 
   # ── Job 2 ────────────────────────────────────────────────────────────────────
@@ -100,7 +103,7 @@ jobs:
             # against the environment it was built with.
             echo "Pulling freshly built image: ${IMAGE_TAG}"
             apptainer pull --force bob-env.sif \
-              "docker://ghcr.io/${{ github.repository_owner }}/bob-env:${IMAGE_TAG}"
+              "docker://${{ env.IMAGE_REPO }}:${IMAGE_TAG}"
             echo "SIF=$(pwd)/bob-env.sif" >> "$GITHUB_ENV"
           elif [ -n "${BOB_SIF_PATH}" ] && [ -f "${BOB_SIF_PATH}" ]; then
             echo "Using shared .sif: ${BOB_SIF_PATH}"
@@ -108,7 +111,7 @@ jobs:
           else
             echo "Pulling latest from GHCR"
             apptainer pull --force bob-env.sif \
-              "docker://ghcr.io/${{ github.repository_owner }}/bob-env:${IMAGE_TAG}"
+              "docker://${{ env.IMAGE_REPO }}:${IMAGE_TAG}"
             echo "SIF=$(pwd)/bob-env.sif" >> "$GITHUB_ENV"
           fi
 
