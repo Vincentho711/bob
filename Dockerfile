@@ -1,6 +1,7 @@
 FROM ubuntu:24.04
 
 # Pinned tool versions — matches the Ubuntu 24.04 LTS development environment.
+# Last updated: 2026-04-28
 # To upgrade a tool: update the pin here, open a PR, merge, then run
 # scripts/update-env.sh <new-tag> to deploy the new .sif to shared storage.
 #
