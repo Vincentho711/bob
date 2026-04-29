@@ -2,9 +2,15 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: ['**']
   pull_request:
     branches: [main]
+
+# Cancel any in-progress run for the same ref when a newer commit arrives,
+# preventing duplicate runs when both push and pull_request fire together.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 env:
   IMAGE_REPO: ghcr.io/vincentho711/bob-env
@@ -133,18 +139,13 @@ jobs:
             --bind "$GITHUB_WORKSPACE" --pwd "$GITHUB_WORKSPACE" \
             "$SIF" uv run python main_cli.py build --all
 
-      - name: Campaign regression (dry run on PRs, full run on main)
+      - name: Campaign regression
         run: |
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            EXTRA_FLAGS="--dry-run"
-          else
-            EXTRA_FLAGS=""
-          fi
           apptainer exec \
             --bind "$GITHUB_WORKSPACE" --pwd "$GITHUB_WORKSPACE" \
             "$SIF" \
             uv run python -m campaign.campaign_runner \
-              --plan campaign.yaml $EXTRA_FLAGS
+              --plan campaign.yaml
 
       - name: Upload campaign results
         if: always()
@@ -152,6 +153,14 @@ jobs:
         with:
           name: campaign-results-${{ github.run_id }}
           path: runs/
+          if-no-files-found: ignore
+
+      - name: Upload reproduce scripts for failed jobs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reproduce-scripts-${{ github.run_id }}
+          path: runs/**/reproduce.sh
           if-no-files-found: ignore
 
   # ── Job 3 ────────────────────────────────────────────────────────────────────
