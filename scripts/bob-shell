@@ -18,4 +18,13 @@ if [ ! -f "${SIF}" ]; then
     exit 1
 fi
 
-exec apptainer shell --shell /bin/zsh "$@" "${SIF}"
+# Bind-mount host editor tools that are not in the container image.
+EXTRA_BINDS=()
+for bin in nvim vim nano; do
+    host_path="$(command -v "$bin" 2>/dev/null || true)"
+    if [ -n "${host_path}" ] && [ -x "${host_path}" ]; then
+        EXTRA_BINDS+=(--bind "${host_path}")
+    fi
+done
+
+exec apptainer shell --shell /bin/zsh "${EXTRA_BINDS[@]}" "$@" "${SIF}"

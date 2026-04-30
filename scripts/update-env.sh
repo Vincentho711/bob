@@ -19,7 +19,7 @@ SYMLINK="${NFS_IMAGE_DIR}/bob-env-current.sif"
 
 mkdir -p "${NFS_IMAGE_DIR}"
 echo "==> Pulling ${IMAGE_REPO}:${IMAGE_TAG} from GHCR..."
-apptainer pull "${SIF_PATH}" "docker://${IMAGE_REPO}:${IMAGE_TAG}"
+apptainer pull --force "${SIF_PATH}" "docker://${IMAGE_REPO}:${IMAGE_TAG}"
 
 echo "==> Updating symlink: ${SYMLINK} -> ${SIF_NAME}"
 ln -sfn "${SIF_NAME}" "${SYMLINK}"
