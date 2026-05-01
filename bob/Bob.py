@@ -779,9 +779,7 @@ class Bob:
             with subprocess.Popen(cmd, env=env, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True) as process:
                 for line in process.stdout:
                     timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                    formatted_line = f"[{timestamp}] {line.strip()}"
-                    print(formatted_line)  # Prints to log file (redirected)
-                    log_file.write(formatted_line + "\n")
+                    log_file.write(f"[{timestamp}] {line.strip()}\n")
 
                 process.wait()
                 return process.returncode == 0
@@ -1446,11 +1444,9 @@ class Bob:
             self.logger.critical(f"Unexpected error during remove_task_output_dir_until(): {e}")
 
     def setup_task_logger(self, log_file_path: Path) -> TextIOWrapper| None:
-        """Redirect stdout and stderr to a file for a subprocess (per-task logging)."""
+        """Open a per-task log file; console stdout is preserved for tee output."""
         log_file_path.parent.mkdir(parents=True, exist_ok=True)
         log_file = open(log_file_path, "w", buffering=1)
-        sys.stdout = log_file
-        sys.stderr = log_file
         return log_file
 
     def execute_tasks(self, build_all_tasks: bool, selected_tasks: list[str]):

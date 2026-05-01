@@ -6,7 +6,19 @@ summarise.py (re-derived from existing artefacts post-hoc).
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
+
+# Verilator's static thread_local class member (Verilated::t_s) uses the
+# general-dynamic TLS model. When -fsanitize=address is active, ASan's
+# __tls_get_addr interceptor returns null on the abort() path, so UBSan
+# reports a false "member access within null pointer of type 'struct
+# ThreadLocal'" from threadContextp(). Filter it out; every other line in
+# the captured output (including real ASan/UBSan reports) is kept.
+_VERILATOR_TLS_FP = re.compile(
+    r".+/verilated\.h:\d+:\d+: runtime error: "
+    r"member access within null pointer of type .struct ThreadLocal."
+)
 
 from campaign.job_spec import JobSpec, JobStatus
 
@@ -128,8 +140,20 @@ def _finalise(spec: JobSpec, err_path: Path, *, returncode: int | None = None) -
     run_dir = spec.output_dir
 
     if run_dir.exists():
-        # Binary created its output dir — discard the (empty) stderr capture
+        # Append any stderr content (e.g. Verilator $fatal messages) to the run
+        # log so failures are self-contained, then remove the temp file.
+        log_path = run_dir / f"{binary_name}.log"
         try:
+            if err_path.stat().st_size > 0:
+                with open(err_path) as ef, open(log_path, "a") as lf:
+                    content = "\n".join(
+                        l for l in ef.read().splitlines()
+                        if not _VERILATOR_TLS_FP.match(l)
+                    )
+                    if content:
+                        lf.write("\n--- stderr ---\n")
+                        lf.write(content)
+                        lf.write("\n")
             err_path.unlink(missing_ok=True)
         except OSError:
             pass

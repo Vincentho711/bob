@@ -100,7 +100,7 @@ class LocalBackend:
         wall_timed_out = False
         job_start_mono = time.monotonic()
         with open(err_path, "w") as err_fh:
-            proc = subprocess.Popen(spec.args, stdout=subprocess.DEVNULL, stderr=err_fh)
+            proc = subprocess.Popen(spec.args, stdout=err_fh, stderr=err_fh)
             with self._procs_lock:
                 self._procs[spec.job_id] = proc
             try:

@@ -33,7 +33,7 @@ void simulation::args::CoreArgumentGroup::post_parse_resolve() {
     if (!output_dir_str_.empty()) {
         std::filesystem::create_directories(output_dir_str_);
         const std::string log_path = output_dir_str_ + "/" + binary_name_ + ".log";
-        simulation::LoggerConfig::instance().set_log_file(log_path, simulation::OutputMode::BOTH);
+        simulation::LoggerConfig::instance().set_log_file(log_path, simulation::OutputMode::FILE_ONLY);
     }
     // Seed resolution
     if (seed_ == 0) {
