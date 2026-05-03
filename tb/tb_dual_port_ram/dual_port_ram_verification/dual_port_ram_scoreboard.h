@@ -11,6 +11,7 @@
 #include "Vdual_port_ram.h"
 #include "dual_port_ram_transaction.h"
 #include "dual_port_ram_tlm_queue.h"
+#include "covergroup.h"
 
 class DualPortRamScoreboard : public BaseScoreboard<Vdual_port_ram, DualPortRamTransaction> {
 public:
@@ -20,6 +21,7 @@ public:
         std::shared_ptr<DualPortRamTLMWrQueue> tlm_wr_queue,
         std::shared_ptr<DualPortRamTLMRdQueue> tlm_rd_queue,
         std::shared_ptr<ClockT> wr_clk, uint32_t wr_delay_cycle,
+        std::shared_ptr<Covergroup> cg = nullptr,
         const std::string &name = "DualPortRamScoreboard"
     );
 
@@ -36,11 +38,13 @@ protected:
 private:
     std::shared_ptr<DualPortRamTLMWrQueue> tlm_wr_queue_;
     std::shared_ptr<DualPortRamTLMRdQueue> tlm_rd_queue_;
-    std::shared_ptr<ClockT> wr_clk_;
-    uint32_t wr_delay_cycle_;
-    uint32_t apply_index_;
-    uint32_t circular_buffer_size_;
+    std::shared_ptr<ClockT>     wr_clk_;
+    uint32_t                    wr_delay_cycle_;
+    uint32_t                    apply_index_;
+    uint32_t                    circular_buffer_size_;
     std::vector<std::deque<TxnPtr>> circular_buffer_;
+    std::shared_ptr<Covergroup> cg_;
+    uint64_t                    last_rd_addr_ = 0;
 };
 
 #endif // DUAL_PORT_RAM_SCOREBOARD_H

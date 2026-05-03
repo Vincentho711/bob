@@ -2,6 +2,9 @@
 
 all : $(TASK_OUTDIR)/${OUTPUT_EXECUTABLE}
 
+# Capture this Makefile's directory (build_scripts/) before any include changes MAKEFILE_LIST.
+BUILD_SCRIPTS_DIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
+
 # Detect the Operating System
 UNAME_S := $(shell uname -s)
 
@@ -81,7 +84,10 @@ $(TASK_OUTDIR):
 	mkdir -p $(TASK_OUTDIR)
 
 # Run Verilator and build simulation executable
-$(TASK_OUTDIR)/V$(TOP_MODULE): $(RTL_SRC_FILES) $(TB_CPP_SRC_FILES) $(TB_HEADER_SRC_FILES) | $(TASK_OUTDIR)
+# Including verilator.mk itself as a dependency ensures CFLAGS changes trigger a rebuild.
+# Including EXTERNAL_OBJECTS ensures relinking when a dependent library archive is updated.
+VERILATOR_MK_PATH := $(BUILD_SCRIPTS_DIR)verilator.mk
+$(TASK_OUTDIR)/V$(TOP_MODULE): $(RTL_SRC_FILES) $(TB_CPP_SRC_FILES) $(TB_HEADER_SRC_FILES) $(VERILATOR_MK_PATH) $(EXTERNAL_OBJECTS) | $(TASK_OUTDIR)
 	$(VERILATOR) --cc $(RTL_SRC_FILES) \
 		--top-module $(TOP_MODULE) \
 		--exe $(TB_CPP_SRC_FILES) \

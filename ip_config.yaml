@@ -62,6 +62,7 @@ tasks:
     depends_on:
       - simulation_lib
       - simulation_utils
+      - verification_lib
       - dual_port_ram_verilate
 
   when_all_cpp_compile:

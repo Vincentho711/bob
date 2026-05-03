@@ -26,5 +26,7 @@ src_files:
   - "coverage/covergroup.h"
   - "coverage/cross_coverpoint.h"
   - "coverage/cross_coverpoint.cpp"
+  - "coverage/coverage_registry.h"
+  - "coverage/coverage_registry.cpp"
 include_header_dirs:
   - "$(get_task_dir(simulation_lib))/core"

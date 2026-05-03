@@ -9,13 +9,15 @@ DualPortRamScoreboard::DualPortRamScoreboard(
     std::shared_ptr<DualPortRamTLMWrQueue> tlm_wr_queue,
     std::shared_ptr<DualPortRamTLMRdQueue> tlm_rd_queue,
     std::shared_ptr<ClockT> wr_clk, uint32_t wr_delay_cycle,
+    std::shared_ptr<Covergroup> cg,
     const std::string &name)
     : BaseScoreboard(name),
       tlm_wr_queue_(tlm_wr_queue), tlm_rd_queue_(tlm_rd_queue),
       wr_clk_(wr_clk), wr_delay_cycle_(wr_delay_cycle),
       apply_index_(0U),
       circular_buffer_size_(wr_delay_cycle + 1U),
-      circular_buffer_(circular_buffer_size_) {}
+      circular_buffer_(circular_buffer_size_),
+      cg_(cg) {}
 
 simulation::Task<> DualPortRamScoreboard::run_phase() {
     // Since the run_write_capture(), run_read_capture() and update_ram_model are infinite tasks, exception thrown will not be caught.
@@ -43,6 +45,14 @@ simulation::Task<> DualPortRamScoreboard::run_write_capture() {
             // Push captured transaction into circular buffer for pending ram model update
             circular_buffer_[staging_index].push_back(write_txn);
             this->log_debug_txn(write_txn->txn_id, "Write transaction added to circular_buffer at staging index = " + std::to_string(staging_index));
+
+            if (cg_) {
+                uint64_t addr = write_txn->payload.addr;
+                cg_->coverpoint("wr_addr").sample(addr);
+                cg_->coverpoint("wr_addr_boundary").sample(addr);
+                cg_->coverpoint("rd_wr_same_addr").sample(addr == last_rd_addr_ ? 1u : 0u);
+                cg_->sample_cross("wr_x_rd_addr", {addr, last_rd_addr_});
+            }
         }
     }
 }
@@ -61,6 +71,11 @@ simulation::Task<> DualPortRamScoreboard::run_read_capture() {
             auto rd_cap_ctx = this->logger_.scoped_context("Run Read Capture");
             log_debug_txn(read_txn->txn_id, "Read txn fetched from tlm rd queue");
             uint32_t addr = read_txn->payload.addr;
+
+            if (cg_) {
+                cg_->coverpoint("rd_addr").sample(addr);
+                last_rd_addr_ = addr;
+            }
             uint32_t dut_data = read_txn->payload.data;
 
             // Look up in our ram model

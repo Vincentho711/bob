@@ -26,6 +26,9 @@
 #include "simulation_args_argument_context.h"
 #include "simulation_progress_reporter.h"
 
+#include "covergroup.h"
+#include "coverage_registry.h"
+
 #include "dual_port_ram_driver.h"
 #include "dual_port_ram_sequencer.h"
 #include "dual_port_ram_tlm_queue.h"
@@ -195,6 +198,7 @@ public:
                 seed,
                 max_time,
                 prog_args.heartbeat_ms());
+            output_dir_ = std::string(core_args.output_dir());
         }
 
         logger_.info("===========================================");
@@ -207,9 +211,12 @@ public:
         // Initialise Verilator
         // ========================================================================
         auto verilator_ctx = logger_.scoped_context("Verilator");
-        // Create DUT as shared pointer
-        dut_ = std::make_shared<Vdual_port_ram>();
-        Verilated::randSeed(seed);
+        // Use an explicit context so its lifecycle is tied to this object, not
+        // to the implicit static defaultContextp() which is destroyed at process
+        // exit in an order that can race with ASan's TLS cleanup.
+        verilated_context_ = std::make_unique<VerilatedContext>();
+        verilated_context_->randSeed(seed);
+        dut_ = std::make_shared<Vdual_port_ram>(verilated_context_.get());
 
         if (waves) {
             const auto& core_args = simulation::args::SimulationArgumentContext::get<simulation::args::CoreArgumentGroup>();
@@ -217,7 +224,7 @@ public:
             const std::string vcd_path = core_args.output_dir().empty()
                 ? vcd_name
                 : std::string(core_args.output_dir()) + "/" + vcd_name;
-            Verilated::traceEverOn(true);
+            verilated_context_->traceEverOn(true);
             trace_ = std::make_shared<VerilatedVcdC>();
             dut_->trace(trace_.get(), TRACE_DEPTH);
             trace_->open(vcd_path.c_str());
@@ -269,6 +276,28 @@ public:
         const uint32_t data_width_arg = static_cast<uint32_t>(Vdual_port_ram_dual_port_ram::DATA_WIDTH);
 
         // ========================================================================
+        // Set up coverage
+        // ========================================================================
+        {
+            const uint32_t depth = 1u << addr_width_arg;
+            covergroup_ = std::make_shared<Covergroup>("dual_port_ram_cg");
+            covergroup_->add_coverpoint("wr_addr")
+                .add_auto_bins("addr", 0, depth - 1);
+            covergroup_->add_coverpoint("rd_addr")
+                .add_auto_bins("addr", 0, depth - 1);
+            covergroup_->add_coverpoint("rd_wr_same_addr")
+                .add_bin("different", {0})
+                .add_bin("same",      {1});
+            auto& bnd = covergroup_->add_coverpoint("wr_addr_boundary")
+                .add_bin("min", {0});
+            if (depth > 2)
+                bnd.add_bin("middle", 1, depth - 2);
+            bnd.add_bin("max", {depth - 1});
+            covergroup_->add_cross("wr_x_rd_addr", {"wr_addr", "rd_addr"});
+            logger_.info("Coverage model initialised (depth=" + std::to_string(depth) + ")");
+        }
+
+        // ========================================================================
         // Set up verification components
         // ========================================================================
         {
@@ -280,8 +309,8 @@ public:
             driver_ = std::make_shared<DualPortRamDriver>(sequencer_, wr_clk_, rd_clk_);
             monitor_ = std::make_shared<DualPortRamMonitor>(wr_clk_, rd_clk_, tlm_wr_queue_, tlm_rd_queue_);
             checker_ = std::make_shared<BaseChecker>("BaseChecker", wr_clk_);
-            scoreboard_ = std::make_shared<DualPortRamScoreboard>(tlm_wr_queue_, tlm_rd_queue_, wr_clk_, 1U);
-            // explicit DualPortRamScoreboard(std::shared_ptr<DualPortRamTLMWrQueue> tlm_wr_queue, std::shared_ptr<DualPortRamTLMRdQueue> tlm_rd_queue, std::shared_ptr<ClockT> wr_clk, uint32_t wr_delay_cycle, const std::string &name, bool debug_enabled);
+            scoreboard_ = std::make_shared<DualPortRamScoreboard>(
+                tlm_wr_queue_, tlm_rd_queue_, wr_clk_, 1U, covergroup_);
             logger_.info("Verification components created");
         }
 
@@ -333,11 +362,23 @@ public:
 
     ~SimulationEnvironment() {
         if (trace_) {
-            // Capture the last signals
+            // Capture the last signals before finalising the DUT.
             dut_->eval();
             trace_->dump(sim_kernel_->time);
             trace_->close();
             logger_.info("Waveform trace closed");
+        }
+        // Call final() explicitly here, after the last eval(), while the
+        // VerilatedContext is still alive. This prevents Verilated from running
+        // its exit callbacks during member destruction at an unsafe time.
+        if (dut_) dut_->final();
+        if (!output_dir_.empty()) {
+            try {
+                CoverageRegistry::instance().write_json(
+                    std::filesystem::path(output_dir_) / "coverage.json");
+            } catch (const std::exception& e) {
+                std::cerr << "[WARN] Failed to write coverage.json: " << e.what() << "\n";
+            }
         }
     }
 
@@ -376,6 +417,10 @@ private:
     simulation::Logger logger_;
 
     // Verilator components
+    // verilated_context_ must be declared before dut_ so it is destroyed after dut_.
+    // Using an explicit context avoids the implicit static VerilatedContext (defaultContextp()
+    // s_s) whose destruction order at process exit can race with ASan's TLS teardown.
+    std::unique_ptr<VerilatedContext> verilated_context_;
     std::shared_ptr<Vdual_port_ram> dut_;
     std::shared_ptr<VerilatedVcdC> trace_;
 
@@ -395,6 +440,10 @@ private:
     std::shared_ptr<DualPortRamDriver> driver_;
     std::shared_ptr<DualPortRamMonitor> monitor_;
     std::shared_ptr<DualPortRamScoreboard> scoreboard_;
+
+    // Coverage
+    std::string                 output_dir_;
+    std::shared_ptr<Covergroup> covergroup_;
 
     // Sequence components
     std::unique_ptr<DualPortRamBaseSequence> top_seq_;

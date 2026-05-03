@@ -1,6 +1,7 @@
 #include "simulation_args_core_argument_group.h"
 #include "simulation_logging_utils.h"
 #include <cstdint>
+#include <cstdio>
 #include <filesystem>
 #include <limits>
 #include <random>
@@ -34,6 +35,15 @@ void simulation::args::CoreArgumentGroup::post_parse_resolve() {
         std::filesystem::create_directories(output_dir_str_);
         const std::string log_path = output_dir_str_ + "/" + binary_name_ + ".log";
         simulation::LoggerConfig::instance().set_log_file(log_path, simulation::OutputMode::FILE_ONLY);
+        // Redirect both stdout and stderr to the log file so that Verilator
+        // $fatal / SVA failure messages (printed via printf to stdout) and any
+        // stderr output (ASan, C++ exceptions) are captured alongside the
+        // structured log regardless of how the binary is launched
+        // (campaign runner, reproduce.sh, or direct invocation).
+        // The logger is already FILE_ONLY so no logger output goes to stdout;
+        // redirecting stdout here only affects Verilator's own printf calls.
+        std::freopen(log_path.c_str(), "a", stdout);
+        std::freopen(log_path.c_str(), "a", stderr);
     }
     // Seed resolution
     if (seed_ == 0) {
