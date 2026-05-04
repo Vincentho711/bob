@@ -22,8 +22,9 @@ module dual_port_ram
             assert (int'(wr_addr_i) < DEPTH)
                 else $error("dual_port_ram: write address 0x%0h out of range (DEPTH=%0d)",
                             wr_addr_i, DEPTH);
-            assert (wr_addr_i == 3)
-                else $error("dual_port_ram: wr_addr != 3");
+            // Intentional test failure to test error output logic
+            // assert (wr_addr_i == 3)
+            //     else $error("dual_port_ram: wr_addr != 3");
 `endif
             mem[wr_addr_i] <= wr_data_i;
         end

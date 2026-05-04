@@ -84,6 +84,17 @@ simulation::Task<> DualPortRamScoreboard::run_read_capture() {
                 simulation::report_fatal(this->logger_, "Read from uninitialised address: " + std::to_string(addr));
             }
             uint32_t expected_data = ram_model_[addr];
+            // Intentional failure to test error handling logic
+            // if (addr == 3U) {
+            //     std::string msg = std::format(
+            //         "{}Forced failure at addr: 0x{:X}{}",
+            //         simulation::colours::RED,
+            //         addr,
+            //         simulation::colours::RESET
+            //     );
+            //     // Throw VerificationError
+            //     simulation::report_fatal(this->logger_, msg);
+            // }
             if (dut_data != expected_data) {
                 std::string msg = std::format(
                     "{}Mismatch at addr: 0x{:X} | Expected data: 0x{:X} | Observed data: 0x{:X}{}",

@@ -1,10 +1,12 @@
 #include "simulation_args_core_argument_group.h"
 #include "simulation_logging_utils.h"
+#include "simulation_progress_reporter.h"
 #include <cstdint>
 #include <cstdio>
 #include <filesystem>
 #include <limits>
 #include <random>
+#include <unistd.h>
 
 void simulation::args::CoreArgumentGroup::register_args(GroupApp& app){
     app.add_argument<uint64_t>("seed", seed_, "RNG seed. 0 = randomise and log chosen value.", seed_);
@@ -33,8 +35,14 @@ void simulation::args::CoreArgumentGroup::post_parse_resolve() {
     // Output directory: create it and wire up the logfile
     if (!output_dir_str_.empty()) {
         std::filesystem::create_directories(output_dir_str_);
-        const std::string log_path = output_dir_str_ + "/" + binary_name_ + ".log";
+        const std::string log_path = (std::filesystem::path(output_dir_str_) / (binary_name_ + ".log")).string();
         simulation::LoggerConfig::instance().set_log_file(log_path, simulation::OutputMode::FILE_ONLY);
+
+        // Preserve the original terminal before redirecting stdout, so we can
+        // write live status updates there even while logs go to the file.
+        const bool stdout_is_tty = (isatty(STDOUT_FILENO) != 0);
+        const int saved_stdout_fd = stdout_is_tty ? dup(STDOUT_FILENO) : -1;
+
         // Redirect both stdout and stderr to the log file so that Verilator
         // $fatal / SVA failure messages (printed via printf to stdout) and any
         // stderr output (ASan, C++ exceptions) are captured alongside the
@@ -44,6 +52,18 @@ void simulation::args::CoreArgumentGroup::post_parse_resolve() {
         // redirecting stdout here only affects Verilator's own printf calls.
         std::freopen(log_path.c_str(), "a", stdout);
         std::freopen(log_path.c_str(), "a", stderr);
+
+        if (saved_stdout_fd >= 0) {
+            FILE* tty = fdopen(saved_stdout_fd, "w");
+            if (tty) {
+                std::fprintf(tty, "Simulation running — log: %s%s%s\n",
+                             simulation::colours::DIM, log_path.c_str(), simulation::colours::RESET);
+                std::fflush(tty);
+                simulation::ProgressReporter::instance().set_console_output(tty);
+            } else {
+                close(saved_stdout_fd);
+            }
+        }
     }
     // Seed resolution
     if (seed_ == 0) {

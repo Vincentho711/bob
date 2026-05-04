@@ -3,6 +3,7 @@
 #include "simulation_context.h"
 #include "simulation_logging_utils.h"
 
+#include <cinttypes>
 #include <cstdio>
 #include <system_error>
 #include <unistd.h>
@@ -19,6 +20,14 @@ ProgressReporter::~ProgressReporter() {
         out_.flush();
         out_.close();
     }
+    if (tty_fp_) {
+        std::fclose(tty_fp_);
+        tty_fp_ = nullptr;
+    }
+}
+
+void ProgressReporter::set_console_output(FILE* fp) {
+    tty_fp_ = fp;
 }
 
 void ProgressReporter::configure(std::filesystem::path output_dir,
@@ -27,7 +36,7 @@ void ProgressReporter::configure(std::filesystem::path output_dir,
                                  uint64_t max_time_ps,
                                  uint32_t heartbeat_ms) {
     if (output_dir.empty()) {
-        enabled_ = false;
+        jsonl_enabled_ = false;
         return;
     }
 
@@ -49,32 +58,65 @@ void ProgressReporter::configure(std::filesystem::path output_dir,
                 now.time_since_epoch()).count());
     }
 
+    // Initialise wall clock before opening JSONL so tty timing works
+    // even if the file open fails.
+    const auto now = std::chrono::steady_clock::now();
+    start_wall_ = now;
+    last_heartbeat_ = now;
+
     const std::filesystem::path jsonl_path = output_dir / "progress.jsonl";
     out_.open(jsonl_path, std::ios::app);
     if (!out_.is_open()) {
         simulation::log_warning("ProgressReporter",
             "Failed to open progress file '" + jsonl_path.string() +
             "'. Progress tracking disabled.");
-        enabled_ = false;
+        jsonl_enabled_ = false;
         return;
     }
 
-    const auto now = std::chrono::steady_clock::now();
-    start_wall_ = now;
-    last_heartbeat_ = now;
-
-    run_started_ = false;
+    jsonl_run_started_ = false;
     run_ended_ = false;
     domain_parent_stack_.clear();
     seq_start_times_.clear();
     seq_count_ = 0;
-    enabled_ = true;
+    jsonl_enabled_ = true;
 }
 
 uint64_t ProgressReporter::wall_us_now_() const {
     const auto now = std::chrono::steady_clock::now();
     return static_cast<uint64_t>(
         std::chrono::duration_cast<std::chrono::microseconds>(now - start_wall_).count());
+}
+
+// static
+std::string ProgressReporter::fmt_wall(uint64_t wall_us) {
+    const uint64_t total_s = wall_us / 1'000'000;
+    if (total_s < 60) {
+        const uint64_t tenths = (wall_us % 1'000'000) / 100'000;
+        char buf[16];
+        std::snprintf(buf, sizeof(buf), "%" PRIu64 ".%" PRIu64 "s", total_s, tenths);
+        return buf;
+    }
+    const uint64_t m = total_s / 60;
+    const uint64_t s = total_s % 60;
+    char buf[16];
+    std::snprintf(buf, sizeof(buf), "%" PRIu64 "m %" PRIu64 "s", m, s);
+    return buf;
+}
+
+// static
+std::string ProgressReporter::fmt_sim(uint64_t sim_ps) {
+    char buf[32];
+    if (sim_ps < 1'000ULL) {
+        std::snprintf(buf, sizeof(buf), "%" PRIu64 "ps", sim_ps);
+    } else if (sim_ps < 1'000'000ULL) {
+        std::snprintf(buf, sizeof(buf), "%.2fus", sim_ps / 1'000.0);
+    } else if (sim_ps < 1'000'000'000ULL) {
+        std::snprintf(buf, sizeof(buf), "%.2fms", sim_ps / 1'000'000.0);
+    } else {
+        std::snprintf(buf, sizeof(buf), "%.3fs", sim_ps / 1'000'000'000.0);
+    }
+    return buf;
 }
 
 void ProgressReporter::json_escape_append_(std::string& out, std::string_view in) {
@@ -128,7 +170,7 @@ void ProgressReporter::json_field_append_(std::string& out, const JsonField& f) 
 void ProgressReporter::write_event_(std::string_view type,
                                     std::string_view domain,
                                     std::initializer_list<JsonField> extras) {
-    if (!enabled_) return;
+    if (!jsonl_enabled_) return;
 
     std::string line;
     line.reserve(256);
@@ -163,23 +205,34 @@ void ProgressReporter::write_event_(std::string_view type,
 }
 
 void ProgressReporter::run_start() {
-    if (!enabled_ || run_started_) return;
-    run_started_ = true;
-    write_event_("run_start", "default", {
-        JsonField{"test_name",       JsonKind::Str, 0, 0, false, test_name_},
-        JsonField{"seed",            JsonKind::U64, seed_},
-        JsonField{"max_time_ps",     JsonKind::U64, max_time_ps_},
-        JsonField{"hostname",        JsonKind::Str, 0, 0, false, hostname_},
-        JsonField{"pid",             JsonKind::U64, pid_},
-        JsonField{"ts_start_utc_us", JsonKind::U64, ts_start_utc_us_},
-    });
+    FILE* const tty = tty_fp_;
+    if (!jsonl_enabled_ && !tty) return;
+
+    if (jsonl_enabled_ && !jsonl_run_started_) {
+        jsonl_run_started_ = true;
+        write_event_("run_start", "default", {
+            JsonField{"test_name",       JsonKind::Str, 0, 0, false, test_name_},
+            JsonField{"seed",            JsonKind::U64, seed_},
+            JsonField{"max_time_ps",     JsonKind::U64, max_time_ps_},
+            JsonField{"hostname",        JsonKind::Str, 0, 0, false, hostname_},
+            JsonField{"pid",             JsonKind::U64, pid_},
+            JsonField{"ts_start_utc_us", JsonKind::U64, ts_start_utc_us_},
+        });
+    }
+
+    if (tty) {
+        std::fprintf(tty, "  %stest:%s %s\n  %sseed:%s 0x%016" PRIx64 "\n",
+                     simulation::colours::DIM, simulation::colours::RESET, test_name_.c_str(),
+                     simulation::colours::DIM, simulation::colours::RESET, seed_);
+        std::fflush(tty);
+    }
 }
 
 void ProgressReporter::seq_start(uint64_t seq_id,
                                  std::string_view name,
                                  uint64_t seed,
                                  std::string_view domain) {
-    if (!enabled_) return;
+    if (!jsonl_enabled_) return;
 
     seq_start_times_[seq_id] = SeqStartInfo{wall_us_now_(), simulation::current_time_ps};
     ++seq_count_;
@@ -204,7 +257,7 @@ void ProgressReporter::seq_start(uint64_t seq_id,
 void ProgressReporter::seq_end(uint64_t seq_id,
                                std::string_view status,
                                std::string_view domain) {
-    if (!enabled_) return;
+    if (!jsonl_enabled_) return;
 
     auto it = domain_parent_stack_.find(std::string(domain));
     if (it != domain_parent_stack_.end() && !it->second.empty()) {
@@ -242,21 +295,40 @@ void ProgressReporter::seq_end(uint64_t seq_id,
 }
 
 void ProgressReporter::heartbeat(std::string_view domain) {
-    if (!enabled_) return;
+    FILE* const tty = tty_fp_;
+    if (!jsonl_enabled_ && !tty) return;
+
     const auto now = std::chrono::steady_clock::now();
     if (now - last_heartbeat_ < heartbeat_interval_) return;
     last_heartbeat_ = now;
-    write_event_("heartbeat", domain, {
-        JsonField{"seq_count", JsonKind::U64, seq_count_},
-    });
+
+    if (jsonl_enabled_) {
+        write_event_("heartbeat", domain, {
+            JsonField{"seq_count", JsonKind::U64, seq_count_},
+        });
+    }
+
+    if (tty) {
+        std::fprintf(tty, "\r%s[%s]%s sim=%s%s%s  seqs=%" PRIu64 "  ",
+                     simulation::colours::DIM,
+                     fmt_wall(wall_us_now_()).c_str(),
+                     simulation::colours::RESET,
+                     simulation::colours::BRIGHT_CYAN,
+                     fmt_sim(simulation::current_time_ps).c_str(),
+                     simulation::colours::RESET,
+                     seq_count_);
+        std::fflush(tty);
+        tty_has_cr_ = true;
+    }
 }
 
 void ProgressReporter::run_end(std::string_view status, std::string_view msg) {
-    if (!enabled_ || run_ended_) return;
+    FILE* const tty = tty_fp_;
+    if (!jsonl_enabled_ && !tty) return;
+    if (run_ended_) return;
     run_ended_ = true;
-    // Only emit a run_end if we actually emitted run_start. Suppresses orphan
-    // events when the TB fails during bootstrap (after configure(), before run()).
-    if (run_started_) {
+
+    if (jsonl_enabled_ && jsonl_run_started_) {
         if (msg.empty()) {
             write_event_("run_end", "default", {
                 JsonField{"status",    JsonKind::Str, 0, 0, false, status},
@@ -269,10 +341,37 @@ void ProgressReporter::run_end(std::string_view status, std::string_view msg) {
                 JsonField{"seq_count", JsonKind::U64, seq_count_},
             });
         }
+        out_.flush();
+        out_.close();
+        jsonl_enabled_ = false;
     }
-    out_.flush();
-    out_.close();
-    enabled_ = false;
+
+    if (tty) {
+        const bool is_ok  = (status == "completed" || status == "max_time");
+        const char* col   = is_ok ? simulation::colours::BRIGHT_GREEN
+                                  : simulation::colours::BRIGHT_RED;
+        const char* icon  = is_ok ? "✓" : "✗";
+        const char* label = is_ok ? "Simulation Passed" : "Simulation Failed";
+        if (tty_has_cr_) std::fprintf(tty, "\r\033[K");
+        if (msg.empty()) {
+            std::fprintf(tty, "%s[%s]%s %s%s %s%s\n",
+                         simulation::colours::DIM,
+                         fmt_wall(wall_us_now_()).c_str(),
+                         simulation::colours::RESET,
+                         col, icon, label, simulation::colours::RESET);
+        } else {
+            std::fprintf(tty, "%s[%s]%s %s%s %s — %.*s%s\n",
+                         simulation::colours::DIM,
+                         fmt_wall(wall_us_now_()).c_str(),
+                         simulation::colours::RESET,
+                         col, icon, label,
+                         static_cast<int>(msg.size()), msg.data(),
+                         simulation::colours::RESET);
+        }
+        std::fflush(tty);
+        std::fclose(tty);
+        tty_fp_ = nullptr;
+    }
 }
 
 }  // namespace simulation

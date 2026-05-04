@@ -1,6 +1,7 @@
 #ifndef SIMULATION_LOGGING_UTILS_H
 #define SIMULATION_LOGGING_UTILS_H
 #include "simulation_context.h"
+#include <format>
 #include <iostream>
 #include <fstream>
 #include <sstream>
@@ -462,246 +463,56 @@ namespace simulation {
         log_message(LogLevel::FATAL, component_name, message, current_time_ps, nullptr, nullptr);
     }
 
-    inline void log_test_passed(const std::string& component_name, const std::string& message = "Simulation Passed") {
+    inline void log_test_result_(
+            LogLevel level,
+            const char* icon_colour,
+            std::string_view icon,
+            const std::string& component_name,
+            const std::string& message) {
         auto& config = LoggerConfig::instance();
 
-        // Determine destinations
-        const LogLevel level = LogLevel::INFO;
-        const bool send_to_stdout = [&]() {
+        const bool send_to_stdout = [&]() -> bool {
             switch (config.get_output_mode()) {
                 case OutputMode::STDOUT_ONLY:
                 case OutputMode::BOTH:
                 case OutputMode::SEPARATE_LEVELS:
                     return level >= config.get_stdout_min_level();
-                default:
-                    return false;
+                default: return false;
             }
         }();
-
-        const bool send_to_file = [&]() {
-            if (!config.is_file_output_enabled()) {
-                return false;
-            }
+        const bool send_to_file = [&]() -> bool {
+            if (!config.is_file_output_enabled()) return false;
             switch (config.get_output_mode()) {
                 case OutputMode::FILE_ONLY:
                 case OutputMode::BOTH:
                 case OutputMode::SEPARATE_LEVELS:
                     return level >= config.get_file_min_level();
-                default:
-                    return false;
+                default: return false;
             }
         }();
-
-        if (!send_to_stdout && !send_to_file) {
-            return;
-        }
-
-        auto build_message = [&](bool use_colours) -> std::string {
-            std::ostringstream log_stream;
-
-            // Timestamp
-            if (config.show_timestamp()) {
-                if (use_colours) {
-                    log_stream << colours::DIM;
-                }
-                log_stream << "@" << format_timestamp(current_time_ps, config.get_timestamp_precision()) << "ps";
-                if (use_colours) {
-                    log_stream << colours::RESET;
-                }
-                log_stream << " ";
-            }
-
-            // Log level
-            if (use_colours) {
-                log_stream << colours::BRIGHT_CYAN;
-            }
-            log_stream << "[INFO   ]";
-            if (use_colours) {
-                log_stream << colours::RESET;
-            }
-            log_stream << " ";
-
-            // Component name
-            if (!component_name.empty()) {
-                if (use_colours) {
-                    log_stream << colours::BRIGHT_BLUE;
-                }
-                log_stream << "[" << component_name << "]";
-                if (use_colours) {
-                    log_stream << colours::RESET;
-                }
-                log_stream << " ";
-            }
-
-            // Success message with colour
-            if (use_colours) {
-                log_stream << colours::BOLD << colours::BRIGHT_GREEN;
-            }
-            log_stream << "✓ " << message;
-            if (use_colours) {
-                log_stream << colours::RESET;
-            }
-
-            return log_stream.str();
-        };
-
-        // Add visual separator and output
-        if (send_to_stdout) {
-            config.write_to_stdout("");
-            config.write_to_stdout(build_message(config.use_stdout_colours()));
-        }
-
-        if (send_to_file) {
-            config.write_to_file("");
-            config.write_to_file(build_message(false));
-        }
-    }
-
-    inline void log_test_failed(const std::string& component_name, const std::string& message = "Simulation Failed") {
-        auto& config = LoggerConfig::instance();
-        // Determine destinations
-        const LogLevel level = LogLevel::ERROR;
-        const bool send_to_stdout = [&]() {
-            switch (config.get_output_mode()) {
-                case OutputMode::STDOUT_ONLY:
-                case OutputMode::BOTH:
-                case OutputMode::SEPARATE_LEVELS:
-                    return level >= config.get_stdout_min_level();
-                default:
-                    return false;
-            }
-        }();
-
-        const bool send_to_file = [&]() {
-            if (!config.is_file_output_enabled()) {
-                return false;
-            }
-            switch (config.get_output_mode()) {
-                case OutputMode::FILE_ONLY:
-                case OutputMode::BOTH:
-                case OutputMode::SEPARATE_LEVELS:
-                    return level >= config.get_file_min_level();
-                default:
-                    return false;
-            }
-        }();
-
-        if (!send_to_stdout && !send_to_file) {
-            return;
-        }
-
-        auto build_message = [&](bool use_colours) -> std::string {
-            std::ostringstream log_stream;
-
-            // Timestamp
-            if (config.show_timestamp()) {
-                if (use_colours) {
-                    log_stream << colours::DIM;
-                }
-                log_stream << "@" << format_timestamp(current_time_ps, config.get_timestamp_precision()) << "ps";
-                if (use_colours) {
-                    log_stream << colours::RESET;
-                }
-                log_stream << " ";
-            }
-
-            // Log level
-            if (use_colours) {
-                log_stream << colours::BRIGHT_RED;
-            }
-            log_stream << "[ERROR  ]";
-            if (use_colours) {
-                log_stream << colours::RESET;
-            }
-            log_stream << " ";
-
-            // Component name
-            if (!component_name.empty()) {
-                if (use_colours) {
-                    log_stream << colours::BRIGHT_BLUE;
-                }
-                log_stream << "[" << component_name << "]";
-                if (use_colours) {
-                    log_stream << colours::RESET;
-                }
-                log_stream << " ";
-            }
-
-            // Failure message with colour
-            if (use_colours) {
-                log_stream << colours::BOLD << colours::BRIGHT_RED;
-            }
-            log_stream << "✗ " << message;
-            if (use_colours) {
-                log_stream << colours::RESET;
-            }
-
-            return log_stream.str();
-        };
-
-        // Add visual separator and output
-        if (send_to_stdout) {
-            config.write_to_stdout("");
-            config.write_to_stdout(build_message(config.use_stdout_colours()));
-        }
-
-        if (send_to_file) {
-            config.write_to_file("");
-            config.write_to_file(build_message(false));
-        }
-    }
-
-    inline void log_test_max_time_reached(const std::string& component_name, uint64_t max_time_ps_val) {
-        auto& config = LoggerConfig::instance();
-        const LogLevel level = LogLevel::WARNING;
-
-        const bool send_to_stdout = (level >= config.get_stdout_min_level() &&
-                                   config.get_output_mode() != OutputMode::FILE_ONLY);
-        const bool send_to_file   = (config.is_file_output_enabled() &&
-                                   level >= config.get_file_min_level() &&
-                                   config.get_output_mode() != OutputMode::STDOUT_ONLY);
-
         if (!send_to_stdout && !send_to_file) return;
 
         auto build_message = [&](bool use_colours) -> std::string {
             std::ostringstream s;
             if (config.show_timestamp()) {
-                if (use_colours) {
-                    s << colours::DIM;
-                }
+                if (use_colours) s << colours::DIM;
                 s << "@" << format_timestamp(current_time_ps, config.get_timestamp_precision()) << "ps";
-                if (use_colours) {
-                    s << colours::RESET;
-                }
+                if (use_colours) s << colours::RESET;
                 s << " ";
             }
-            if (use_colours) {
-                s << colours::BRIGHT_YELLOW;
-            }
-            s << "[WARNING]";
-            if (use_colours) {
-                s << colours::RESET;
-            }
+            if (use_colours) s << get_level_colour(level);
+            s << "[" << get_level_string(level) << "]";
+            if (use_colours) s << colours::RESET;
             s << " ";
             if (!component_name.empty()) {
-                if (use_colours) {
-                    s << colours::BRIGHT_BLUE;
-                }
+                if (use_colours) s << colours::BRIGHT_BLUE;
                 s << "[" << component_name << "]";
-                if (use_colours) {
-                    s << colours::RESET;
-                }
+                if (use_colours) s << colours::RESET;
                 s << " ";
             }
-
-            if (use_colours) {
-                s << colours::BOLD << colours::BRIGHT_YELLOW;
-            }
-            s << "⚠ Max simulation time reached (" << max_time_ps_val
-              << "ps) — tasks may be incomplete";
-            if (use_colours) { 
-                s << colours::RESET;
-            }
+            if (use_colours) s << colours::BOLD << icon_colour;
+            s << icon << " " << (use_colours ? message : strip_ansi_codes(message));
+            if (use_colours) s << colours::RESET;
             return s.str();
         };
 
@@ -713,6 +524,24 @@ namespace simulation {
             config.write_to_file("");
             config.write_to_file(build_message(false));
         }
+    }
+
+    inline void log_test_passed(const std::string& component_name,
+                                 const std::string& message = "Simulation Passed") {
+        log_test_result_(LogLevel::INFO, colours::BRIGHT_GREEN, "✓", component_name, message);
+    }
+
+    inline void log_test_failed(const std::string& component_name,
+                                 const std::string& message = "Simulation Failed") {
+        log_test_result_(LogLevel::ERROR, colours::BRIGHT_RED, "✗", component_name, message);
+    }
+
+    inline void log_test_max_time_reached(const std::string& component_name,
+                                           uint64_t max_time_ps_val) {
+        log_test_result_(LogLevel::WARNING, colours::BRIGHT_YELLOW, "⚠",
+            component_name,
+            std::format("Max simulation time reached ({}ps) — tasks may be incomplete",
+                        max_time_ps_val));
     }
 
     class Logger {

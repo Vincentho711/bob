@@ -2,7 +2,9 @@
 #define SIMULATION_PROGRESS_REPORTER_H
 
 #include <chrono>
+#include <cinttypes>
 #include <cstdint>
+#include <cstdio>
 #include <filesystem>
 #include <fstream>
 #include <initializer_list>
@@ -36,7 +38,12 @@ public:
                    uint64_t max_time_ps,
                    uint32_t heartbeat_ms);
 
-    [[nodiscard]] bool enabled() const noexcept { return enabled_; }
+    [[nodiscard]] bool enabled() const noexcept { return jsonl_enabled_; }
+
+    // Takes ownership of fp. Call before configure() to activate console output.
+    // If fp is null this is a no-op. When --output-dir is set and stdout was a
+    // TTY before freopen, CoreArgumentGroup passes the saved terminal FILE* here.
+    void set_console_output(FILE* fp);
 
     void run_start();
     void seq_start(uint64_t seq_id,
@@ -75,8 +82,18 @@ private:
 
     [[nodiscard]] uint64_t wall_us_now_() const;
 
-    bool enabled_ = false;
+    // Format elapsed wall time: "12.3s" or "2m 15s"
+    static std::string fmt_wall(uint64_t wall_us);
+    // Format simulation time: "123ps", "1.23us", "1.23ms", "1.234s"
+    static std::string fmt_sim(uint64_t sim_ps);
+
+    // JSONL output — controlled by jsonl_enabled_
+    bool          jsonl_enabled_ = false;
     std::ofstream out_;
+
+    // Console (tty) output — controlled independently; owned FILE* (fclose in dtor)
+    FILE* tty_fp_     = nullptr;
+    bool  tty_has_cr_ = false;  // true after a \r heartbeat line; cleared on \n
 
     std::string test_name_;
     uint64_t seed_ = 0;
@@ -99,8 +116,8 @@ private:
     std::unordered_map<uint64_t, SeqStartInfo> seq_start_times_;
     uint64_t seq_count_ = 0;
 
-    bool run_started_ = false;
-    bool run_ended_ = false;
+    bool jsonl_run_started_ = false;  // gates JSONL run_start event emission
+    bool run_ended_         = false;  // general lifecycle guard; prevents double run_end
 };
 
 }  // namespace simulation
