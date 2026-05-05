@@ -145,7 +145,7 @@ jobs:
             --bind "$GITHUB_WORKSPACE" --pwd "$GITHUB_WORKSPACE" \
             "$SIF" \
             uv run python -m campaign.campaign_runner \
-              --plan campaign.yaml
+              --plan regression_plans/smoke.yaml
 
       - name: Upload campaign results
         if: always()

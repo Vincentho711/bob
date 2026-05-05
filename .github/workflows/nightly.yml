@@ -1,0 +1,71 @@
+name: Nightly Regression
+
+on:
+  schedule:
+    - cron: '0 0 * * 1-5'  # midnight UTC = 4 PM PST / 5 PM PDT, Mon-Fri
+  workflow_dispatch:         # allow manual trigger
+
+env:
+  IMAGE_REPO: ghcr.io/vincentho711/bob-env
+
+jobs:
+  nightly-regression:
+    runs-on: self-hosted
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Apptainer image
+        run: |
+          if [ -n "${BOB_SIF_PATH}" ] && [ -f "${BOB_SIF_PATH}" ]; then
+            echo "Using shared .sif: ${BOB_SIF_PATH}"
+            echo "SIF=${BOB_SIF_PATH}" >> "$GITHUB_ENV"
+          else
+            echo "Pulling latest from GHCR"
+            apptainer pull --force bob-env.sif \
+              "docker://${{ env.IMAGE_REPO }}:latest"
+            echo "SIF=$(pwd)/bob-env.sif" >> "$GITHUB_ENV"
+          fi
+
+      - name: Install Python dependencies
+        run: |
+          apptainer exec \
+            --bind "$GITHUB_WORKSPACE" --pwd "$GITHUB_WORKSPACE" \
+            "$SIF" uv sync --frozen
+
+      - name: Run tests
+        run: |
+          apptainer exec \
+            --bind "$GITHUB_WORKSPACE" --pwd "$GITHUB_WORKSPACE" \
+            "$SIF" uv run pytest pytests/ -v
+
+      - name: Build all tasks
+        run: |
+          apptainer exec \
+            --bind "$GITHUB_WORKSPACE" --pwd "$GITHUB_WORKSPACE" \
+            "$SIF" uv run python main_cli.py build --all
+
+      - name: Nightly regression
+        run: |
+          apptainer exec \
+            --bind "$GITHUB_WORKSPACE" --pwd "$GITHUB_WORKSPACE" \
+            "$SIF" \
+            uv run python -m campaign.campaign_runner \
+              --plan regression_plans/nightly.yaml
+
+      - name: Upload campaign results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nightly-results-${{ github.run_id }}
+          path: runs/
+          if-no-files-found: ignore
+
+      - name: Upload reproduce scripts for failed jobs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nightly-reproduce-scripts-${{ github.run_id }}
+          path: runs/**/reproduce.sh
+          if-no-files-found: ignore

@@ -1,0 +1,25 @@
+batch_id: "nightly_regression"
+output_dir: "runs"
+max_time_ps: 100000000000   # 100 ms of simulation time
+wall_timeout_s: 600          # 10 min per job
+
+binaries:
+  - binary: "./build/tb_dual_port_ram/tb_dual_port_ram.out"
+    heartbeat_ms: 2000
+    runs:
+      - test: default
+        count: 50            # 50 randomly-generated seeds
+
+      - test: directed
+        seeds: [1, 2, 3]    # deterministic corner-case coverage
+
+  # tb_coroutine_sim_test — 2 seeds to verify the simulation framework is not broken
+  - binary: "./build/tb_coroutine_sim_test/tb_coroutine_sim_test.out"
+    runs:
+      - seeds: [2, 3]
+        extra_args: ["--verbosity=debug"]
+
+resources:                  # ignored by LocalBackend; used by SlurmBackend when implemented
+  cpus: 1
+  mem_mb: 1024
+  time_limit_min: 10
