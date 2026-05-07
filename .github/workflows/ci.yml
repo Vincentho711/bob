@@ -139,6 +139,14 @@ jobs:
             --bind "$GITHUB_WORKSPACE" --pwd "$GITHUB_WORKSPACE" \
             "$SIF" uv run python main_cli.py build --all
 
+      - name: Validate campaign plan
+        run: |
+          apptainer exec \
+            --bind "$GITHUB_WORKSPACE" --pwd "$GITHUB_WORKSPACE" \
+            "$SIF" \
+            uv run python -m campaign.campaign_runner \
+              --plan regression_plans/smoke.yaml --validate
+
       - name: Campaign regression
         run: |
           apptainer exec \

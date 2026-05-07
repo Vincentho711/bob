@@ -1,7 +1,7 @@
-batch_id: "multi_tb_regression"
+batch_id: "smoke"
 output_dir: "runs"
 max_time_ps: 100000000000   # 100 ms of simulation time default; overrideable per entry
-wall_timeout_s: 30          # wall clock timeout, global for all jobs
+job_wall_timeout_s: 30      # wall-clock limit per individual job
 
 binaries:
   - binary: "./build/tb_dual_port_ram/tb_dual_port_ram.out"

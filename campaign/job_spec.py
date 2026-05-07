@@ -33,7 +33,7 @@ class JobSpec:
     test_name:  str | None    # None for binaries with no --tb.test=
     seed:       int
     resources:      dict     = field(default_factory=dict)
-    wall_timeout_s: int | None = None
+    job_wall_timeout_s: int | None = None
     git_sha:        str | None = None  # HEAD SHA at batch start; None if not in a git repo
 
     @property

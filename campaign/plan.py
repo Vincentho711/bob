@@ -30,7 +30,7 @@ class RunEntry(BaseModel):
     count:          int         = Field(0, ge=0)
     seeds:          list[int]   = Field(default_factory=list)
     max_time_ps:    int | None  = None  # None → inherits Plan.max_time_ps
-    wall_timeout_s: int | None  = Field(None, gt=0)  # None → inherits Plan.wall_timeout_s
+    job_wall_timeout_s: int | None  = Field(None, gt=0)  # None → inherits Plan.job_wall_timeout_s
     extra_args:     list[str]   = Field(default_factory=list)
 
     @field_validator("seeds", mode="before")
@@ -74,7 +74,7 @@ class Plan(BaseModel):
     batch_id:       str       = "batch"
     output_dir:     Path      = Path("runs")
     max_time_ps:    int       = Field(100_000_000_000, gt=0)
-    wall_timeout_s: int | None = Field(None, gt=0)  # None = no wall-clock limit
+    job_wall_timeout_s: int | None = Field(None, gt=0)  # None = no per-job wall-clock limit
     binaries:       list[BinaryEntry] = Field(min_length=1)
     resources:      Resources = Field(default_factory=Resources)
 
@@ -97,13 +97,13 @@ def load_plan(plan_path: Path) -> Plan:
 def check_warnings(plan: Plan) -> list[str]:
     """Non-fatal advisories about the plan configuration."""
     warnings: list[str] = []
-    if plan.wall_timeout_s is None and all(
-        e.wall_timeout_s is None
+    if plan.job_wall_timeout_s is None and all(
+        e.job_wall_timeout_s is None
         for b in plan.binaries
         for e in b.runs
     ):
         warnings.append(
-            "wall_timeout_s not set — hung jobs will block the batch indefinitely"
+            "job_wall_timeout_s not set — hung jobs will block the batch indefinitely"
         )
     return warnings
 

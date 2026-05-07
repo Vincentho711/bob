@@ -1,7 +1,7 @@
 batch_id: "nightly_regression"
 output_dir: "runs"
 max_time_ps: 100000000000   # 100 ms of simulation time
-wall_timeout_s: 600          # 10 min per job
+job_wall_timeout_s: 600      # wall-clock limit per individual job (10 min)
 
 binaries:
   - binary: "./build/tb_dual_port_ram/tb_dual_port_ram.out"

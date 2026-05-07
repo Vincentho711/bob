@@ -104,7 +104,7 @@ class LocalBackend:
             with self._procs_lock:
                 self._procs[spec.job_id] = proc
             try:
-                proc.wait(timeout=spec.wall_timeout_s)
+                proc.wait(timeout=spec.job_wall_timeout_s)
             except subprocess.TimeoutExpired:
                 wall_timed_out = True
                 proc.terminate()
@@ -120,7 +120,7 @@ class LocalBackend:
             if spec.output_dir.exists():
                 write_wall_timeout_event(
                     spec.output_dir / "progress.jsonl",
-                    spec.wall_timeout_s,
+                    spec.job_wall_timeout_s,
                     elapsed_us,
                 )
             status = finalise_run(spec, err_path, returncode=proc.returncode)

@@ -65,10 +65,10 @@ def _expand_specs(plan: Plan, batch_run_id: str, batch_dir: Path, git_sha: str |
         for entry in bin_entry.runs:
             test_name      = entry.test
             max_time       = entry.max_time_ps if entry.max_time_ps is not None else max_time_ps_global
-            wall_timeout_s = (
-                entry.wall_timeout_s
-                if entry.wall_timeout_s is not None
-                else plan.wall_timeout_s
+            job_wall_timeout_s = (
+                entry.job_wall_timeout_s
+                if entry.job_wall_timeout_s is not None
+                else plan.job_wall_timeout_s
             )
 
             seeds = list(entry.seeds)
@@ -103,7 +103,7 @@ def _expand_specs(plan: Plan, batch_run_id: str, batch_dir: Path, git_sha: str |
                     test_name=test_name,
                     seed=seed,
                     resources=resources,
-                    wall_timeout_s=wall_timeout_s,
+                    job_wall_timeout_s=job_wall_timeout_s,
                     git_sha=git_sha,
                 ))
 

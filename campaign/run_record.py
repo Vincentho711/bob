@@ -64,7 +64,7 @@ def build_run_record(spec: JobSpec, status: JobStatus) -> dict:
 
 
 def write_wall_timeout_event(
-    progress_path: Path, wall_timeout_s: int | None, elapsed_us: int
+    progress_path: Path, job_wall_timeout_s: int | None, elapsed_us: int
 ) -> None:
     """Append a synthetic run_end event after a wall-clock kill.
 
@@ -74,8 +74,8 @@ def write_wall_timeout_event(
     mask the original timeout.
     """
     msg = (
-        f"killed: wall-clock timeout after {wall_timeout_s}s"
-        if wall_timeout_s is not None
+        f"killed: wall-clock timeout after {job_wall_timeout_s}s"
+        if job_wall_timeout_s is not None
         else "killed: wall-clock timeout"
     )
     event = {
