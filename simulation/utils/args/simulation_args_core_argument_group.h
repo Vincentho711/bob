@@ -28,6 +28,7 @@ public:
 
     [[nodiscard]] uint64_t seed() const noexcept { return seed_; }
     [[nodiscard]] bool waves() const noexcept { return waves_; }
+    [[nodiscard]] bool coverage() const noexcept { return coverage_; }
     [[nodiscard]] bool dry_run() const noexcept { return dry_run_; }
     [[nodiscard]] std::string_view verbosity_str() const noexcept { return verbosity_str_; }
     [[nodiscard]] std::string_view output_dir() const noexcept { return output_dir_str_; }
@@ -39,6 +40,7 @@ private:
     uint64_t seed_ = 1;
     std::string verbosity_str_;
     bool waves_ = false;
+    bool coverage_ = false;
     bool dry_run_ = false;
     std::string output_dir_str_;
     uint64_t max_time_ps_;

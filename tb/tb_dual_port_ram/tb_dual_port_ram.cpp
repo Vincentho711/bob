@@ -160,10 +160,11 @@ class BaseChecker : public simulation::SimulationComponent<Vdual_port_ram>{
 
 class SimulationEnvironment {
 public:
-    SimulationEnvironment(uint64_t seed, bool waves, uint64_t max_time,
+    SimulationEnvironment(uint64_t seed, bool waves, bool coverage, uint64_t max_time,
                           const DualPortRamTestRegistry& test_registry)
         : seed_(seed),
           waves_(waves),
+          coverage_(coverage),
           max_time_(max_time),
           logger_("SimEnv"),
           sim_context_(nullptr) {
@@ -278,7 +279,7 @@ public:
         // ========================================================================
         // Set up coverage
         // ========================================================================
-        {
+        if (coverage_) {
             const uint32_t depth = 1u << addr_width_arg;
             covergroup_ = std::make_shared<Covergroup>("dual_port_ram_cg");
             covergroup_->add_coverpoint("wr_addr")
@@ -372,10 +373,12 @@ public:
         // VerilatedContext is still alive. This prevents Verilated from running
         // its exit callbacks during member destruction at an unsafe time.
         if (dut_) dut_->final();
-        if (!output_dir_.empty()) {
+        if (covergroup_) {
+            const std::filesystem::path cov_path = output_dir_.empty()
+                ? std::filesystem::path("coverage.json")
+                : std::filesystem::path(output_dir_) / "coverage.json";
             try {
-                CoverageRegistry::instance().write_json(
-                    std::filesystem::path(output_dir_) / "coverage.json");
+                CoverageRegistry::instance().write_json(cov_path);
             } catch (const std::exception& e) {
                 std::cerr << "[WARN] Failed to write coverage.json: " << e.what() << "\n";
             }
@@ -411,6 +414,7 @@ private:
     const int32_t TRACE_DEPTH = 5;
     const uint64_t seed_;
     const bool waves_;
+    const bool coverage_;
     const uint64_t max_time_;
 
     // Logger for this class
@@ -501,7 +505,8 @@ int main(int argc, char** argv) {
     const auto& core_args = arg_parser.get<simulation::args::CoreArgumentGroup>();
     const auto& tb_args = arg_parser.get<DualPortRamArgumentGroup>();
 
-    const bool waves = core_args.waves();
+    const bool waves    = core_args.waves();
+    const bool coverage = core_args.coverage();
     const uint64_t max_time_ps = core_args.max_time_ps();
 
     // ============================================================================
@@ -519,7 +524,7 @@ int main(int argc, char** argv) {
     // ============================================================================
     simulation::Logger main_logger("Main");
     try {
-        SimulationEnvironment sim_env(core_args.seed(), waves, max_time_ps, test_registry);
+        SimulationEnvironment sim_env(core_args.seed(), waves, coverage, max_time_ps, test_registry);
         simulation::RunResult run_result = sim_env.start_sim_kernel();
 
         if (run_result == simulation::RunResult::MaxTimeReached) {

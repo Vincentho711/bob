@@ -16,6 +16,8 @@ void simulation::args::CoreArgumentGroup::register_args(GroupApp& app){
         "Created automatically if absent. Omit for stdout-only runs with no artifact capture.",
         output_dir_str_);
     app.add_flag("waves", waves_, "Enable waveform dump.");
+    app.add_flag("coverage", coverage_,
+        "Enable coverage collection and write coverage.json to --output-dir.");
     app.add_flag("dry-run", dry_run_, "Resolve and print all args, then exit without simulating.");
     app.add_argument<uint64_t>("max-time", max_time_ps_, "Max simulation time in ps. 0 = unlimited.", max_time_ps_);
 }
