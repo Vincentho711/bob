@@ -25,6 +25,9 @@ public:
     // Writes schema_version 1 coverage.json containing all registered covergroups.
     void write_json(const std::filesystem::path& path) const;
 
+    // FNV-1a 64-bit hash over all registered covergroup fingerprints (sorted by name).
+    std::string compute_fingerprint() const;
+
 private:
     CoverageRegistry() = default;
     std::vector<Covergroup*> groups_;  // insertion-ordered, non-owning

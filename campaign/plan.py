@@ -62,7 +62,8 @@ class BinaryEntry(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     binary:       Path
-    heartbeat_ms: int | None     = None  # None → omit --progress.heartbeat-ms=
+    heartbeat_ms: int | None     = None   # None → omit --progress.heartbeat-ms=
+    coverage:     bool           = False  # enable --coverage for every run under this binary
     runs:         list[RunEntry] = Field(min_length=1)
 
 

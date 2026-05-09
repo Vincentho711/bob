@@ -6,6 +6,7 @@ job_wall_timeout_s: 600      # wall-clock limit per individual job (10 min)
 binaries:
   - binary: "./build/tb_dual_port_ram/tb_dual_port_ram.out"
     heartbeat_ms: 2000
+    coverage: true
     runs:
       - test: default
         count: 50            # 50 randomly-generated seeds

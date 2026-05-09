@@ -27,6 +27,7 @@ public:
 
     std::string to_json_string() const;
     const std::string& name() const { return name_; }
+    const std::vector<std::shared_ptr<Coverpoint>>& constituents() const { return constituents_; }
 
 private:
     static std::string make_key(const std::vector<uint64_t>& values);

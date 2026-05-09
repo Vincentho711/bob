@@ -93,6 +93,8 @@ def _expand_specs(plan: Plan, batch_run_id: str, batch_dir: Path, git_sha: str |
                 ]
                 if heartbeat_ms is not None:
                     args.append(f"--progress.heartbeat-ms={heartbeat_ms}")
+                if bin_entry.coverage:
+                    args.append("--coverage")
                 args.extend(entry.extra_args)
 
                 specs.append(JobSpec(
@@ -105,6 +107,7 @@ def _expand_specs(plan: Plan, batch_run_id: str, batch_dir: Path, git_sha: str |
                     resources=resources,
                     job_wall_timeout_s=job_wall_timeout_s,
                     git_sha=git_sha,
+                    coverage=bin_entry.coverage,
                 ))
 
     return specs
@@ -187,12 +190,14 @@ def _write_summary(batch_dir: Path, specs: list[JobSpec],
     failures = [r for r in records if r["status"] != "passed"]
 
     binaries = list(dict.fromkeys(str(s.binary.resolve()) for s in specs))
+    coverage_map = {s.binary.stem: s.coverage for s in specs}
 
     summary = {
         "batch_id":    batch_run_id,
         "plan":        str(plan_path.resolve()),
         "binaries":    binaries,
         "git_sha":     specs[0].git_sha if specs else None,
+        "coverage":    coverage_map,
         "started_at":  started_at,
         "finished_at": finished_at,
         "counts": {

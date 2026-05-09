@@ -2,6 +2,8 @@
 #include "covergroup.h"
 
 #include <algorithm>
+#include <cstdint>
+#include <cstdio>
 #include <format>
 #include <fstream>
 #include <stdexcept>
@@ -64,12 +66,36 @@ double CoverageRegistry::total_coverage() const {
     return (defined > 0) ? static_cast<double>(hit) / static_cast<double>(defined) : 0.0;
 }
 
+std::string CoverageRegistry::compute_fingerprint() const {
+    std::vector<std::string> cg_names;
+    cg_names.reserve(groups_.size());
+    for (const auto* g : groups_) cg_names.push_back(g->name());
+    std::sort(cg_names.begin(), cg_names.end());
+
+    std::string canonical;
+    for (const auto& n : cg_names) {
+        for (const auto* g : groups_) {
+            if (g->name() == n) {
+                canonical += "CG:" + n + ":" + g->compute_fingerprint() + ";";
+                break;
+            }
+        }
+    }
+    uint64_t hash = 14695981039346656037ULL;
+    for (unsigned char c : canonical) { hash ^= c; hash *= 1099511628211ULL; }
+    char buf[17];
+    std::snprintf(buf, sizeof(buf), "%016llx", static_cast<unsigned long long>(hash));
+    return std::string(buf);
+}
+
 void CoverageRegistry::write_json(const std::filesystem::path& path) const {
     double total = total_coverage();
     std::string compact;
     compact += "{\"schema_version\":1,\"total_coverage\":";
     compact += std::to_string(total);
-    compact += ",\"covergroups\":[";
+    compact += ",\"model_fingerprint\":\"";
+    compact += compute_fingerprint();
+    compact += "\",\"covergroups\":[";
     for (std::size_t i = 0; i < groups_.size(); ++i) {
         if (i > 0) compact += ",";
         compact += groups_[i]->to_json_string();

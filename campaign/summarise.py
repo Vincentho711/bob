@@ -47,6 +47,7 @@ def _manifest_to_spec(entry: dict) -> JobSpec:
         output_dir=Path(entry["run_dir"]),
         test_name=entry["test"],
         seed=entry["seed"],
+        coverage=entry.get("coverage", False),
     )
 
 
@@ -106,11 +107,14 @@ def summarise(batch_dir: Path) -> int:
     passed  = counts.get("passed", 0)
     failures = [r for r in records if r["status"] != "passed"]
 
+    coverage_map = {s.binary.stem: s.coverage for s in specs}
+
     now = datetime.now(timezone.utc).isoformat()
     summary = {
         "batch_id":    existing.get("batch_id", batch_dir.name),
         "plan":        existing.get("plan", None),
         "binaries":    existing.get("binaries", [existing["binary"]] if existing.get("binary") else []),
+        "coverage":    coverage_map or existing.get("coverage", {}),
         "started_at":  existing.get("started_at", None),
         "finished_at": existing.get("finished_at", now),
         "counts": {

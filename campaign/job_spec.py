@@ -35,6 +35,7 @@ class JobSpec:
     resources:      dict     = field(default_factory=dict)
     job_wall_timeout_s: int | None = None
     git_sha:        str | None = None  # HEAD SHA at batch start; None if not in a git repo
+    coverage:       bool       = False
 
     @property
     def seed_hex(self) -> str:
@@ -48,4 +49,5 @@ class JobSpec:
             "seed":     self.seed,
             "seed_hex": self.seed_hex,
             "run_dir":  str(self.output_dir.resolve()),
+            "coverage": self.coverage,
         }) + "\n"

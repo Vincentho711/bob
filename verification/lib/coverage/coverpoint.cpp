@@ -222,6 +222,15 @@ std::string Coverpoint::to_json_string() const {
         o << "{";
         o << "\"name\":\""  << json_escape(b.name)    << "\",";
         o << "\"type\":\""  << bin_type_str(b.type)   << "\",";
+        o << "\"ranges\":[";
+        auto sorted_ranges = b.ranges;
+        std::sort(sorted_ranges.begin(), sorted_ranges.end(),
+                  [](const Range& lhs, const Range& rhs){ return lhs.lo < rhs.lo; });
+        for (std::size_t j = 0; j < sorted_ranges.size(); ++j) {
+            if (j > 0) o << ",";
+            o << "{\"lo\":" << sorted_ranges[j].lo << ",\"hi\":" << sorted_ranges[j].hi << "}";
+        }
+        o << "],";
         o << "\"hits\":"    << b.hits;
         o << "}";
     }

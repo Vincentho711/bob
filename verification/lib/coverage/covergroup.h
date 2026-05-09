@@ -44,6 +44,10 @@ public:
     // JSON fragment for this covergroup (used by CoverageRegistry).
     std::string to_json_string() const;
 
+    // FNV-1a 64-bit hash of the coverage model structure (bin names, types, ranges, crosses).
+    // Used for schema evolution detection across runs and accumulation cycles.
+    std::string compute_fingerprint() const;
+
     const std::string& name() const { return name_; }
 
     // Aggregates used by CoverageRegistry for weighted-mean total_coverage.

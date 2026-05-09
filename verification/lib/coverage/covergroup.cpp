@@ -1,6 +1,9 @@
 #include "covergroup.h"
 #include "coverage_registry.h"
 
+#include <algorithm>
+#include <cstdint>
+#include <cstdio>
 #include <format>
 #include <fstream>
 #include <stdexcept>
@@ -115,6 +118,49 @@ double Covergroup::coverage() const {
     uint64_t defined = total_bins_defined();
     if (defined == 0) return 0.0;
     return static_cast<double>(total_bins_hit()) / static_cast<double>(defined);
+}
+
+std::string Covergroup::compute_fingerprint() const {
+    std::string canonical;
+
+    // Coverpoints: sort names for determinism; iterate bins in insertion order
+    std::vector<std::string> cp_names = cp_order_;
+    std::sort(cp_names.begin(), cp_names.end());
+    for (const auto& cpn : cp_names) {
+        canonical += "CP:" + cpn + ";";
+        for (const auto& bin : coverpoints_.at(cpn)->bins()) {
+            canonical += "B:" + bin.name + ":";
+            switch (bin.type) {
+                case BinType::REGULAR: canonical += "R"; break;
+                case BinType::ILLEGAL: canonical += "I"; break;
+                case BinType::IGNORE:  canonical += "G"; break;
+            }
+            canonical += ":";
+            auto rs = bin.ranges;
+            std::sort(rs.begin(), rs.end(),
+                      [](const Coverpoint::Range& lhs, const Coverpoint::Range& rhs){
+                          return lhs.lo < rhs.lo;
+                      });
+            for (const auto& r : rs)
+                canonical += std::to_string(r.lo) + "-" + std::to_string(r.hi) + "|";
+            canonical += ";";
+        }
+    }
+
+    // Crosses: sort names for determinism; constituents in insertion order
+    std::vector<std::string> cx_names = cx_order_;
+    std::sort(cx_names.begin(), cx_names.end());
+    for (const auto& xn : cx_names) {
+        canonical += "X:" + xn + ";";
+        for (const auto& cp : crosses_.at(xn)->constituents())
+            canonical += "C:" + cp->name() + ";";
+    }
+
+    uint64_t hash = 14695981039346656037ULL;
+    for (unsigned char c : canonical) { hash ^= c; hash *= 1099511628211ULL; }
+    char buf[17];
+    std::snprintf(buf, sizeof(buf), "%016llx", static_cast<unsigned long long>(hash));
+    return std::string(buf);
 }
 
 std::string Covergroup::to_json_string() const {

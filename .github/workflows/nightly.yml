@@ -54,6 +54,20 @@ jobs:
             uv run python -m campaign.campaign_runner \
               --plan regression_plans/nightly.yaml
 
+      - name: Merge coverage
+        if: always()
+        run: |
+          BATCH_DIR=$(ls -td runs/*/ 2>/dev/null | head -1)
+          if [ -z "$BATCH_DIR" ]; then
+            echo "No batch directory found — skipping coverage merge"
+            exit 0
+          fi
+          apptainer exec \
+            --bind "$GITHUB_WORKSPACE" --pwd "$GITHUB_WORKSPACE" \
+            "$SIF" \
+            uv run python -m campaign.merge_coverage \
+              --batch-dir "$BATCH_DIR"
+
       - name: Upload campaign results
         if: always()
         uses: actions/upload-artifact@v4
