@@ -26,7 +26,7 @@ jobs:
   #   push to main → sha-<7-char-sha>  +  latest
   #   pull request → pr-<pr-number>         (latest is NOT updated)
   # ─────────────────────────────────────────────────────────────────────────────
-  build-image:
+  build-env:
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -39,7 +39,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Detect environment spec changes
+      - name: Detect env spec changes
         uses: dorny/paths-filter@v3
         id: filter
         with:
@@ -49,7 +49,7 @@ jobs:
               - pyproject.toml
               - uv.lock
 
-      - name: Log in to GHCR
+      - name: Authenticate to GHCR
         if: steps.filter.outputs.env == 'true'
         uses: docker/login-action@v3
         with:
@@ -57,7 +57,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract image metadata
+      - name: Compute image tags
         if: steps.filter.outputs.env == 'true'
         id: meta
         uses: docker/metadata-action@v5
@@ -70,7 +70,7 @@ jobs:
             type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
             type=ref,event=pr,prefix=pr-
 
-      - name: Build and push
+      - name: Build and push image
         if: steps.filter.outputs.env == 'true'
         uses: docker/build-push-action@v6
         with:
@@ -82,64 +82,42 @@ jobs:
           cache-to: type=inline
 
   # ── Job 2 ────────────────────────────────────────────────────────────────────
-  # Run tests and builds using the canonical Apptainer image.
-  # Waits for build-image so it always uses the freshest image for this commit.
+  # Run unit tests, build simulation binaries, and execute the smoke regression.
+  # Waits for build-env so it always uses the freshest image for this commit.
   #
-  # Image selection priority:
-  #   1. env-changed == true  → use the image just built (PR or main)
+  # Image selection priority (via setup-env composite action):
+  #   1. env-changed == true  → pull the image just built (PR or main)
   #   2. BOB_SIF_PATH set     → use NFS .sif (fast, no pull)
   #   3. fallback             → pull latest from GHCR
   # ─────────────────────────────────────────────────────────────────────────────
-  test-and-build:
-    needs: build-image
+  smoke-regression:
+    needs: build-env
     runs-on: self-hosted
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Apptainer image
-        run: |
-          ENV_CHANGED="${{ needs.build-image.outputs.env-changed }}"
-          IMAGE_TAG="${{ needs.build-image.outputs.image-tag }}"
-          IMAGE_TAG="${IMAGE_TAG:-latest}"
+      - name: Set up environment
+        uses: ./.github/actions/setup-env
+        with:
+          image_repo: ${{ env.IMAGE_REPO }}
+          image_tag: ${{ needs.build-env.outputs.image-tag || 'latest' }}
+          force_pull: ${{ needs.build-env.outputs.env-changed }}
 
-          if [ "${ENV_CHANGED}" = "true" ]; then
-            # Always pull the freshly built image so this commit is tested
-            # against the environment it was built with.
-            echo "Pulling freshly built image: ${IMAGE_TAG}"
-            apptainer pull --force bob-env.sif \
-              "docker://${{ env.IMAGE_REPO }}:${IMAGE_TAG}"
-            echo "SIF=$(pwd)/bob-env.sif" >> "$GITHUB_ENV"
-          elif [ -n "${BOB_SIF_PATH}" ] && [ -f "${BOB_SIF_PATH}" ]; then
-            echo "Using shared .sif: ${BOB_SIF_PATH}"
-            echo "SIF=${BOB_SIF_PATH}" >> "$GITHUB_ENV"
-          else
-            echo "Pulling latest from GHCR"
-            apptainer pull --force bob-env.sif \
-              "docker://${{ env.IMAGE_REPO }}:${IMAGE_TAG}"
-            echo "SIF=$(pwd)/bob-env.sif" >> "$GITHUB_ENV"
-          fi
-
-      - name: Install Python dependencies
-        run: |
-          apptainer exec \
-            --bind "$GITHUB_WORKSPACE" --pwd "$GITHUB_WORKSPACE" \
-            "$SIF" uv sync --frozen
-
-      - name: Run tests
+      - name: Run unit tests
         run: |
           apptainer exec \
             --bind "$GITHUB_WORKSPACE" --pwd "$GITHUB_WORKSPACE" \
             "$SIF" uv run pytest pytests/ -v
 
-      - name: Build all tasks
+      - name: Build simulation binaries
         run: |
           apptainer exec \
             --bind "$GITHUB_WORKSPACE" --pwd "$GITHUB_WORKSPACE" \
             "$SIF" uv run python main_cli.py build --all
 
-      - name: Validate campaign plan
+      - name: Validate smoke plan
         run: |
           apptainer exec \
             --bind "$GITHUB_WORKSPACE" --pwd "$GITHUB_WORKSPACE" \
@@ -147,7 +125,7 @@ jobs:
             uv run python -m campaign.campaign_runner \
               --plan regression_plans/smoke.yaml --validate
 
-      - name: Campaign regression
+      - name: Run smoke regression
         run: |
           apptainer exec \
             --bind "$GITHUB_WORKSPACE" --pwd "$GITHUB_WORKSPACE" \
@@ -155,7 +133,7 @@ jobs:
             uv run python -m campaign.campaign_runner \
               --plan regression_plans/smoke.yaml
 
-      - name: Upload campaign results
+      - name: Upload results
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -163,7 +141,7 @@ jobs:
           path: runs/
           if-no-files-found: ignore
 
-      - name: Upload reproduce scripts for failed jobs
+      - name: Upload repro scripts
         if: failure()
         uses: actions/upload-artifact@v4
         with:
@@ -176,21 +154,21 @@ jobs:
   # Only runs when the environment spec changed AND all tests passed.
   # Engineers pick up the new environment automatically on their next bob-shell.
   # ─────────────────────────────────────────────────────────────────────────────
-  deploy-sif:
-    needs: [build-image, test-and-build]
+  deploy-env:
+    needs: [build-env, smoke-regression]
     if: |
       github.event_name == 'push' &&
       github.ref == 'refs/heads/main' &&
-      needs.build-image.result == 'success' &&
-      needs.build-image.outputs.env-changed == 'true' &&
-      needs.test-and-build.result == 'success'
+      needs.build-env.result == 'success' &&
+      needs.build-env.outputs.env-changed == 'true' &&
+      needs.smoke-regression.result == 'success'
     runs-on: self-hosted
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Deploy .sif to NFS
+      - name: Deploy environment image
         run: |
           BOB_NFS_IMAGE_DIR=/nfs/images \
-            ./scripts/update-env.sh "${{ needs.build-image.outputs.image-tag }}"
+            ./scripts/update-env.sh "${{ needs.build-env.outputs.image-tag }}"

@@ -5,6 +5,13 @@ on:
     - cron: '0 0 * * 1-5'  # midnight UTC = 4 PM PST / 5 PM PDT, Mon-Fri
   workflow_dispatch:         # allow manual trigger
 
+# Prevent two simultaneous nightly runs (e.g. two manual triggers) from
+# writing to the same runs/ directory. A second trigger queues rather than
+# cancels so no run is lost.
+concurrency:
+  group: nightly
+  cancel-in-progress: false
+
 env:
   IMAGE_REPO: ghcr.io/vincentho711/bob-env
 
@@ -16,37 +23,24 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Apptainer image
-        run: |
-          if [ -n "${BOB_SIF_PATH}" ] && [ -f "${BOB_SIF_PATH}" ]; then
-            echo "Using shared .sif: ${BOB_SIF_PATH}"
-            echo "SIF=${BOB_SIF_PATH}" >> "$GITHUB_ENV"
-          else
-            echo "Pulling latest from GHCR"
-            apptainer pull --force bob-env.sif \
-              "docker://${{ env.IMAGE_REPO }}:latest"
-            echo "SIF=$(pwd)/bob-env.sif" >> "$GITHUB_ENV"
-          fi
+      - name: Set up environment
+        uses: ./.github/actions/setup-env
+        with:
+          image_repo: ${{ env.IMAGE_REPO }}
 
-      - name: Install Python dependencies
-        run: |
-          apptainer exec \
-            --bind "$GITHUB_WORKSPACE" --pwd "$GITHUB_WORKSPACE" \
-            "$SIF" uv sync --frozen
-
-      - name: Run tests
+      - name: Run unit tests
         run: |
           apptainer exec \
             --bind "$GITHUB_WORKSPACE" --pwd "$GITHUB_WORKSPACE" \
             "$SIF" uv run pytest pytests/ -v
 
-      - name: Build all tasks
+      - name: Build simulation binaries
         run: |
           apptainer exec \
             --bind "$GITHUB_WORKSPACE" --pwd "$GITHUB_WORKSPACE" \
             "$SIF" uv run python main_cli.py build --all
 
-      - name: Nightly regression
+      - name: Run nightly regression
         run: |
           apptainer exec \
             --bind "$GITHUB_WORKSPACE" --pwd "$GITHUB_WORKSPACE" \
@@ -54,12 +48,12 @@ jobs:
             uv run python -m campaign.campaign_runner \
               --plan regression_plans/nightly.yaml
 
-      - name: Merge coverage
+      - name: Aggregate coverage
         if: always()
         run: |
           BATCH_DIR=$(ls -td runs/*/ 2>/dev/null | head -1)
           if [ -z "$BATCH_DIR" ]; then
-            echo "No batch directory found — skipping coverage merge"
+            echo "No batch directory found — skipping coverage aggregation"
             exit 0
           fi
           apptainer exec \
@@ -68,7 +62,7 @@ jobs:
             uv run python -m campaign.merge_coverage \
               --batch-dir "$BATCH_DIR"
 
-      - name: Upload campaign results
+      - name: Upload results
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -76,7 +70,7 @@ jobs:
           path: runs/
           if-no-files-found: ignore
 
-      - name: Upload reproduce scripts for failed jobs
+      - name: Upload repro scripts
         if: failure()
         uses: actions/upload-artifact@v4
         with:

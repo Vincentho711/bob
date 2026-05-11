@@ -1,3 +1,4 @@
+schema_version: 1
 batch_id: "nightly_regression"
 output_dir: "runs"
 max_time_ps: 100000000000   # 100 ms of simulation time
@@ -16,6 +17,7 @@ binaries:
 
   # tb_coroutine_sim_test — 2 seeds to verify the simulation framework is not broken
   - binary: "./build/tb_coroutine_sim_test/tb_coroutine_sim_test.out"
+    coverage: false
     runs:
       - seeds: [2, 3]
         extra_args: ["--verbosity=debug"]

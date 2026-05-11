@@ -1,0 +1,52 @@
+name: Set up bob environment
+description: >
+  Pull the Apptainer .sif and install Python dependencies.
+  Prefers a pre-pulled .sif on NFS (BOB_SIF_PATH) unless force_pull is true.
+
+inputs:
+  image_repo:
+    description: GHCR image repository (e.g. ghcr.io/vincentho711/bob-env)
+    required: true
+  image_tag:
+    description: Image tag to pull when no NFS .sif is available
+    default: latest
+  force_pull:
+    description: >
+      Always pull from GHCR even if BOB_SIF_PATH is set.
+      Use when the environment spec just changed and the fresh image must be tested.
+    default: 'false'
+
+runs:
+  using: composite
+  steps:
+    - name: Set up environment
+      shell: bash
+      run: |
+        FORCE_PULL="${{ inputs.force_pull }}"
+        IMAGE_REPO="${{ inputs.image_repo }}"
+        IMAGE_TAG="${{ inputs.image_tag }}"
+
+        if [ "${FORCE_PULL}" = "true" ]; then
+          # Env spec changed: always pull the freshly built image so this commit
+          # is tested against the environment it was built with.
+          echo "Pulling freshly built image (tag: ${IMAGE_TAG})"
+          apptainer pull --force bob-env.sif "docker://${IMAGE_REPO}:${IMAGE_TAG}"
+          echo "SIF=$(pwd)/bob-env.sif" >> "$GITHUB_ENV"
+        elif [ -n "${BOB_SIF_PATH}" ] && [ -f "${BOB_SIF_PATH}" ]; then
+          # BOB_SIF_PATH: runner env var pointing to a pre-pulled .sif on the NFS
+          # share (e.g. /nfs/images/bob-env-current.sif). Set it on the runner to
+          # skip the GHCR pull entirely and use the cached image.
+          echo "Using shared .sif: ${BOB_SIF_PATH}"
+          echo "SIF=${BOB_SIF_PATH}" >> "$GITHUB_ENV"
+        else
+          echo "Pulling ${IMAGE_REPO}:${IMAGE_TAG}"
+          apptainer pull --force bob-env.sif "docker://${IMAGE_REPO}:${IMAGE_TAG}"
+          echo "SIF=$(pwd)/bob-env.sif" >> "$GITHUB_ENV"
+        fi
+
+    - name: Install dependencies
+      shell: bash
+      run: |
+        apptainer exec \
+          --bind "$GITHUB_WORKSPACE" --pwd "$GITHUB_WORKSPACE" \
+          "$SIF" uv sync --frozen
